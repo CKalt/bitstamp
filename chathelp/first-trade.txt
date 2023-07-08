@@ -1,0 +1,128 @@
+I have the following code that works with Bitstamp to authenticate against their API.
+I have replaced my keys with x's.
+
+import hashlib
+import hmac
+import time
+import requests
+import uuid
+import sys
+
+api_key = 'xxxxx'
+API_SECRET = b'xxxxx'
+
+timestamp = str(int(round(time.time() * 1000)))
+nonce = str(uuid.uuid4())
+content_type = 'application/x-www-form-urlencoded'
+payload = {'offset': '1'}
+
+if sys.version_info.major >= 3:
+    from urllib.parse import urlencode
+else:
+    from urllib import urlencode
+
+payload_string = urlencode(payload)
+
+# '' (empty string) in message represents any query parameters or an empty string in case there are none
+message = 'BITSTAMP ' + api_key + \
+    'POST' + \
+    'www.bitstamp.net' + \
+    '/api/v2/user_transactions/' + \
+    '' + \
+    content_type + \
+    nonce + \
+    timestamp + \
+    'v2' + \
+    payload_string
+message = message.encode('utf-8')
+signature = hmac.new(API_SECRET, msg=message, digestmod=hashlib.sha256).hexdigest()
+headers = {
+    'X-Auth': 'BITSTAMP ' + api_key,
+    'X-Auth-Signature': signature,
+    'X-Auth-Nonce': nonce,
+    'X-Auth-Timestamp': timestamp,
+    'X-Auth-Version': 'v2',
+    'Content-Type': content_type
+}
+r = requests.post(
+    'https://www.bitstamp.net/api/v2/user_transactions/',
+    headers=headers,
+    data=payload_string
+    )
+if not r.status_code == 200:
+    raise Exception('Status code not 200')
+
+string_to_sign = (nonce + timestamp + r.headers.get('Content-Type')).encode('utf-8') + r.content
+signature_check = hmac.new(API_SECRET, msg=string_to_sign, digestmod=hashlib.sha256).hexdigest()
+if not r.headers.get('X-Server-Auth-Signature') == signature_check:
+    raise Exception('Signatures do not match')
+
+print(r.content)
+--------------
+Here is the response that it produces:
+------------
+
+[
+  {
+    "id": 291626278,
+    "datetime": "2023-07-06 23:08:21.816000",
+    "type": "2",
+    "fee": "10.18407",
+    "btc": "0.56531044",
+    "usd": "-16973.445961",
+    "btc_usd": 30025,
+    "eur": 0,
+    "order_id": 1637748004929537
+  },
+  {
+    "id": 291626277,
+    "datetime": "2023-07-06 23:08:21.615000",
+    "type": "2",
+    "fee": "0.99057",
+    "btc": "0.05498578",
+    "usd": "-1650.9480445",
+    "btc_usd": 30025,
+    "eur": 0,
+    "order_id": 1637748004929537
+  },
+  {
+    "id": 291626275,
+    "datetime": "2023-07-06 23:08:21.540000",
+    "type": "2",
+    "fee": "35.02536",
+    "btc": "1.94423333",
+    "usd": "-58375.60573325",
+    "btc_usd": 30025,
+    "eur": 0,
+    "order_id": 1637748004929537
+  },
+  .....
+  many records deleted for brevity
+]
+
+-------------
+
+Can you please show me how to modify the code so that it places a limit buy order trade for .01 bitcoin at a price of USD $28000?
+
+
+Please follow the following documentation I found about the bitstamp api with respect to placing limit orders.
+
+https://www.bitstamp.net/api/#buy-order
+
+Buy limit order
+
+This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+Request
+POST 	https://www.bitstamp.net/api/v2/buy/{currency_pair}/
+  	Supported values for currency_pair: btcusd, btceur, btcgbp, btcpax, gbpusd, eurusd, xrpusd, xrpeur, xrpbtc, xrpgbp, ltcbtc, ltcusd, ltceur, ltcgbp, ethbtc, ethusd, etheur, ethgbp, ethpax, bchusd, bcheur, bchbtc, paxusd, xlmbtc, xlmusd, xlmeur, xlmgbp, linkusd, linkeur, linkgbp, linkbtc, usdcusd, usdceur, btcusdc, ethusdc, eth2eth, aaveusd, aaveeur, aavebtc, batusd, bateur, umausd, umaeur, daiusd, kncusd, knceur, mkrusd, mkreur, zrxusd, zrxeur, gusdusd, algousd, algoeur, algobtc, audiousd, audioeur, audiobtc, crvusd, crveur, snxusd, snxeur, uniusd, unieur, unibtc, yfiusd, yfieur, compusd, compeur, grtusd, grteur, lrcusd, lrceur, usdtusd, usdteur, usdcusdt, btcusdt, ethusdt, xrpusdt, eurteur, eurtusd, flrusd, flreur, manausd, manaeur, maticusd, maticeur, sushiusd, sushieur, chzusd, chzeur, enjusd, enjeur, hbarusd, hbareur, alphausd, alphaeur, axsusd, axseur, sandusd, sandeur, storjusd, storjeur, adausd, adaeur, adabtc, fetusd, feteur, sklusd, skleur, slpusd, slpeur, sxpusd, sxpeur, sgbusd, sgbeur, avaxusd, avaxeur, dydxusd, dydxeur, ftmusd, ftmeur, shibusd, shibeur, ampusd, ampeur, ensusd, enseur, galausd, galaeur, perpusd, perpeur, wbtcbtc, ctsiusd, ctsieur, cvxusd, cvxeur, imxusd, imxeur, nexousd, nexoeur, antusd, anteur, godsusd, godseur, radusd, radeur, bandusd, bandeur, injusd, injeur, rlyusd, rlyeur, rndrusd, rndreur, vegausd, vegaeur, 1inchusd, 1incheur, solusd, soleur, apeusd, apeeur, mplusd, mpleur, eurocusdc, euroceur, dotusd, doteur, nearusd, neareur, ldousd, ldoeur, dgldusd, dgldeur, dogeusd, dogeeur, suiusd, suieur
+Request parameters
+amount 	Amount.
+price 	Price.
+limit_price (Optional) 	If the order gets executed, a new sell order will be placed, with "limit_price" as its price.
+daily_order (Optional) 	Opens buy limit order which will be canceled at 0:00 UTC unless it already has been executed. Possible value: True
+ioc_order (Optional) 	An Immediate-Or-Cancel (IOC) order is an order that must be executed immediately. Any portion of an IOC order that cannot be filled immediately will be cancelled. Possible value: True
+fok_order (Optional) 	A Fill-Or-Kill (FOK) order is an order that must be executed immediately in its entirety. If the order cannot be immediately executed in its entirety, it will be cancelled. Possible value: True
+moc_order (Optional) 	A Maker-Or-Cancel (MOC) order is an order that ensures it is not fully or partially filled when placed. In case it would be, the order is cancelled. Possible value: True
+gtd_order (Optional) 	A Good-Till-Date (GTD) lets you select an expiration date and time up until which the order will be open. Possible value: True
+expire_time (Optional) 	Unix timestamp in milliseconds. Required in case of GTD order.
+client_order_id (Optional) 	Client order id set by client. Client order id needs to be a string. 

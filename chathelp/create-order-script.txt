@@ -1,0 +1,95 @@
+The following python script has been tested and works correctly. It successfully creates a limit buy order using the bistamp API.  I need to modify it so that it reads the api_keuy and api_secret from a file called `.bitstamp` that has the following format:
+
+{
+    "customer_id": "99999",
+    "api_key": "xxxx",
+    "api_secret": "yyyyy"
+}
+
+I also need to have the price and limit data for the order itself to come from a file whose name is provided as the first argument to the script.  The format of that file is the following:
+
+{
+    "order_type": "limit-buy",
+    "currency_pair": "btcusd",
+    "amount": 0.01,
+    "price": 25800
+}
+
+I also wish to have a -v --verbose command line arguements that when active show the details of the request method, endpoint headers and body to the console.
+
+Otherwise these details as well as the response http status as well as content should be loggged to a file called bitstamp.log for all requests.
+
+
+import hashlib
+import hmac
+import time
+import requests
+import uuid
+import sys
+import logging
+
+api_key = 'xxxx'
+API_SECRET = b'yyyy'
+
+timestamp = str(int(round(time.time() * 1000)))
+nonce = str(uuid.uuid4())
+content_type = 'application/x-www-form-urlencoded'
+payload = {'amount': '0.01', 'price': '25300'}
+
+if sys.version_info.major >= 3:
+    from urllib.parse import urlencode
+else:
+    from urllib import urlencode
+
+payload_string = urlencode(payload)
+
+# '' (empty string) in message represents any query parameters or an empty string in case there are none
+message = 'BITSTAMP ' + api_key + \
+    'POST' + \
+    'www.bitstamp.net' + \
+    '/api/v2/buy/btcusd/' + \
+    '' + \
+    content_type + \
+    nonce + \
+    timestamp + \
+    'v2' + \
+    payload_string
+message = message.encode('utf-8')
+signature = hmac.new(API_SECRET, msg=message, digestmod=hashlib.sha256).hexdigest()
+headers = {
+    'X-Auth': 'BITSTAMP ' + api_key,
+    'X-Auth-Signature': signature,
+    'X-Auth-Nonce': nonce,
+    'X-Auth-Timestamp': timestamp,
+    'X-Auth-Version': 'v2',
+    'Content-Type': content_type
+}
+
+# Set up logging
+logging.basicConfig(filename='working_code.log', level=logging.INFO)
+
+url = 'https://www.bitstamp.net/api/v2/buy/btcusd/'
+logging.info(f"Request Method: POST")
+logging.info(f"Request URL: {url}")
+logging.info(f"Request Headers: {headers}")
+logging.info(f"Request Payload: {payload_string}")
+
+r = requests.post(
+    url,
+    headers=headers,
+    data=payload_string
+)
+
+if not r.status_code == 200:
+    logging.error(f"Unexpected status code: {r.status_code}")
+    logging.error(f"Response text: {r.text}")
+    raise Exception('Status code not 200')
+
+string_to_sign = (nonce + timestamp + r.headers.get('Content-Type')).encode('utf-8') + r.content
+signature_check = hmac.new(API_SECRET, msg=string_to_sign, digestmod=hashlib.sha256).hexdigest()
+if not r.headers.get('X-Server-Auth-Signature') == signature_check:
+    logging.error('Signatures do not match')
+    raise Exception('Signatures do not match')
+
+logging.info(f"Response: {r.content}")
+print(r.content)

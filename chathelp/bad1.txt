@@ -1,0 +1,172 @@
+Here's the request your code is making and the failure it produces is also shown:
+
+python src/trade.py -v orders/first.json
+Request Method: POST
+Request URL: https://www.bitstamp.net/api/v2/buy/btcusd/
+Request Headers: {'X-Auth': 'BITSTAMP AKIAW5FT7ERNXDMZDQ4W', 'X-Auth-Signature': 'b3d4f30fb34dd9cd2e4d95d8854d213d6089c56816a0094c1b12043ac4fa44af', 'X-Auth-Nonce': '8494e972-5454-440b-a6f6-74f8084218ab', 'X-Auth-Timestamp': '1688772152431', 'X-Auth-Version': 'v2', 'Content-Type': 'application/x-www-form-urlencoded'}
+Request Payload: amount=0.01&price=25800
+Traceback (most recent call last):
+  File "/Users/chris/projects/python/btc/src/trade.py", line 78, in <module>
+    raise Exception('Status code not 200')
+Exception: Status code not 200
+
+Here's the code that works:
+import hashlib
+import hmac
+import time
+import requests
+import uuid
+import sys
+
+api_key = 'xxxxx'
+API_SECRET = b'xxxxx'
+
+timestamp = str(int(round(time.time() * 1000)))
+nonce = str(uuid.uuid4())
+content_type = 'application/x-www-form-urlencoded'
+payload = {'amount': '0.01', 'price': '25300'}
+
+if sys.version_info.major >= 3:
+    from urllib.parse import urlencode
+else:
+    from urllib import urlencode
+
+payload_string = urlencode(payload)
+
+# '' (empty string) in message represents any query parameters or an empty string in case there are none
+message = 'BITSTAMP ' + api_key + \
+    'POST' + \
+    'www.bitstamp.net' + \
+    '/api/v2/buy/btcusd/' + \
+    '' + \
+    content_type + \
+    nonce + \
+    timestamp + \
+    'v2' + \
+    payload_string
+message = message.encode('utf-8')
+signature = hmac.new(API_SECRET, msg=message, digestmod=hashlib.sha256).hexdigest()
+headers = {
+    'X-Auth': 'BITSTAMP ' + api_key,
+    'X-Auth-Signature': signature,
+    'X-Auth-Nonce': nonce,
+    'X-Auth-Timestamp': timestamp,
+    'X-Auth-Version': 'v2',
+    'Content-Type': content_type
+}
+r = requests.post(
+    'https://www.bitstamp.net/api/v2/buy/btcusd/',
+    headers=headers,
+    data=payload_string
+    )
+
+if not r.status_code == 200:
+    print(f"Unexpected status code: {r.status_code}")
+    print(f"Response text: {r.text}")
+    raise Exception('Status code not 200')
+
+string_to_sign = (nonce + timestamp + r.headers.get('Content-Type')).encode('utf-8') + r.content
+signature_check = hmac.new(API_SECRET, msg=string_to_sign, digestmod=hashlib.sha256).hexdigest()
+if not r.headers.get('X-Server-Auth-Signature') == signature_check:
+    raise Exception('Signatures do not match')
+
+print(r.content)
+
+
+
+
+
+
+and here's your code that does not work:
+import hashlib
+import hmac
+import time
+import requests
+import uuid
+import sys
+import json
+import os
+import logging
+
+# Read the secrets from .bitstamp file
+with open('.bitstamp') as f:
+    secrets = json.load(f)
+
+api_key = secrets['api_key']
+API_SECRET = bytes(secrets['api_secret'], 'utf-8')
+
+# Read the order details from the command line argument
+with open(sys.argv[2] if len(sys.argv) > 2 else sys.argv[1]) as f:
+    order = json.load(f)
+
+currency_pair = order['currency_pair']
+amount = str(order['amount'])
+price = str(order['price'])
+
+timestamp = str(int(round(time.time() * 1000)))
+nonce = str(uuid.uuid4())
+content_type = 'application/x-www-form-urlencoded'
+payload = {'amount': amount, 'price': price}
+
+if sys.version_info.major >= 3:
+    from urllib.parse import urlencode
+else:
+    from urllib import urlencode
+
+payload_string = urlencode(payload)
+
+message = 'BITSTAMP ' + api_key + \
+    'POST' + \
+    'www.bitstamp.net' + \
+    f'/api/v2/buy/{currency_pair}/' + \
+    '' + \
+    content_type + \
+    nonce + \
+    timestamp + \
+    'v2' + \
+    payload_string
+message = message.encode('utf-8')
+signature = hmac.new(API_SECRET, msg=message, digestmod=hashlib.sha256).hexdigest()
+headers = {
+    'X-Auth': 'BITSTAMP ' + api_key,
+    'X-Auth-Signature': signature,
+    'X-Auth-Nonce': nonce,
+    'X-Auth-Timestamp': timestamp,
+    'X-Auth-Version': 'v2',
+    'Content-Type': content_type
+}
+
+# Configure logging
+logging.basicConfig(filename='bitstamp.log', level=logging.INFO)
+
+url = f'https://www.bitstamp.net/api/v2/buy/{currency_pair}/'
+r = requests.post(
+    url,
+    headers=headers,
+    data=payload_string
+)
+
+if sys.argv[1] == "-v":
+    print(f"Request Method: POST")
+    print(f"Request URL: {url}")
+    print(f"Request Headers: {headers}")
+    print(f"Request Payload: {payload_string}")
+
+if not r.status_code == 200:
+    logging.error(f"Unexpected status code: {r.status_code}")
+    logging.error(f"Response text: {r.text}")
+    raise Exception('Status code not 200')
+
+string_to_sign = (nonce + timestamp + r.headers.get('Content-Type')).encode('utf-8') + r.content
+signature_check = hmac.new(API_SECRET, msg=string_to_sign, digestmod=hashlib.sha256).hexdigest()
+
+if not r.headers.get('X-Server-Auth-Signature') == signature_check:
+    logging.error('Signatures do not match')
+    raise Exception('Signatures do not match')
+
+# Log the request and response details
+logging.info(f"Trade request for order: {order}")
+logging.info(f"Trade response: {r.content.decode('utf-8')}")
+
+print(r.content)
+
