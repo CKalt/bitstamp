@@ -79,3 +79,4 @@ if minutes_diff >= 1:
 else:
     next_minute = 60 - datetime.utcnow().second
     print(f"The last minute bar stored is sufficient and the database need not be updated. Check again in {next_minute} seconds.")
+    
