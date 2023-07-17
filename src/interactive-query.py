@@ -11,6 +11,7 @@ token = config['token']
 org = config['org']
 bucket = config['bucket']
 
+print(f"bucket = {bucket}")
 
 client =  InfluxDBClient(url=url, token=token, org=org)
 query_api = client.query_api()

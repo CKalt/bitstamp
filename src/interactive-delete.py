@@ -11,12 +11,15 @@ def delete_measurement_records(measurement):
     org = config['org']
     bucket = config['bucket']
 
+    print(f"bucket = {bucket}")
+
     # Connect to InfluxDB
     with InfluxDBClient(url=url, token=token) as client:
         delete_api = client.delete_api()
 
         # Construct delete predicate for the given measurement
         predicate = f'_measurement="{measurement}"'
+        print(f"predicate={predicate}")
 
         # Set the start and stop time to delete the specific rows
         start = '2020-01-01T08:00:00Z'
@@ -28,5 +31,5 @@ def delete_measurement_records(measurement):
         print(f"All records for measurement '{measurement}' have been deleted.")
 
 if __name__ == '__main__':
-    measurement_to_delete = 'weatherstation'  # Replace with your desired measurement name
+    measurement_to_delete = 'bitstamp'  # Replace with your desired measurement name
     delete_measurement_records(measurement_to_delete)

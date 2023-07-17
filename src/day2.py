@@ -15,12 +15,15 @@ df = pd.DataFrame(data['data']['ohlc'])
 df[['close', 'high', 'low', 'open', 'volume']] = df[['close', 'high', 'low', 'open', 'volume']].apply(pd.to_numeric)
 df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
 
-# You can generate a Token from the "Tokens Tab" in the UI
-token = "<my-token>"
-org = "<my-org>"
-bucket = "<my-bucket>"
+# Read API configuration from file
+with open('.influxdb', 'r') as f:
+    config = json.load(f)
+url = config['url']
+token = config['token']
+org = config['org']
+bucket = config['bucket']
 
-client = InfluxDBClient(url="http://localhost:8086", token=token)
+client = InfluxDBClient(url=url, token=token)
 
 write_api = client.write_api(write_options=SYNCHRONOUS)
 
