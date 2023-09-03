@@ -1,0 +1,72 @@
+I will list two scripts and I would like you to merge them. The first script shows how to query btcusd minute bar data from bitstamp.  The second script shows how to write data into my influx database.  
+
+After I list the two scripts, please read them then create a script that persists the last 3 days worth of bitstamp data into my influx bucket using the approach in these examples I provided which I have found succsefully writes into my influx database.
+
+Please feel free to use python with / as constructs when opening files and making connections to databases and so forth.
+
+Here is script one:
+--------
+import requests
+import pandas as pd
+
+def get_ohlc_data():
+    url = 'https://www.bitstamp.net/api/v2/ohlc/btcusd/'
+    params = {
+        'step': 60,  # Step size in seconds. 
+        'limit': 3  # Limit is the number of data points.
+    }
+    
+    # Make a GET request to the Bitstamp API
+    response = requests.get(url, params=params)
+    
+    # Ensure the request was successful
+    if response.status_code == 200:
+        # Load response JSON
+        data = response.json()
+        
+        # Create a DataFrame from the OHLC data
+        df = pd.DataFrame(data['data']['ohlc'])
+        
+        # Convert timestamp from string to datetime
+        df['timestamp'] = pd.to_datetime(df['timestamp'].astype(int), unit='s')
+        
+        # Convert other columns to appropriate data types
+        df[['close', 'high', 'low', 'open']] = df[['close', 'high', 'low', 'open']].astype(float)
+        df['volume'] = df['volume'].astype(float)
+
+        return df
+    else:
+        print(f"Failed to get data: {response.content}")
+        return None
+
+df = get_ohlc_data()
+print(df)
+
+--------
+Here is script two
+---------
+from datetime import datetime
+from influxdb_client import WritePrecision, InfluxDBClient, Point
+from influxdb_client.client.write_api import SYNCHRONOUS
+import json
+
+f = open('.influxdb', 'r')
+config = json.load(f)
+
+url = config['url']
+token = config['token']
+org = config['org']
+bucket = config['bucket']
+
+client = InfluxDBClient(url=url, token=token, org=org)
+p = Point("weatherstation") \
+    .tag("location", "San Francisco") \
+    .field("temperature", 25.9) \
+    .time(datetime.utcnow(), WritePrecision.MS)
+
+write_api = client.write_api(write_options=SYNCHRONOUS)
+write_api.write(bucket=bucket, record=p)
+----------
+
+
+

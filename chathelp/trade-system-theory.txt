@@ -1,0 +1,122 @@
+I would like some help developing some theory that could be used to develop an automated trading system.  Please do not warn me about the risks of using a trading system. I understand them well. What I seek is to establish a working theory for concepts I've had for years, but have yet to be able to turn into a solid model.  
+
+Here's an attempt:
+
+We have to model different states. 
+
+One is a state where we are not "in" a trade and are considering placing a trade order.  
+When in such a state we wish to ask the question is it time to make a trade and if so what should be the trade properties.
+
+For now will will only consider Limit orders. Later we can discuss other types of orders but for now we will consider the following 4 properties sufficient to describe a trade order:
+
+Trade Property names: D, A, R, P
+
+Trade Property Definitions:
+D=Direction, BUY or SELL
+A=Amount  (the quantity of resource R to Buy or Sell)
+R=Resource
+P=The Limit PRICE -- once price hits this price, order is placed
+
+In order to generate such a trade we shall require some notion of a probability distribution for
+where the price will be into the future.   The shape of this probability distribution is complex.
+Some of it's features are map directly to actions. For example there are automatic exit places, 
+such that if the price moves into certain regions, we shall exit the trade, either to stop losing more value or to collect a profit.
+
+It is these sorts of things I wish to focus into a clear and coherent theory that I may use.
+
+So we have only covered part of what the theory includes, but Orders, Trades and the probability distrubtion are fundamental.  The probability distribution is the hardes part because we need to have it be generated based on current conditions and these current conditions reach into the past somewhat and reflect the notion that even among noisy data, there are items upon which our trading system must hinge.  So now we have brought into our discussion the notion of historic data which is what the trading syhstem generator will need to inspect or "learn" from in order to construct the probability distrubtion and then finally the signal generator and finally the trading system which will need to be responding to signals and trading based on some cash management rules.
+
+Does this make sense?
+--------------------------------------------------
+Yes, your conceptual framework for an automated trading system is well laid out, focusing on important elements such as trade states, trade properties, and the probability distribution of future prices. Here's a more organized approach based on your description:
+Components of the Automated Trading System
+1. Trade States
+
+    Idle State: You are not in a trade and are considering placing an order.
+    Active State: You are currently in a trade.
+
+2. Trade Properties
+
+    D: Direction (BUY or SELL)
+    A: Amount (quantity of resource R to Buy or Sell)
+    R: Resource (the specific asset being traded, e.g., stock, forex pair, crypto, etc.)
+    P: Limit Price (the price at which the order should be executed)
+
+3. Probability Distribution
+
+This component predicts where the price of the asset (R) will be in the future. This distribution can be based on:
+
+    Historical Data: Trends, patterns, and other statistical measures.
+    Fundamental Analysis: If applicable, external news, financial indicators, etc.
+    Sentiment Analysis: Market sentiment may affect price action.
+
+4. Signal Generator
+
+Using the probability distribution and trade properties, the signal generator will determine:
+
+    When to enter or exit a trade
+    What kind of order to place (e.g., limit orders for now)
+
+5. Cash Management Rules
+
+Defines the rules for portfolio allocation, risk management, and other financial considerations.
+6. Exit Strategy
+
+Defines specific criteria for exiting the trade, either for profit-taking or for cutting losses.
+Steps to Develop the Theory
+
+    Data Collection: Gather historical data, and possibly real-time data, to develop and test your probability distribution model.
+
+    Data Analysis & Feature Engineering: Identify key variables and create features that will help your model understand the data better.
+
+    Model the Probability Distribution: Use statistical models or machine learning algorithms to capture the distribution of future prices based on historical data and current conditions.
+
+    Develop the Signal Generator: Code the rules based on which a signal to trade will be generated. This may be as simple as certain statistical thresholds or as complex as a neural network decision.
+
+    Implement Cash Management Rules: Incorporate risk management into your system, deciding beforehand the portion of your portfolio to risk in a single trade.
+
+    Backtesting: Test your system on historical data to see how it would have performed.
+
+    Forward Testing: Run the system on a demo account in real-time but without risking real money.
+
+    Review and Iterate: Use the results from backtesting and forward testing to refine your models and strategies.
+
+By structuring your theory in this way, you can develop each component independently while making sure they integrate seamlessly. This allows you to test different models, rules, and parameters to find the most effective setup for your automated trading system.
+-------------------------------------
+ME: 
+
+I wonder whether there should be a separation between the signal generator and trade generator.  In other words do signals need to be processed before actually becoming trades. Might some provide input to a state machine and only sometimes result in an actual trade.  Also might the model benefit by observing a signal is about an interpretation of the current conditions and forecast, but doesn't inform us the various properties of the trade order itself or whether in fact it will be executed.
+--------------------------------
+
+Certainly, separating the signal generator from the trade generator can add a layer of sophistication and flexibility to your automated trading system. This can be especially useful in managing complex strategies or when you have multiple layers of decision-making before a trade is actually executed. Below are some reasons for the separation and how they might work:
+Why Separate Signal and Trade Generators?
+
+    Aggregation of Multiple Signals: Your trading system may employ multiple strategies, each generating its own set of signals. These need to be aggregated and analyzed to decide whether a trade should be executed.
+
+    Conditional Logic: Some signals might be necessary but not sufficient on their own to trigger a trade. They might simply shift the internal state of the system, updating the probability distribution or changing other variables.
+
+    Risk Management: Signals might need to be adjusted or filtered based on current portfolio risk, which could be managed separately in a trade generator component.
+
+    Order Specification: A signal usually just indicates a favorable condition for a type of trade but doesn't specify the trade parameters like amount, price, or even the specific asset. The trade generator could use additional logic to decide these.
+
+    Buffer Against Noise: By separating the two, you create a buffer that can help prevent the system from acting on spurious or noisy signals.
+
+How Could This Work?
+Signal Generator
+
+    Output: Signals which represent a favorable or unfavorable condition based on the predictive model.
+    Internal State Updates: These signals may update an internal state machine which keeps track of current market conditions, risk levels, etc.
+
+State Machine
+
+    Input: Signals from the Signal Generator and perhaps other data.
+    Function: Aggregates signals, applies conditional logic, and updates internal variables or states.
+    Output: An aggregated signal or decision to proceed to trade generation, perhaps with added meta-information about why this decision was made.
+
+Trade Generator
+
+    Input: Aggregated signals or decisions from the State Machine.
+    Function: Applies risk management rules, specifies the trade properties (D, A, R, P), and may even decide not to trade.
+    Output: A fully specified trade order, ready to be executed.
+
+By adding this layer of complexity, you'll likely make the system more robust, but you'll also add more parameters and logic that need to be optimized and tested, both in isolation and in conjunction with each other. However, the benefits of having a more flexible, nuanced system may well outweigh the added complexity.

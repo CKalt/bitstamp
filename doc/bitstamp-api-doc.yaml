@@ -1,0 +1,3594 @@
+components:
+  schemas:
+    AccountBalancesResponse:
+      properties:
+        available:
+          description: Available balance for trading.
+          example: '90.00'
+          format: decimal
+          readOnly: true
+          type: string
+        currency:
+          description: Currency name.
+          example: usd
+          readOnly: true
+          type: string
+        reserved:
+          description: Reserved balance for trading.
+          example: '10.00'
+          format: decimal
+          readOnly: true
+          type: string
+        total:
+          description: Total balance on exchange.
+          example: '100.00'
+          format: decimal
+          readOnly: true
+          type: string
+      type: object
+    BankWithdrawalStatusRequest:
+      properties:
+        id:
+          description: ID of the withdrawal request.
+          example: '1'
+          type: string
+      required:
+        - id
+      type: object
+    BankWithdrawalStatusResponse:
+      properties:
+        status:
+          description: Status of the withdrawal request.
+          example: Waiting to be processed
+          readOnly: true
+          type: string
+      type: object
+    BuyInstantOrderRequest:
+      properties:
+        amount:
+          description: 'Amount in counter currency (Example: For BTC/USD pair, amount is quoted in USD)'
+          example: '100.00'
+          type: number
+        client_order_id:
+          description: Unique client order id set by client. Client order id needs to be unique string. Client order id value can only be used once.
+          example: '123456789'
+          type: string
+      required:
+        - amount
+      type: object
+    BuySellLimitOrderRequest:
+      properties:
+        amount:
+          description: Amount.
+          example: '100.00'
+          maximum: 92233720368
+          minimum: 1.e-8
+          type: number
+        client_order_id:
+          description: Unique client order id set by client. Client order id needs to be unique string. Client order id value can only be used once.
+          example: '123456789'
+          type: string
+        daily_order:
+          description: Opens buy limit order which will be canceled at 0:00 UTC unless it already has been executed.
+          example: true
+          type: boolean
+        expire_time:
+          description: Unix timestamp in milliseconds. Required in case of GTD order.
+          example: 1643698764
+          format: int32
+          type: integer
+        fok_order:
+          description: A Fill-Or-Kill (FOK) order is an order that must be executed immediately in its entirety. If the order cannot be immediately executed in its entirety, it will be cancelled.
+          example: true
+          type: boolean
+        gtd_order:
+          description: A Good-Till-Date (GTD) lets you select an expiration date and time up until which the order will be open.
+          example: true
+          type: boolean
+        ioc_order:
+          description: An Immediate-Or-Cancel (IOC) order is an order that must be executed immediately. Any portion of an IOC order that cannot be filled immediately will be cancelled.
+          example: true
+          type: boolean
+        limit_price:
+          description: If the order gets executed, a new sell order will be placed, with "limit_price" as its price.
+          example: '100.00'
+          maximum: 92233720368
+          minimum: 1.e-8
+          type: number
+        moc_order:
+          description: A Maker-Or-Cancel (MOC) order is an order that ensures it is not fully or partially filled when placed. In case it would be, the order is cancelled.
+          example: true
+          type: boolean
+        price:
+          description: Price.
+          example: '100.00'
+          maximum: 92233720368
+          minimum: 1.e-8
+          type: number
+      required:
+        - amount
+        - price
+      type: object
+    BuySellMarketOrderRequest:
+      properties:
+        amount:
+          description: 'Amount in base currency (Example: For BTC/USD pair, amount is quoted in BTC)'
+          example: '100.00'
+          type: number
+        client_order_id:
+          description: Unique client order id set by client. Client order id needs to be unique string. Client order id value can only be used once.
+          example: '123456789'
+          type: string
+      required:
+        - amount
+      type: object
+    BuySellOrderResponse:
+      properties:
+        amount:
+          description: Amount.
+          example: '45.00000000'
+          readOnly: true
+          type: string
+        client_order_id:
+          description: Client order ID sent with request. Only returned if parameter was used in request.
+          example: '123456789'
+          readOnly: true
+          type: string
+        datetime:
+          description: Date and time.
+          example: '2022-01-31 14:43:15.796000'
+          format: date-time
+          readOnly: true
+          type: string
+        id:
+          description: Order ID.
+          example: '1234123412341234'
+          readOnly: true
+          type: string
+        market:
+          description: Market where the order was placed.
+          example: BTC/USD
+          readOnly: true
+          type: string
+        price:
+          description: Price.
+          example: '2211.00'
+          readOnly: true
+          type: string
+        type:
+          description: 0 (buy) or 1 (sell).
+          example: '0'
+          readOnly: true
+          type: string
+      type: object
+    CancelAllOrdersResponse:
+      properties:
+        canceled:
+          items:
+            $ref: '#/components/schemas/Order'
+          readOnly: true
+          type: array
+        success:
+          description: '"true" if all orders were successfully canceled and "false" otherwise'
+          example: true
+          readOnly: true
+          type: boolean
+      type: object
+    CancelBankOrCryptoWithdrawalRequest:
+      properties:
+        id:
+          description: ID of the withdrawal request.
+          example: '1'
+          type: string
+      required:
+        - id
+      type: object
+    CancelBankWithdrawalResponse:
+      properties:
+        account_currency:
+          description: Account currency (balance currency from which the withdrawal was requested) of the cancelled withdrawal request.
+          example: EUR
+          readOnly: true
+          type: string
+        amount:
+          description: Amount of the cancelled withdrawal request.
+          example: 100
+          readOnly: true
+          type: number
+        currency:
+          description: Currency of the cancelled withdrawal request.
+          example: EUR
+          readOnly: true
+          type: string
+        id:
+          description: ID of the cancelled withdrawal request.
+          example: '1'
+          readOnly: true
+          type: string
+        type:
+          description: The type of the cancelled withdrawal request.
+          example: EU bank transfer (SEPA)
+          readOnly: true
+          type: string
+      type: object
+    CancelOrderRequest:
+      properties:
+        id:
+          description: Order ID.
+          example: '1234123412341234'
+          type: string
+      type: object
+    CancelOrderResponse:
+      properties:
+        amount:
+          description: Order amount.
+          example: '0.02035278'
+          readOnly: true
+          type: number
+        id:
+          description: Order ID.
+          example: 1453282316578816
+          format: int32
+          readOnly: true
+          type: integer
+        price:
+          description: Order price.
+          example: '2100.45'
+          readOnly: true
+          type: number
+        type:
+          description: Order type.
+          example: 0
+          format: int32
+          readOnly: true
+          type: integer
+      type: object
+    CryptoTransaction:
+      properties:
+        amount:
+          description: Amount.
+          example: 0.00012
+          readOnly: true
+          type: number
+        currency:
+          description: Currency.
+          example: BTC
+          readOnly: true
+          type: string
+        datetime:
+          description: Date and time.
+          example: 1642665114
+          format: int32
+          readOnly: true
+          type: integer
+        destinationAddress:
+          description: Destination address.
+          example: 3FiKkjgZ6Sj4RWp3ZsCjYh5Pt7ZCBsL7uF
+          readOnly: true
+          type: string
+        txid:
+          description: Transaction hash.
+          example: e4123d1d57df4106aaae5ec4d77eb6cd42e226d020a0a2c1c7919d14b932494b
+          readOnly: true
+          type: string
+      type: object
+    CryptoTransactionsRequest:
+      properties:
+        include_ious:
+          description: True - shows also ripple IOU transactions.
+          example: false
+          type: boolean
+        limit:
+          description: 'Limit result to that many transactions (default: 100; maximum: 1000).'
+          example: 100
+          format: int32
+          type: integer
+        offset:
+          description: 'Skip that many transactions before returning results (default: 0, maximum: 200000).'
+          example: 0
+          format: int32
+          type: integer
+      type: object
+    CryptoTransactionsResponse:
+      properties:
+        deposits:
+          description: Deposits.
+          items:
+            $ref: '#/components/schemas/CryptoTransaction'
+          type: array
+        ripple_iou_transactions:
+          description: Ripple IOU transactions.
+          items:
+            $ref: '#/components/schemas/CryptoTransaction'
+          type: array
+        withdrawals:
+          description: Withdrawals.
+          items:
+            $ref: '#/components/schemas/CryptoTransaction'
+          type: array
+      type: object
+    CryptoWithdrawalRequest:
+      properties:
+        address:
+          description: Cryptocurrency address.
+          example: aMDHooGmAkyrsaQiKhAORhSNTmoRzxqWIO
+          type: string
+        amount:
+          description: Cryptocurrency amount.
+          example: '1'
+          type: number
+        destination_tag:
+          description: 'Address destination tag - applicable to: XRP.'
+          example: '12345'
+          type: string
+        memo_id:
+          description: 'Address memo id - applicable to: XLM, HBAR.'
+          example: '12345'
+          type: string
+      required:
+        - address
+        - amount
+        - destination_tag
+      type: object
+    CryptoWithdrawalResponse:
+      properties:
+        id:
+          description: Withdrawal ID.
+          example: 1
+          format: int32
+          readOnly: true
+          type: integer
+      type: object
+    Currency:
+      properties:
+        available_supply:
+          example: '234565.232'
+          readOnly: true
+          type: string
+        currency:
+          example: BTC
+          readOnly: true
+          type: string
+        decimals:
+          example: 8
+          format: int32
+          minimum: 2
+          readOnly: true
+          type: integer
+        deposit:
+          example: Enabled
+          readOnly: true
+          type: string
+        logo:
+          example: https://assets.bitstamp.net/static/webapp/images/currencies/btc.28753a856eda28f17d69161c23de305be2728cd5.svg
+          readOnly: true
+          type: string
+        name:
+          example: Bitcoin
+          readOnly: true
+          type: string
+        symbol:
+          example: ₿
+          readOnly: true
+          type: string
+        type:
+          enum:
+            - crypto
+            - fiat
+          example: crypto
+          readOnly: true
+          type: string
+        withdrawal:
+          example: Enabled
+          readOnly: true
+          type: string
+      required:
+        - available_supply
+        - currency
+        - decimals
+        - name
+        - symbol
+        - type
+      type: object
+    DepositAddressResponse:
+      properties:
+        address:
+          description: Address for requested currency.
+          example: '0x6a56f5b80f04b4fd70d64d72e1396698635e5436'
+          readOnly: true
+          type: string
+        destination_tag:
+          description: Destination tag in case of currency XRP or Ripple, otherwise not present.
+          example: 89473951
+          format: int32
+          readOnly: true
+          type: integer
+        memo_id:
+          description: Memo ID in case of currency HBAR or XLM, otherwise not present.
+          example: '299576079'
+          readOnly: true
+          type: string
+      type: object
+    ErrorResponse:
+      properties:
+        reason:
+          description: Error reason.
+          example: The reason for the error.
+          readOnly: true
+          type: string
+        status:
+          description: '"error"'
+          example: error
+          readOnly: true
+          type: string
+      type: object
+    EurUsdConversionRateResponse:
+      properties:
+        buy:
+          description: Buy conversion rate.
+          example: '16.52234567'
+          readOnly: true
+          type: string
+        sell:
+          description: Sell conversion rate.
+          example: '0.06577932'
+          readOnly: true
+          type: string
+      type: object
+    Fee:
+      properties:
+        maker:
+          description: Fee for maker of the market.
+          example: '0.15000'
+          format: decimal
+          readOnly: true
+          type: string
+        taker:
+          description: Fee for taker of the market.
+          example: '0.16000'
+          format: decimal
+          readOnly: true
+          type: string
+      type: object
+    FeeTradingResponse:
+      properties:
+        currency_pair:
+          description: Currency pair name.
+          example: btcusd
+          readOnly: true
+          type: string
+        fees:
+          description: Dictionary of maker and taker fees.
+          example:
+            - maker: '0.15000'
+              taker: '0.16000'
+          items:
+            $ref: '#/components/schemas/Fee'
+          type: array
+      type: object
+    FeeWithdrawalResponse:
+      properties:
+        currency:
+          description: Currency name.
+          example: btc
+          readOnly: true
+          type: string
+        fee:
+          description: Customer withdrawal fee.
+          example: '0.00015000'
+          format: decimal
+          readOnly: true
+          type: string
+      type: object
+    LiquidationAddressInfoRequest:
+      properties:
+        address:
+          description: Shows transactions for specific liquidation address or for all users liquidation addresses.
+          example: 3MDvHUAg41uJx1511gDotsf4ccKuc9frz1
+          type: string
+      type: object
+    LiquidationAddressInfoResponse:
+      properties:
+        address:
+          description: Address set for automatic conversion
+          example: 3MDvHUAg41uJx1511gDotsf4ccKuc9frz1
+          readOnly: true
+          type: string
+        currency_pair:
+          description: Address set for automatic conversion.
+          example: BTC/USD
+          readOnly: true
+          type: string
+        transactions:
+          description: List of transactions.
+          example:
+            - count: 1
+              order_id: 1
+              trades:
+                - btc_amount: '1.0'
+                  exchange_rate: '1.0'
+                  fees: '0.0'
+          items:
+            $ref: '#/components/schemas/Transaction'
+          type: array
+      type: object
+    NewLiquidationAddressRequest:
+      properties:
+        address_format:
+          description: "\tAddress format. Can be either \"P2SHP2WSH\" or \"BECH32\"."
+          example: P2SHP2WSH
+          type: string
+        liquidation_currency:
+          description: Deposited BTCs will be automatically converted to liquidation_currency.
+          example: BTC
+          type: string
+      type: object
+    NewLiquidationAddressResponse:
+      properties:
+        address:
+          description: Address set for automatic conversion.
+          example: 3MDvHUAg41uJx1511gDotsf4ccKuc9frz1
+          readOnly: true
+          type: string
+      type: object
+    Ohlc:
+      properties:
+        timestamp:
+          description: Unix timestamp date and time.
+          example: '1643630400'
+          readOnly: true
+          type: string
+        open:
+          description: Opening price.
+          example: '2188.97'
+          readOnly: true
+          type: string
+        high:
+          description: Price high.
+          example: '2211.00'
+          readOnly: true
+          type: string
+        low:
+          description: Price low.
+          example: '2188.97'
+          readOnly: true
+          type: string
+        close:
+          description: Closing price.
+          example: '2188.97'
+          readOnly: true
+          type: string
+        volume:
+          description: Volume.
+          example: '4.01560417'
+          readOnly: true
+          type: string
+      type: object
+    OhlcDataResponse:
+      properties:
+        pair:
+          description: Trading pair.
+          example: BTC/USD
+          readOnly: true
+          type: string
+        ohlc:
+          allOf:
+            - $ref: '#/components/schemas/Ohlc'
+          description: OHLC data.
+      type: object
+    OpenBankWithdrawalRequest:
+      properties:
+        account_currency:
+          description: The balance from which you wish to withdraw. Can be either "USD", "EUR" or "GBP".
+          example: USD
+          type: string
+        address:
+          description: User or company address.
+          example: Street 1
+          type: string
+        amount:
+          description: The amount to withdraw.
+          example: '100.0'
+          type: string
+        bank_address:
+          description: Target bank address (international withdrawals only).
+          example: Street 1
+          type: string
+        bank_city:
+          description: Target bank city (international withdrawals only).
+          example: City
+          type: string
+        bank_country:
+          description: 'Target bank country. Country codes must be in accordance with the ISO 3166-1 standard (use two character Alpha-2 codes). Disclaimer: Not all country choices listed at this reference URL are supported. For a detailed list please refer to our platform''s withdrawal interfaces (international withdrawals only).'
+          example: SI
+          type: string
+        bank_name:
+          description: Target bank name (international withdrawals only).
+          example: Bank
+          type: string
+        bank_postal_code:
+          description: Target bank postal code (international withdrawals only).
+          example: '0000'
+          type: string
+        bic:
+          description: The target bank BIC.
+          example: XXXXYY00
+          type: string
+        city:
+          description: User or company city.
+          example: City
+          type: string
+        comment:
+          description: Withdrawal comment.
+          example: Comment.
+          type: string
+        country:
+          description: 'User or company country. Country codes must be in accordance with the ISO 3166-1 standard (use two character Alpha-2 codes). Disclaimer: Not all country choices listed at this reference URL are supported. For a detailed list please refer to our platform''s withdrawal interfaces.'
+          example: SI
+          type: string
+        currency:
+          description: 'The currency in which the funds should be withdrawn (may involve conversion fees). Currency codes must be in accordance with the ISO 4217 standard. Disclaimer: Not all currency choices listed at this reference URL are supported. For a detailed list please refer to our platform''s withdrawal interfaces. (international withdrawals only)'
+          example: USD
+          type: string
+        iban:
+          description: User or company IBAN.
+          example: SI56 0000 0000 0000 000
+          type: string
+        name:
+          description: Full user or company name.
+          example: John Doe
+          type: string
+        postal_code:
+          description: User or company postal code.
+          example: '0000'
+          type: string
+        type:
+          description: Type of the withdrawal request ("sepa" or "international").
+          example: international
+          type: string
+      required:
+        - account_currency
+        - address
+        - amount
+        - bic
+        - city
+        - country
+        - iban
+        - name
+        - postal_code
+        - type
+      type: object
+    OpenBankWithdrawalResponse:
+      properties:
+        withdrawal_id:
+          description: Withdrawal ID.
+          example: 1
+          format: int32
+          readOnly: true
+          type: integer
+      type: object
+    OpenOrdersAllResponse:
+      properties:
+        amount:
+          description: Remaining amount.
+          example: '0.50000000'
+          readOnly: true
+          type: string
+        amount_at_create:
+          description: Initial amount.
+          example: '0.50000000'
+          readOnly: true
+          type: string
+        client_order_id:
+          description: Client order id. (Only returned if order was placed with client order id parameter.)
+          example: '1234123412341234'
+          readOnly: true
+          type: string
+        currency_pair:
+          description: Currency Pair.
+          example: BTC/USD
+          readOnly: true
+          type: string
+        datetime:
+          description: Date and time.
+          example: '2022-01-31 14:43:15'
+          readOnly: true
+          type: string
+        id:
+          description: Order ID.
+          example: '1234123412341234'
+          readOnly: true
+          type: string
+        limit_price:
+          description: Limit price. (Only returned if limit order was placed with limit_price parameter.)
+          example: '110.00'
+          readOnly: true
+          type: string
+        market:
+          description: Market where the order was placed.
+          example: BTC/USD
+          readOnly: true
+          type: string
+        price:
+          description: Price.
+          example: '100.00'
+          readOnly: true
+          type: string
+        type:
+          description: 'Type: 0 - buy; 1 - sell.'
+          example: '0'
+          readOnly: true
+          type: string
+      type: object
+    OpenOrdersPairResponse:
+      properties:
+        amount:
+          description: Remaining amount.
+          example: '0.50000000'
+          readOnly: true
+          type: string
+        amount_at_create:
+          description: Initial amount.
+          example: '0.50000000'
+          readOnly: true
+          type: string
+        client_order_id:
+          description: Client order id. (Only returned if order was placed with client order id parameter.)
+          example: '1234123412341234'
+          readOnly: true
+          type: string
+        datetime:
+          description: Date and time.
+          example: '2022-01-31 14:43:15'
+          readOnly: true
+          type: string
+        id:
+          description: Order ID.
+          example: '1234123412341234'
+          readOnly: true
+          type: string
+        limit_price:
+          description: Limit price. (Only returned if limit order was placed with limit_price parameter.)
+          example: '110.00'
+          readOnly: true
+          type: string
+        price:
+          description: Price.
+          example: '100.00'
+          readOnly: true
+          type: string
+        type:
+          description: 'Order type: 0 - buy; 1 - sell.'
+          example: '0'
+          readOnly: true
+          type: string
+      type: object
+    Order:
+      properties:
+        amount:
+          description: Order amount.
+          example: '0.02035278'
+          readOnly: true
+          type: number
+        currency_pair:
+          description: Currency pair formatted as "BTC/USD".
+          example: BTC/USD
+          readOnly: true
+          type: string
+        id:
+          description: Order ID.
+          example: 1453282316578816
+          format: int32
+          readOnly: true
+          type: integer
+        price:
+          description: Order price.
+          example: '2100.45'
+          readOnly: true
+          type: number
+        type:
+          description: Order type.
+          example: 0
+          format: int32
+          readOnly: true
+          type: integer
+      type: object
+    OrderBookResponse:
+      properties:
+        asks:
+          description: List of sell orders.
+          example:
+            - - '9484.34'
+              - '1.00000000'
+          items:
+            items:
+              type: string
+            type: array
+          readOnly: true
+          type: array
+        bids:
+          description: List of buy orders.
+          example:
+            - - '9484.34'
+              - '1.00000000'
+          items:
+            items:
+              type: string
+            type: array
+          readOnly: true
+          type: array
+        microtimestamp:
+          description: Unix timestamp date and time in microseconds.
+          example: '1643643584684047'
+          readOnly: true
+          type: string
+        timestamp:
+          description: Unix timestamp date and time.
+          example: '1643643584'
+          readOnly: true
+          type: string
+      type: object
+    OrderStatusRequest:
+      properties:
+        client_order_id:
+          description: (Optional) Client order id. (Can only be used if order was placed with client order id parameter.).
+          example: '1234123412341234'
+          type: string
+        id:
+          description: Order ID.
+          example: '1234123412341234'
+          type: string
+        omit_transactions:
+          description: '(Optional) Omits list of transactions for order ID. Possible value: True'
+          example: true
+          type: boolean
+      type: object
+    OrderStatusResponse:
+      properties:
+        amount_remaining:
+          description: Amount remaining.
+          example: '100.00'
+          readOnly: true
+          type: number
+        client_order_id:
+          description: Client order id. (Only returned if order was placed with client order id parameter.).
+          example: '0.50000000'
+          readOnly: true
+          type: string
+        id:
+          description: Order ID.
+          example: 1458532827766784
+          format: int32
+          readOnly: true
+          type: integer
+        market:
+          description: Market where the order was placed.
+          example: BTC/USD
+          readOnly: true
+          type: string
+        status:
+          description: Open, Finished, Expired or Canceled.
+          example: Open
+          readOnly: true
+          type: string
+        transactions:
+          items:
+            $ref: '#/components/schemas/OrderTransaction'
+          readOnly: true
+          type: array
+      type: object
+    OrderTransaction:
+      properties:
+        datetime:
+          description: Date and time.
+          example: '2022-01-31 14:43:15'
+          readOnly: true
+          type: string
+        fee:
+          description: Transaction fee.
+          example: '1.00'
+          readOnly: true
+          type: string
+        price:
+          description: Price.
+          example: '100.00'
+          readOnly: true
+          type: string
+        tid:
+          description: Transaction ID.
+          example: 1
+          format: int32
+          readOnly: true
+          type: integer
+        type:
+          description: 'Transaction type: 0 - deposit; 1 - withdrawal; 2 - market trade.'
+          example: 0
+          format: int32
+          readOnly: true
+          type: integer
+        '{from_currency}':
+          description: '{from_currency} amount.'
+          example: '101.00'
+          readOnly: true
+          type: string
+        '{to_currency}':
+          description: '{to_currency} amount.'
+          example: '1'
+          readOnly: true
+          type: string
+      type: object
+    RippleIOUDepositAddressResponse:
+      properties:
+        address:
+          description: Ripple address.
+          example: rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B
+          readOnly: true
+          type: string
+        destination_tag:
+          description: Destination tag.
+          example: 89473951
+          format: int32
+          readOnly: true
+          type: integer
+      type: object
+    RippleIOUWithdrawalRequest:
+      properties:
+        address:
+          description: Ripple address.
+          example: rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B
+          type: string
+        amount:
+          description: Currency amount.
+          example: '123'
+          type: number
+        currency:
+          description: Currency to withdraw.
+          example: USD
+          readOnly: true
+          type: string
+      required:
+        - address
+        - amount
+      type: object
+    RippleIOUWithdrawalResponse:
+      properties:
+        id:
+          description: Withdrawal ID.
+          example: 1
+          format: int32
+          readOnly: true
+          type: integer
+      type: object
+    SellInstantOrderRequest:
+      properties:
+        amount:
+          description: 'Amount in base currency (Example: For BTC/USD pair, amount is quoted in BTC)'
+          example: '100.00'
+          type: number
+        amount_in_counter:
+          description: '(Optional) Instant sell orders allow you to sell an amount of the base currency determined by the value of it in the counter-currency. Amount_in_counter sets the amount parameter to refer to the counter currency instead of the base currency of the selected trading pair. Possible value: True'
+          example: false
+          type: boolean
+        client_order_id:
+          description: Unique client order id set by client. Client order id needs to be unique string. Client order id value can only be used once.
+          example: '123456789'
+          type: string
+      required:
+        - amount
+      type: object
+    SimpleErrorResponse:
+      properties:
+        error:
+          description: The reason for the error.
+          example: The reason for the error.
+          readOnly: true
+          type: string
+      type: object
+    TickerHourResponse:
+      properties:
+        ask:
+          description: Lowest sell order.
+          example: '43521.92'
+          readOnly: true
+          type: string
+        bid:
+          description: Highest buy order.
+          example: '43499.58'
+          readOnly: true
+          type: string
+        high:
+          description: Last hour price high.
+          example: '43701.83'
+          readOnly: true
+          type: string
+        last:
+          description: Last price.
+          example: '43505.90'
+          readOnly: true
+          type: string
+        low:
+          description: Last hour price low.
+          example: '43416.85'
+          readOnly: true
+          type: string
+        open:
+          description: First price of the hour.
+          example: '43640.06'
+          readOnly: true
+          type: string
+        side:
+          description: 'Ticker side: 0 - buy; 1 - sell.'
+          example: '0'
+          readOnly: true
+          type: string
+        timestamp:
+          description: Unix timestamp date and time.
+          example: '1644405321'
+          readOnly: true
+          type: string
+        volume:
+          description: Last hour volume.
+          example: '26.24890063'
+          readOnly: true
+          type: string
+        vwap:
+          description: Last hour volume weighted average price.
+          example: '43578.11'
+          readOnly: true
+          type: string
+      type: object
+    TickerResponse:
+      properties:
+        ask:
+          description: Lowest sell order.
+          example: '2211.00'
+          readOnly: true
+          type: string
+        bid:
+          description: Highest buy order.
+          example: '2188.97'
+          readOnly: true
+          type: string
+        high:
+          description: Last 24 hours price high.
+          example: '2811.00'
+          readOnly: true
+          type: string
+        last:
+          description: Last price.
+          example: '2211.00'
+          readOnly: true
+          type: string
+        low:
+          description: Last 24 hours price low.
+          example: '2188.97'
+          readOnly: true
+          type: string
+        open:
+          description: First price of the day.
+          example: '2211.00'
+          readOnly: true
+          type: string
+        open_24:
+          description: 24 hours time delta transaction price
+          example: '2211.00'
+          readOnly: true
+          type: string
+        percent_change_24:
+          description: 24 hours price change percent
+          example: '13.57'
+          readOnly: true
+          type: string
+        side:
+          description: 'Ticker side: 0 - buy; 1 - sell.'
+          example: '0'
+          readOnly: true
+          type: string
+        timestamp:
+          description: Unix timestamp date and time.
+          example: '1643640186'
+          readOnly: true
+          type: string
+        volume:
+          description: Last 24 hours volume.
+          example: '213.26801100'
+          readOnly: true
+          type: string
+        vwap:
+          description: Last 24 hours volume weighted average price.
+          example: '2189.80'
+          readOnly: true
+          type: string
+      type: object
+    TickerWithPairResponse:
+      properties:
+        ask:
+          description: Lowest sell order.
+          example: '2211.00'
+          readOnly: true
+          type: string
+        bid:
+          description: Highest buy order.
+          example: '2188.97'
+          readOnly: true
+          type: string
+        high:
+          description: Last 24 hours price high.
+          example: '2811.00'
+          readOnly: true
+          type: string
+        last:
+          description: Last price.
+          example: '2211.00'
+          readOnly: true
+          type: string
+        low:
+          description: Last 24 hours price low.
+          example: '2188.97'
+          readOnly: true
+          type: string
+        open:
+          description: First price of the day.
+          example: '2211.00'
+          readOnly: true
+          type: string
+        open_24:
+          description: 24 hours time delta transaction price
+          example: '2211.00'
+          readOnly: true
+          type: string
+        pair:
+          description: Currency pair name
+          example: BTC/USD
+          readOnly: true
+          type: string
+        percent_change_24:
+          description: 24 hours price change percent
+          example: '13.57'
+          readOnly: true
+          type: string
+        side:
+          description: 'Ticker side: 0 - buy; 1 - sell.'
+          example: '0'
+          readOnly: true
+          type: string
+        timestamp:
+          description: Unix timestamp date and time.
+          example: '1643640186'
+          readOnly: true
+          type: string
+        volume:
+          description: Last 24 hours volume.
+          example: '213.26801100'
+          readOnly: true
+          type: string
+        vwap:
+          description: Last 24 hours volume weighted average price.
+          example: '2189.80'
+          readOnly: true
+          type: string
+      type: object
+    Trade:
+      properties:
+        btc_amount:
+          description: BTC amount.
+          example: '1.0'
+          readOnly: true
+          type: string
+        exchange_rate:
+          description: Exchange rate.
+          example: '1.0'
+          readOnly: true
+          type: string
+        fees:
+          description: Fees.
+          example: '0.0'
+          readOnly: true
+          type: string
+      type: object
+    TradingPair:
+      properties:
+        name:
+          description: Trading pair.
+          example: BTC/USD
+          readOnly: true
+          type: string
+        url_symbol:
+          description: URL symbol of trading pair.
+          example: btcusd
+          readOnly: true
+          type: string
+      type: object
+    TradingPairsInfoResponse:
+      properties:
+        name:
+          description: Trading pair.
+          example: BTC/USD
+          readOnly: true
+          type: string
+        url_symbol:
+          description: URL symbol of trading pair.
+          example: btcusd
+          readOnly: true
+          type: string
+        base_decimals:
+          description: 'Decimal precision for base currency (BTC/USD - base: BTC).'
+          example: 8
+          format: int32
+          readOnly: true
+          type: integer
+        counter_decimals:
+          description: 'Decimal precision for counter currency (BTC/USD - counter: USD).'
+          example: 2
+          format: int32
+          readOnly: true
+          type: integer
+        minimum_order:
+          description: Minimum order size.
+          example: 20.0 USD
+          readOnly: true
+          type: string
+        trading:
+          description: Trading engine status (Enabled/Disabled).
+          example: Enabled
+          readOnly: true
+          type: string
+        instant_and_market_orders:
+          description: Instant and market orders status (Enabled/Disabled).
+          example: Enabled
+          readOnly: true
+          type: string
+        description:
+          description: Trading pair description.
+          example: Bitcoin / U.S. dollar
+          readOnly: true
+          type: string
+      type: object
+    Transaction:
+      properties:
+        count:
+          description: Number of transactions.
+          example: 1
+          format: int32
+          readOnly: true
+          type: integer
+        order_id:
+          description: Conversion order ID.
+          example: 1
+          format: int32
+          readOnly: true
+          type: integer
+        trades:
+          description: Trades.
+          items:
+            $ref: '#/components/schemas/Trade'
+          type: array
+      type: object
+    TransactionsResponse:
+      properties:
+        amount:
+          description: Amount.
+          example: '0.00676053'
+          readOnly: true
+          type: string
+        date:
+          description: Unix timestamp date and time.
+          example: '1644406050'
+          readOnly: true
+          type: string
+        price:
+          description: Price.
+          example: '43524.69'
+          readOnly: true
+          type: string
+        tid:
+          description: Transaction ID.
+          example: '220744838'
+          readOnly: true
+          type: string
+        type:
+          description: 0 (buy) or 1 (sell).
+          readOnly: true
+          type: string
+      type: object
+    TransferToFromMainRequest:
+      properties:
+        amount:
+          description: Amount.
+          example: '10'
+          type: number
+        currency:
+          description: Currency.
+          example: BTC
+          type: string
+        subAccount:
+          description: The Sub Account unique identifier.
+          example: '990129'
+          format: int32
+          type: integer
+      required:
+        - amount
+        - currency
+        - subAccount
+      type: object
+    TransferToFromMainResponse:
+      properties:
+        reason:
+          description: Additional error information.
+          example: 'Missing parameters: ["subAccount"].'
+          readOnly: true
+          type: string
+        status:
+          description: '"ok" or "error"'
+          example: error
+          readOnly: true
+          type: string
+      type: object
+    UserTransactionsRequest:
+      properties:
+        limit:
+          description: 'Limit result to that many transactions (default: 100; maximum: 1000).'
+          example: '100'
+          type: string
+        offset:
+          description: 'Skip that many transactions before returning results (default: 0, maximum: 200000). If you need to export older history contact support OR use combination of limit and since_id parameters.'
+          example: '0'
+          type: string
+        since_id:
+          description: (Optional) Show only transactions from specified transaction id. If since_id parameter is used, limit parameter is set to 1000.
+          example: '1'
+          type: string
+        since_timestamp:
+          description: (Optional) Show only transactions from unix timestamp (for max 30 days old).
+          example: '1644406050'
+          type: string
+        sort:
+          description: 'Sorting by date and time: asc - ascending; desc - descending (default: desc).'
+          example: desc
+          type: string
+        until_timestamp:
+          description: Show only transactions to unix timestamp (for max 30 days old).
+          example: '1644406050'
+          type: string
+      type: object
+    UserTransactionsResponse:
+      properties:
+        datetime:
+          description: Date and time.
+          example: '2022-03-01 10:54:53.849000'
+          readOnly: true
+          type: string
+        fee:
+          description: Transaction fee.
+          example: '0.62563'
+          readOnly: true
+          type: string
+        id:
+          description: Transaction ID.
+          example: 1
+          format: int32
+          readOnly: true
+          type: integer
+        order_id:
+          description: Executed order ID.
+          example: 1463489000206336
+          format: int32
+          readOnly: true
+          type: integer
+        self_trade:
+          description: True if transaction is a self trade transaction.
+          example: true
+          readOnly: true
+          type: boolean
+        self_trade_order_id:
+          description: Order ID of the complementary order of the self trade.
+          example: 1
+          format: int32
+          readOnly: true
+          type: integer
+        type:
+          description: 'Transaction type: 0 - deposit; 1 - withdrawal; 2 - market trade; 14 - sub account transfer; 25 - credited with staked assets; 26 - sent assets to staking; 27 - staking reward; 32 - referral reward; 35 - inter account transfer; 33 - settlement transfer.'
+          example: '1'
+          readOnly: true
+          type: string
+        '{currency_pair}':
+          description: '{currency_pair} exchange rate.'
+          example: 1
+          readOnly: true
+          type: number
+        '{from_currency}':
+          description: '{from_currency} amount.'
+          example: '-1.0'
+          readOnly: true
+          type: string
+        '{to_currency}':
+          description: '{to_currency} amount.'
+          example: '1.0'
+          readOnly: true
+          type: string
+      type: object
+    WebsocketsTokenResponse:
+      properties:
+        token:
+          description: Token.
+          example: vRQqHEFoxp23seihJnbhPGt0lgBG5EFe
+          readOnly: true
+          type: string
+        user_id:
+          description: User ID.
+          example: 1
+          format: int32
+          readOnly: true
+          type: integer
+        valid_sec:
+          description: Validity of token in seconds.
+          example: 60
+          format: int32
+          readOnly: true
+          type: integer
+      type: object
+    WithdrawalRequestsRequest:
+      properties:
+        id:
+          description: Withdrawal request id.
+          example: '1'
+          type: string
+        limit:
+          description: 'Limit result to that many withdrawal requests (minimum: 1; maximum: 1000).'
+          example: '10'
+          type: string
+        offset:
+          description: 'Skip that many withdrawal requests before returning results (minimum: 0; maximum: 200000).'
+          example: '0'
+          type: string
+        timedelta:
+          description: Withdrawal requests from number of seconds ago to now (max. 50000000).
+          example: '86400'
+          maxLength: 10
+          type: string
+      type: object
+    WithdrawalRequestsResponse:
+      properties:
+        address:
+          description: Withdrawal address.
+          example: aMDHooGmAkyrsaQiKhAORhSNTmoRzxqWIO
+          readOnly: true
+          type: string
+        amount:
+          description: Amount.
+          example: '0.00006000'
+          readOnly: true
+          type: string
+        currency:
+          description: Currency.
+          example: BTC
+          readOnly: true
+          type: string
+        datetime:
+          description: Date and time.
+          example: '2022-01-31 16:07:32'
+          format: date-time
+          readOnly: true
+          type: string
+        id:
+          description: Withdrawal ID.
+          example: 1
+          format: int32
+          readOnly: true
+          type: integer
+        status:
+          description: 0 (open), 1 (in process), 2 (finished), 3 (canceled) or 4 (failed).
+          example: 2
+          format: int32
+          readOnly: true
+          type: integer
+        transaction_id:
+          description: Transaction ID (crypto withdrawals only).
+          example: NsOeFbQhRnpGzNIThWGBTkQwRJqTNOGPVhYavrVyMfkAyMUmIlUpFIwGTzSvpeOP
+          readOnly: true
+          type: string
+        txid:
+          description: Bitstamp's transaction id.
+          example: 1
+          format: int32
+          readOnly: true
+          type: integer
+        type:
+          description: 0 (SEPA), 2 (WIRE transfer), 17 (BCH), 1 (BTC), 16 (ETH), 15 (LTC), 18 (PAX), 19 (XLM), 14 (XRP), 20 (LINK), 21 (OMG), 22 (USDC), 24 (AAVE), 25 (BAT), 26 (UMA), 27 (DAI), 28 (KNC), 29 (MKR), 30 (ZRX), 31 (GUSD), 32 (ALGO), 33 (AUDIO), 34 (CRV), 35 (SNX), 36 (UNI), 38 (YFI), 39 (COMP), 40 (GRT), 42 (USDT), 43 (EURT), 46 (MATIC), 47 (SUSHI), 48 (CHZ), 49 (ENJ), 50 (HBAR), 51 (ALPHA), 52 (AXS), 53 (FTT), 54 (SAND), 55 (STORJ), 56 (ADA), 57 (FET), 58 (RGT), 59 (SKL), 60 (CEL), 61 (SLP), 62 (SXP), 65 (DYDX), 66 (FTM), 67 (SHIB), 69 (AMP), 71 (GALA), 72 (PERP).
+          example: 0
+          format: int32
+          readOnly: true
+          type: integer
+      type: object
+  securitySchemes:
+    x_auth:
+      description: '**Format:** `BITSTAMP {api_key}`'
+      in: header
+      name: X-Auth
+      type: apiKey
+    x_auth_nonce:
+      description: |-
+
+        Client generated random nonce:
+
+        - lowercase,
+
+        - 36 char string,
+
+        - each nonce can be used only once within a timeframe of 150 seconds.
+      in: header
+      name: X-Auth
+      type: apiKey
+    x_auth_signature:
+      description: |-
+
+        ```sha256.hmac({string_to_sign}, {api_secret})```
+
+        ```{string_to_sign}``` is your signature message.
+
+        Content-Type should not be added to the string if request.body is empty.
+
+        The following have to be combined into a single string:
+
+        ```
+        "BITSTAMP" + " " + api_key + 
+        HTTP Verb + 
+        url.host + 
+        url.path + 
+        url.query + 
+        Content-Type + 
+        X-Auth-Nonce + 
+        X-Auth-Timestamp + 
+        X-Auth-Version + 
+        request.body
+        ```
+      in: header
+      name: X-Auth-Signature
+      type: apiKey
+    x_auth_timestamp:
+      description: |-
+
+        Request departure timestamp UTC in milliseconds.
+
+        If timestamp is more than 150 seconds from current server time, it will not allow to make the request.
+      in: header
+      name: X-Auth-Timestamp
+      type: apiKey
+    x_auth_version:
+      description: '**Format:** `v2`'
+      in: header
+      name: X-Auth-Version
+      type: apiKey
+    x_content_type:
+      description: Please note that you you should not set Content-Type header if there is no body.
+      in: header
+      name: Content-Type
+      type: apiKey
+info:
+  contact:
+    email: support@bitstamp.net
+  description: |
+    # What is API?
+    Bitstamp application programming interface (API) allows our clients to access and control their accounts, using custom
+    written software.
+
+    # Response codes
+    Response code is a key that can be appended to an API response as **response_code** (string). Additionally, also
+    explanation may or may not be included as the **response_explanation** (string) key, which defines further explanation
+    to what has gone wrong when processing a request.
+
+    Below is the list of all available response codes and it's explanations:
+    | response_code | response_explanation (optional) |
+    | ----------- | ----------- |
+    | 400.001 | Unknown validation error. |
+    | 400.002 | Request rejected due to exceeded rate limit. |
+    | 400.003 | Trading for provided market is disabled. |
+    | 400.004 | POST parameter(s) is missing from request. |
+    | 400.005 | POST parameter(s) is missing from request: amount. |
+    | 400.006 | POST parameter(s) is missing from request: price. |
+    | 400.007 | POST parameter(s) is malformed. |
+    | 400.008 | POST parameter(s) is malformed: client_order_id. |
+    | 400.009 | Insufficient balance for provided user. |
+    | 400.010 | POST parameter(s) is malformed: offset. |
+    | 400.011 | POST parameter(s) is malformed: limit. |
+    | 400.012 | POST parameter(s) is malformed: sort. |
+    | 400.013 | POST parameter(s) is malformed: since_timestamp. |
+    | 400.014 | POST parameter(s) is missing from request: order_id. |
+    | 400.015 | POST parameter(s) is missing from request: client_order_id. |
+    | 400.016 | POST parameter(s) is malformed: order_id. |
+    | 400.017 | POST parameter(s) is malformed: client_cancel_id. |
+    | 400.018 | GET parameters not allowed for this request. |
+    | 400.019 | Provided client_order_id already exists. |
+    | 400.020 | Provided order size is not in range of minimum order value. |
+    | 400.021 | Provided price is out of range. |
+    | 400.022 | POST parameter(s) is missing from request: expire_time. |
+    | 400.023 | POST parameter(s) is malformed: expire_time. |
+    | 400.024 | Only one of optional parameters can be set. |
+    | 400.025 | Both limit_price and any optional parameter cannot be set. |
+    | 400.026 | POST parameter(s) is malformed: amount. |
+    | 400.027 | Sell if executed price must be higher than buy price. |
+    | 400.028 | Buy if executed price must be lower than sell price. |
+    | 400.029 | 'stop_order_id' is None. |
+    | 400.030 | 'stop_order_price' is None. |
+    | 400.031 | 'expire_time' is None. |
+    | 400.032 | 'expire_time' must be set in future date. |
+    | 400.033 | 'expire_time' must be None. |
+    | 400.034 | POST parameter(s) is malformed: until_timestamp. |
+    | 403.001 | User verification failed. |
+    | 403.002 | Trading is not allowed on lending account. |
+    | 403.003 | Trading is not allowed on collateral account. |
+    | 403.004 | Trading is blocked for user. |
+    | 404.001 | Unknown not found error. |
+    | 404.002 | Order not found for corresponding request. |
+    | 404.003 | Currency pair not found for corresponding request. |
+    | 404.004 | Trade account not found for provided API key. |
+    | 404.005 | Order book not found. |
+    | 404.006 | Currency not found for corresponding request. |
+    | 405.001 | GET method not allowed. |
+    | 410.001 | Requested endpoint is deprecated. |
+    | 500.001 | Unknown server error. |
+    | 500.002 | One of Bitstamp internal services failed to process request. |
+    | 500.003 | Unknown error while processing order. |
+    | 500.004 | No sell orders for provided market. |
+    | 500.005 | No buy orders for provided market. |
+    | 500.006 | Cash sell order types are currently disabled. |
+    | 500.007 | Error while serializing data. |
+    | 500.008 | Margin option for provided market is disabled. |
+    | 500.009 | Order book is currently unavailable. |
+    | 500.010 | Instant trading for provided market is disabled. |
+    | 500.011 | Market trading for provided market is disabled. |
+    | 500.012 | Matching blocked for this order book. |
+    | 500.013 | Unknown matching engine error. |
+    | 500.014 | Cash order for provided market is disabled. |
+    | 500.015 | Cannot place order. There are currently no orders for provided market. |
+    | 500.016 | Timeout on matching engine. |
+    | 500.017 | Order rejected by matching engine. |
+
+    # Request limits
+    Do not make more than 8000 requests per 10 minutes or we will ban your IP address. For real time data please refer to
+    the [**websocket API**](https://www.bitstamp.net/websocket/v2/).
+
+    ## Commercial Use of Bitstamp's Exchange Data
+    Companies seeking to utilize Bitstamp's exchange data for their own commercial purposes are directed to contact
+    partners@bitstamp.net to receive and sign a commercial use Data License Agreement.
+
+    Bitstamp allows the incorporation and redistribution of our exchange data for commercial purposes.
+    This includes the right to create ratios, calculations, new original works, statistics, and similar, based on the
+    exchange data.
+
+    # Authentication
+
+    All private API calls require authentication. For a successful authentication you need to provide the following
+    authorization headers in your request:
+
+    ## Possible authentication errors
+    <table>
+    <thead><th>Code</th><th>Reason</th><th>Action</th></thead>
+    <tbody>
+    <tr><td><strong>API0001</strong></td><td>API key not found</td><td>Check your API key value.</td></tr>
+    <tr><td><strong>API0002</strong></td><td>IP address not allowed</td><td>This IP address has no permission to use this API key.</td></tr>
+    <tr><td><strong>API0003</strong></td><td>No permission found</td><td>API key doesn't have permission for calling this api endpoint.</td></tr>
+    <tr><td><strong>API0004</strong></td><td>Invalid nonce</td><td>Check your nonce value. It must be different than last nonce used in the last 150 seconds.</td></tr>
+    <tr><td><strong>API0005</strong></td><td>Invalid signature</td><td>Posted signature doesn't match with ours.</td></tr>
+    <tr><td><strong>API0006</strong></td><td>Your account is frozen</td><td>Contact support to unfreeze your account.</td></tr>
+    <tr><td><strong>API0008</strong></td><td>Authentication failed</td><td>Can't find customer with selected API key.</td></tr>
+    <tr><td><strong>API0009</strong></td><td>Please update your profile with your FATCA information, before using API.</td><td>Check that you filled out the FATCA information form on your account.</td></tr>
+    <tr><td><strong>API0010</strong></td><td>Invalid version</td><td>Check that you send "v2" in the version authorization header.</td></tr>
+    <tr><td><strong>API0011</strong></td><td>Wrong API key format</td><td>Check that your API key string is correct.</td></tr>
+    <tr><td><strong>API0012</strong></td><td>X-Auth header is required</td><td>X-Auth header is probably missing in your request.</td></tr>
+    <tr><td><strong>API0013</strong></td><td>X-Auth-Signature header is required</td><td>X-Auth-Signature header is probably missing in your request.</td></tr>
+    <tr><td><strong>API0014</strong></td><td>X-Auth-Nonce header is required</td><td>X-Auth-Nonce header is probably missing in your request.</td></tr>
+    <tr><td><strong>API0015</strong></td><td>X-Auth-Timestamp header is required</td><td>X-Auth-Timestamp header is probably missing in your request.</td></tr>
+    <tr><td><strong>API0016</strong></td><td>X-Auth-Version header is required</td><td>X-Auth-Version header is probably missing in your request.</td></tr>
+    <tr><td><strong>API0017</strong></td><td>X-Auth-Timestamp header is out of boundaries</td><td>Timestamp you added in the header is either too old or too new. Check that timestamp is within 150 second timeframe.</td></tr>
+    <tr><td><strong>API0018</strong></td><td>X-Auth-Timestamp header is invalid</td><td>Check the format of X-Auth-Timestamp header.</td></tr>
+    <tr><td><strong>API0019</strong></td><td>Content-Type header is not accepted</td><td>Please specify the correct content type.</td></tr>
+    <tr><td><strong>API0020</strong></td><td>Content-Type header should not be present</td><td>Please make sure you're not sending any body in the request.</td></tr>
+    <tr><td><strong>API0021</strong></td><td>Please make sure url query string is not too long</td><td>Please make sure the total length of the url does not exceed 2000 characters.</td></tr>
+    </tbody>
+    </table>
+    <SecurityDefinitions />
+
+    ## Authentication examples
+    **Note:** if the request body is empty, the Content-Type header has to be removed both from the headers and from the
+    signature
+
+    <div class="api__code mb48">
+        <div class="api__code-header">
+            <span>Python</span>
+            <span class="icon icon--code"></span>
+        </div>
+
+    ```python
+    import hashlib
+    import hmac
+    import time
+    import requests
+    import uuid
+    import sys
+    from urllib.parse import urlencode
+
+    api_key = 'api_key'
+    API_SECRET = b'api_key_secret'
+
+    timestamp = str(int(round(time.time() * 1000)))
+    nonce = str(uuid.uuid4())
+    content_type = 'application/x-www-form-urlencoded'
+    payload = {'offset': '1'}
+
+    payload_string = urlencode(payload)
+
+    # '' (empty string) in message represents any query parameters or an empty string in case there are none
+    message = 'BITSTAMP ' + api_key + \
+        'POST' + \
+        'www.bitstamp.net' + \
+        '/api/v2/user_transactions/' + \
+        '' + \
+        content_type + \
+        nonce + \
+        timestamp + \
+        'v2' + \
+        payload_string
+    message = message.encode('utf-8')
+    signature = hmac.new(API_SECRET, msg=message, digestmod=hashlib.sha256).hexdigest()
+    headers = {
+        'X-Auth': 'BITSTAMP ' + api_key,
+        'X-Auth-Signature': signature,
+        'X-Auth-Nonce': nonce,
+        'X-Auth-Timestamp': timestamp,
+        'X-Auth-Version': 'v2',
+        'Content-Type': content_type
+    }
+    r = requests.post(
+        'https://www.bitstamp.net/api/v2/user_transactions/',
+        headers=headers,
+        data=payload_string
+        )
+    if not r.status_code == 200:
+        raise Exception('Status code not 200')
+
+    string_to_sign = (nonce + timestamp + r.headers.get('Content-Type')).encode('utf-8') + r.content
+    signature_check = hmac.new(API_SECRET, msg=string_to_sign, digestmod=hashlib.sha256).hexdigest()
+    if not r.headers.get('X-Server-Auth-Signature') == signature_check:
+        raise Exception('Signatures do not match')
+
+    print(r.content)
+
+
+    ```
+
+    </div>
+    <div class="api__code mb48">
+        <div class="api__code-header">
+            <span>Java</span>
+            <span class="icon icon--code"></span>
+        </div>
+
+    ```java
+    package com.example.AuthenticationExample;
+
+    import org.apache.commons.codec.binary.Hex;
+
+    import javax.crypto.Mac;
+    import javax.crypto.spec.SecretKeySpec;
+    import java.net.URI;
+    import java.net.http.HttpClient;
+    import java.net.http.HttpRequest;
+    import java.net.http.HttpResponse;
+    import java.util.UUID;
+
+    public class Authentication {
+        public static void main(String[] args) {
+            String apiKey = String.format("%s %s", "BITSTAMP", "api_key");
+            String apiKeySecret = "api_key_secret";
+            String httpVerb = "POST";
+            String urlHost = "www.bitstamp.net";
+            String urlPath = "/api/v2/user_transactions/";
+            String urlQuery = "";
+            String timestamp = String.valueOf(System.currentTimeMillis());
+            String nonce = UUID.randomUUID().toString();
+            String contentType = "application/x-www-form-urlencoded";
+            String version = "v2";
+            String payloadString = "offset=1";
+            String signature = apiKey +
+                httpVerb +
+                urlHost +
+                urlPath +
+                urlQuery +
+                contentType +
+                nonce +
+                timestamp +
+                version +
+                payloadString;
+
+            try {
+                SecretKeySpec secretKey = new SecretKeySpec(apiKeySecret.getBytes(), "HmacSHA256");
+                Mac mac = Mac.getInstance("HmacSHA256");
+                mac.init(secretKey);
+                byte[] rawHmac = mac.doFinal(signature.getBytes());
+                signature = new String(Hex.encodeHex(rawHmac)).toUpperCase();
+
+                HttpClient client = HttpClient.newHttpClient();
+                HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://www.bitstamp.net/api/v2/user_transactions/"))
+                    .POST(HttpRequest.BodyPublishers.ofString(payloadString))
+                    .setHeader("X-Auth", apiKey)
+                    .setHeader("X-Auth-Signature", signature)
+                    .setHeader("X-Auth-Nonce", nonce)
+                    .setHeader("X-Auth-Timestamp", timestamp)
+                    .setHeader("X-Auth-Version", version)
+                    .setHeader("Content-Type", contentType)
+                    .build();
+
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() != 200) {
+                    throw new RuntimeException("Status code not 200");
+                }
+
+                String serverSignature = response.headers().map().get("x-server-auth-signature").get(0);
+                String responseContentType = response.headers().map().get("Content-Type").get(0);
+                String stringToSign = nonce + timestamp + responseContentType + response.body();
+
+                mac.init(secretKey);
+                byte[] rawHmacServerCheck = mac.doFinal(stringToSign.getBytes());
+                String newSignature = new String(Hex.encodeHex(rawHmacServerCheck));
+
+                if (!newSignature.equals(serverSignature)) {
+                    throw new RuntimeException("Signatures do not match");
+                }
+
+                System.out.println(response.body());
+
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+
+    ```
+
+    </div>
+    <div class="api__code mb48">
+        <div class="api__code-header">
+            <span>C++</span>
+            <span class="icon icon--code"></span>
+        </div>
+
+    ```cpp
+    #include <curl/curl.h>
+    #include <openssl/hmac.h>
+    #include <uuid/uuid.h>
+
+    #include <iostream>
+    #include <string>
+    #include <chrono>
+    #include <iomanip>
+
+    static size_t write_call_back(void *contents, size_t size, size_t nmemb, void *userp)
+    {
+        ((std::string*)userp)->append((char*)contents, size * nmemb);
+        return size * nmemb;
+    }
+
+    std::string b2a_hex(char *byte_arr, int n)
+    {
+        const static std::string hex_codes = "0123456789abcdef";
+        std::string hex_string;
+        for ( int i = 0; i < n ; ++i ) {
+            unsigned char bin_value = byte_arr[i];
+            hex_string += hex_codes[( bin_value >> 4 ) & 0x0F];
+            hex_string += hex_codes[bin_value & 0x0F];
+        }
+        return hex_string;
+    }
+
+    std::string url_encode(std::string data)
+    {
+        std::string res = data;
+        CURL *curl = curl_easy_init();
+
+        if(curl) {
+            char *output = curl_easy_escape(curl, data.c_str(), data.length());
+            if(output) {
+                res = output;
+                curl_free(output);
+            }
+        }
+
+        return res;
+    }
+
+
+    int main() {
+
+        const std::string api_key = "api_key";
+        const std::string api_secret = "api_key_secret";
+
+        std::chrono::milliseconds timestamp = std::chrono::duration_cast< std::chrono::milliseconds >(
+                std::chrono::system_clock::now().time_since_epoch()
+        );
+
+        uuid_t uuid;
+        uuid_string_t nonce;
+        uuid_generate(uuid);
+        uuid_unparse_lower(uuid, nonce);
+
+        std::string x_auth = "BITSTAMP " + api_key;
+        std::string x_auth_nonce = nonce;
+        std::string x_auth_timestamp = std::to_string(timestamp.count());
+        std::string x_auth_version = "v2";
+        std::string content_type = "application/x-www-form-urlencoded";
+        std::string payload = url_encode("{offset:1}");
+
+        std::string http_method = "POST";
+        std::string url_host = "www.bitstamp.net";
+        std::string url_path = "/api/v2/user_transactions/";
+        std::string url_query = "";
+
+        std::string data_to_sign = "";
+        data_to_sign.append(x_auth);
+        data_to_sign.append(http_method);
+        data_to_sign.append(url_host);
+        data_to_sign.append(url_path);
+        data_to_sign.append(url_query);
+        data_to_sign.append(content_type);
+        data_to_sign.append(x_auth_nonce);
+        data_to_sign.append(x_auth_timestamp);
+        data_to_sign.append(x_auth_version);
+        data_to_sign.append(payload);
+
+        // calculate hmac signature
+        unsigned char* result;
+        unsigned int len = 20;
+        result = (unsigned char*)malloc(sizeof(char) * len);
+
+        HMAC_CTX ctx;
+        HMAC_CTX_init(&ctx);
+
+        HMAC_Init_ex(&ctx, api_secret.c_str(), api_secret.length(), EVP_sha256(), NULL);
+        HMAC_Update(&ctx, (unsigned char*)data_to_sign.c_str(), data_to_sign.length());
+        HMAC_Final(&ctx, result, &len);
+        HMAC_CTX_cleanup(&ctx);
+
+        std::string x_auth_signature = b2a_hex( (char *)result, 32 );
+        free(result);
+
+        // send request
+        CURL *curl;
+        CURLcode res;
+        std::string read_buffer;
+
+        curl = curl_easy_init();
+
+        if(curl) {
+
+            struct curl_slist *headers = NULL;
+            headers = curl_slist_append(headers, ("X-Auth: " + x_auth).c_str());
+            headers = curl_slist_append(headers, ("X-Auth-Signature: " + x_auth_signature).c_str());
+            headers = curl_slist_append(headers, ("X-Auth-Nonce: " + x_auth_nonce).c_str());
+            headers = curl_slist_append(headers, ("X-Auth-Timestamp: " + x_auth_timestamp).c_str());
+            headers = curl_slist_append(headers, ("X-Auth-Version: " + x_auth_version).c_str());
+            headers = curl_slist_append(headers, ("Content-Type: " + content_type).c_str());
+
+            std::string url = "https://" + url_host + url_path + url_query;
+
+            curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_call_back);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &read_buffer);
+
+            res = curl_easy_perform(curl);
+
+            if(res != CURLE_OK) {
+                std::cout << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+            }
+
+            std::cout << "curl_easy_perform() response: " << read_buffer << std::endl;
+
+            curl_easy_cleanup(curl);
+
+        }
+
+        return 0;
+
+    }
+
+
+    ```
+
+    </div>
+
+    # Change log
+
+    ### 2023-04-07
+    * Introduced a new Currencies endpoint:
+      * `GET /api/v2/currencies/`: Get listed currencies info.
+  title: Bitstamp Public API
+  version: v2
+openapi: 3.0.3
+paths:
+  /api/v2/account_balances/:
+    post:
+      description: Return account balances.
+      operationId: GetAccountBalances
+      responses:
+        '200':
+          content:
+            application/json:
+              example:
+                - available: '90.00'
+                  currency: usd
+                  reserved: '10.00'
+                  total: '100.00'
+              schema:
+                items:
+                  $ref: '#/components/schemas/AccountBalancesResponse'
+                type: array
+          description: Post operation
+      security: []
+      summary: Account balances
+      tags:
+        - Account balances
+  /api/v2/account_balances/{currency}/:
+    post:
+      description: Return account balances for currency.
+      operationId: GetAccountBalancesForCurrency
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountBalancesResponse'
+          description: Post operation
+      security: []
+      summary: Account balance for currency
+      tags:
+        - Account balances
+    parameters:
+      - in: path
+        name: currency
+        required: true
+        schema:
+          type: string
+  /api/v2/btc_unconfirmed/:
+    post:
+      description: |
+        This API call is cached for 60 seconds. This call will be executed on the account (Sub or Main), to which
+        the used API key is bound to.
+      operationId: GetUnconfirmedBTCDeposits
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/DepositAddressResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Unconfirmed bitcoin deposits
+      tags:
+        - Deposits
+  /api/v2/buy/instant/{market_symbol}/:
+    post:
+      description: |
+        Open a buy instant order. By placing an instant order you acknowledge that the execution of your order
+        depends on the market conditions and that these conditions may be subject to sudden changes that cannot be
+        foreseen. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Missing amount and/or price POST parameters | Missing one or both parameters. |
+        | 'parameter': Enter a number. Use "." as a decimal point. | 'parameter' can only be number. |
+        | Minimum order size is 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH | Order value must be at least 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH |
+        | You can only buy 'amount' 'currency'. Check your account balance for details. | Account has less 'available_currency' than is required to make this order. |
+        | Maximum market buy amount at the moment is 'amount' 'currency'. Please use limit order instead. | Order amount exceeds the limit amount set for market buy orders. |
+        | Order could not be placed. | Order could not be placed (perhaps due to internal error or trade halt). Please retry placing order. |
+        </details>
+      operationId: OpenInstantBuyOrder
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BuyInstantOrderRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/BuySellOrderResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Buy instant order
+      tags:
+        - Orders
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/buy/market/{market_symbol}/:
+    post:
+      description: |
+        Open a buy market order. By placing a market order you acknowledge that the execution of your order depends
+        on the market conditions and that these conditions may be subject to sudden changes that cannot be
+        foreseen. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Missing amount and/or price POST parameters | Missing one or both parameters. |
+        | 'parameter': Enter a number. Use "." as a decimal point. | 'parameter' can only be number. |
+        | Minimum order size is 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH | Order value must be at least 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH |
+        | You can only buy 'amount' 'currency'. Check your account balance for details. | Account has less 'available_currency' than is required to make this order. |
+        | Maximum market buy amount at the moment is 'amount' 'currency'. Please use limit order instead. | Order amount exceeds the limit amount set for market buy orders. |
+        | Order could not be placed. | Order could not be placed (perhaps due to internal error or trade halt). Please retry placing order. |
+        </details>
+      operationId: OpenMarketBuyOrder
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BuySellMarketOrderRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/BuySellOrderResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Buy market order
+      tags:
+        - Orders
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/buy/{market_symbol}/:
+    post:
+      description: |
+        Open a buy limit order. This call will be executed on the account (Sub or Main), to which the used API key
+        is bound to.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Missing amount and/or price POST parameters | Missing one or both parameters. |
+        | 'parameter': Enter a number. Use "." as a decimal point. | 'parameter' can only be number. |
+        | Minimum order size is 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH | Order value must be at least 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH |
+        | Price is more than 20% above market price. | Order price must not exceed 20% of current price. |
+        | You need 'order_value' USD to open that order. You have only 'available_fiat' USD available. Check your account balance for details. | Account has less 'available_fiat' than is required to make this order. |
+        | Sell if executed price must be higher than buy price. | 'limit_price' must be larger than 'price' parameter. |
+        | Both limit_price and daily_order cannot be set. | Only one of those parameters can be set. |
+        | Order could not be placed. | Order could not be placed (perhaps due to internal error or trade halt). Please retry placing order. |
+        </details>
+      operationId: OpenLimitBuyOrder
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BuySellLimitOrderRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/BuySellOrderResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Buy limit order
+      tags:
+        - Orders
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/cancel_all_orders/:
+    post:
+      description: Cancel all open orders. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+      operationId: CancelAllOrders
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelAllOrdersResponse'
+          description: Post operation
+      security: []
+      summary: Cancel all orders
+      tags:
+        - Orders
+  /api/v2/cancel_all_orders/{market_symbol}/:
+    post:
+      description: Cancel all open orders for a currency pair. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+      operationId: CancelOrdersForCurrencyPair
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelAllOrdersResponse'
+          description: Post operation
+      security: []
+      summary: Cancel all orders for currency pair
+      tags:
+        - Orders
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/cancel_order/:
+    post:
+      description: |
+        Cancel an order. This call will be executed on the account (Sub or Main), to which the used API key is
+        bound to.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Missing id POST param | Id parameter missing. |
+        | Invalid order id | Order id parameter can only be number. |
+        | Order not found. | Order with that id was not found in our system. |
+        | Internal error. | Order could not be canceled (perhaps due to internal error or trade halt). Please retry cancelling order. |
+        </details>
+      operationId: CancelOrder
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CancelOrderRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/CancelOrderResponse'
+                  - $ref: '#/components/schemas/SimpleErrorResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Cancel order
+      tags:
+        - Orders
+  /api/v2/crypto-transactions/:
+    post:
+      description: |
+        Return user's crypto transactions. This call will be executed on the account, to which the used API key is
+        bound to. This call is for your main account only.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Limit too large | Max value of limit parameter is 1000. |
+        | Invalid limit | Limit parameter should be number from 1 to 1000. |
+        | Offset too large | Offset parameter cannot be larger than 200000. |
+        | Invalid offset | Offset parameter needs to be a number from 0 to 200000. |
+        </details>
+      operationId: GetCryptoUserTransactions
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CryptoTransactionsRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/CryptoTransactionsResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Crypto transactions
+      tags:
+        - Transactions private
+  /api/v2/currencies/:
+    get:
+      description: View that returns list of all currencies with basic data.
+      operationId: GetCurrencies
+      responses:
+        '200':
+          content:
+            application/json:
+              example:
+                - available_supply: '234565.232'
+                  currency: BTC
+                  decimals: 8
+                  deposit: Enabled
+                  logo: https://assets.bitstamp.net/static/webapp/images/currencies/btc.28753a856eda28f17d69161c23de305be2728cd5.svg
+                  name: Bitcoin
+                  symbol: ₿
+                  type: crypto
+                  withdrawal: Enabled
+              schema:
+                items:
+                  $ref: '#/components/schemas/Currency'
+                type: array
+          description: Get operation
+      security: []
+      summary: Currencies
+      tags:
+        - Tickers
+  /api/v2/eur_usd/:
+    get:
+      description: Return EUR/USD conversion rate.
+      operationId: GetEURUSDConversionRate
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EurUsdConversionRateResponse'
+          description: Get operation
+      security: []
+      summary: EUR/USD conversion rate
+      tags:
+        - Market info
+  /api/v2/fees/trading/:
+    post:
+      description: Return all trading fees.
+      operationId: GetAllTradingFees
+      responses:
+        '200':
+          content:
+            application/json:
+              example:
+                - currency_pair: btcusd
+                  fees:
+                    - maker: '0.15000'
+                      taker: '0.16000'
+              schema:
+                items:
+                  $ref: '#/components/schemas/FeeTradingResponse'
+                type: array
+          description: Post operation
+      security: []
+      summary: Trading fees
+      tags:
+        - Fees
+  /api/v2/fees/trading/{market_symbol}/:
+    post:
+      description: Return trading fees for currency.
+      operationId: GetTradingFeesForCurrency
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeeTradingResponse'
+          description: Post operation
+      security: []
+      summary: Trading fee for currency
+      tags:
+        - Fees
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/fees/withdrawal/:
+    post:
+      description: Return withdrawal fees.
+      operationId: GetAllWithdrawalFees
+      responses:
+        '200':
+          content:
+            application/json:
+              example:
+                - currency: btc
+                  fee: '0.00015000'
+              schema:
+                items:
+                  $ref: '#/components/schemas/FeeWithdrawalResponse'
+                type: array
+          description: Post operation
+      security: []
+      summary: Withdrawal fees
+      tags:
+        - Fees
+  /api/v2/fees/withdrawal/{currency}/:
+    post:
+      description: Return withdrawal fee for currency.
+      operationId: GetWithdrawalFeeForCurrency
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeeWithdrawalResponse'
+          description: Post operation
+      security: []
+      summary: Withdrawal fee for currency
+      tags:
+        - Fees
+    parameters:
+      - in: path
+        name: currency
+        required: true
+        schema:
+          type: string
+  /api/v2/liquidation_address/info/:
+    post:
+      description: |
+        Shows transactions (BTC to liquidation_currency) for liquidation address.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Address not found. | Provided address is wrong. |
+        </details>
+      operationId: GetLiquidationAddressTransactions
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LiquidationAddressInfoRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                LiquidationAddressInfoResponse:
+                  value:
+                    - address: 3MDvHUAg41uJx1511gDotsf4ccKuc9frz1
+                      currency_pair: BTC/USD
+                      transactions:
+                        - count: 1
+                          order_id: 1
+                          trades:
+                            - btc_amount: '1.0'
+                              exchange_rate: '1.0'
+                              fees: '0.0'
+                ErrorResponse:
+                  value:
+                    reason: The reason for the error.
+                    status: error
+              schema:
+                oneOf:
+                  - items:
+                      $ref: '#/components/schemas/LiquidationAddressInfoResponse'
+                    type: array
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Liquidation address info
+      tags:
+        - Liquidation
+  /api/v2/liquidation_address/new/:
+    post:
+      description: |
+        Creates new liquidation address which will automatically sell your BTC for specified liquidation_currency.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Missing liquidation_currency parameter. | Parameter liquidation_currency is required for this call. |
+        | Invalid currency / Currency [...] not supported. | Invalid liquidation_currency. |
+        | Cannot create new address, please try later. | At the moment we can't create new deposit address. Try again later. |
+        | Invalid address format. | Invalid address_format. |
+        | Your trading features are currently disabled | No new liquidation addresses can be created at this time. If a URL is provided you can follow it to resolve any issues which might be causing this. |
+        </details>
+      operationId: RequestNewLiquidationAddress
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/NewLiquidationAddressRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/NewLiquidationAddressResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: New liquidation address
+      tags:
+        - Liquidation
+  /api/v2/my_trading_pairs/:
+    get:
+      description: |
+        Returns all trading pairs that can be traded on selected account.
+      operationId: GetUserTradingPairs
+      responses:
+        '200':
+          content:
+            application/json:
+              example:
+                - name: BTC/USD
+                  url_symbol: btcusd
+              schema:
+                items:
+                  $ref: '#/components/schemas/TradingPair'
+                type: array
+          description: Get operation
+      security: []
+      summary: Trading pairs
+      tags:
+        - Orders
+  /api/v2/ohlc/{market_symbol}/:
+    get:
+      description: |
+        View that returns OHLC (Open High Low Close) data on api request.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Missing data for required field. | Step and limit parameters are missing. |
+        | Not a valid choice. | Value entered in parameter is invalid. |
+        | Must be between 1 and 1000. | Limit value must be between 1 and 1000. |
+        </details>
+      operationId: GetOHLCData
+      parameters:
+        - in: query
+          name: end
+          required: false
+          schema:
+            format: int32
+            maximum: 253402297199
+            minimum: 0
+            type: integer
+        - in: query
+          name: exclude_current_candle
+          required: false
+          schema:
+            default: false
+            type: boolean
+        - in: query
+          name: limit
+          required: true
+          schema:
+            format: int32
+            maximum: 1000
+            minimum: 1
+            type: integer
+        - in: query
+          name: start
+          required: false
+          schema:
+            format: int32
+            maximum: 253402297199
+            minimum: 0
+            type: integer
+        - in: query
+          name: step
+          required: true
+          schema:
+            enum:
+              - 60
+              - 180
+              - 300
+              - 900
+              - 1800
+              - 3600
+              - 7200
+              - 14400
+              - 21600
+              - 43200
+              - 86400
+              - 259200
+            format: int32
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OhlcDataResponse'
+          description: Get operation
+      security: []
+      summary: OHLC data
+      tags:
+        - Market info
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/open_orders/all/:
+    post:
+      description: Return user's open orders. This API call is cached for 10 seconds. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+      operationId: GetAllOpenOrders
+      responses:
+        '200':
+          content:
+            application/json:
+              example:
+                - amount: '0.50000000'
+                  amount_at_create: '0.50000000'
+                  client_order_id: '1234123412341234'
+                  currency_pair: BTC/USD
+                  datetime: '2022-01-31 14:43:15'
+                  id: '1234123412341234'
+                  limit_price: '110.00'
+                  market: BTC/USD
+                  price: '100.00'
+                  type: '0'
+              schema:
+                items:
+                  $ref: '#/components/schemas/OpenOrdersAllResponse'
+                type: array
+          description: Post operation
+      security: []
+      summary: All open orders
+      tags:
+        - Orders
+  /api/v2/open_orders/{market_symbol}/:
+    post:
+      description: Return user's open orders for currency pair. This API call is cached for 10 seconds. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+      operationId: GetOpenOrdersForCurrency
+      responses:
+        '200':
+          content:
+            application/json:
+              example:
+                - amount: '0.50000000'
+                  amount_at_create: '0.50000000'
+                  client_order_id: '1234123412341234'
+                  datetime: '2022-01-31 14:43:15'
+                  id: '1234123412341234'
+                  limit_price: '110.00'
+                  price: '100.00'
+                  type: '0'
+              schema:
+                items:
+                  $ref: '#/components/schemas/OpenOrdersPairResponse'
+                type: array
+          description: Post operation
+      security: []
+      summary: Open orders
+      tags:
+        - Orders
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/order_book/{market_symbol}/:
+    get:
+      description: |
+        Returns order book data.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | POST method not allowed for this request. | HTTP method other than GET used. |
+        | Invalid GET parameter. | Missing group parameter. |
+        | Internal error. | Order book unavailable. |
+        </details>
+      operationId: GetOrderBook
+      parameters:
+        - description: The group parameter is used for accessing different data from order book. Possible values are 0 (orders are not grouped at same price), 1 (orders are grouped at same price - default) or 2 (orders with their order ids are not grouped at same price).
+          in: query
+          name: group
+          required: false
+          schema:
+            example: '0'
+            format: int32
+            maximum: 2
+            minimum: 0
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/OrderBookResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Get operation
+      security: []
+      summary: Order book
+      tags:
+        - Order book
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/order_status/:
+    post:
+      description: |
+        Returns order status. This call will be executed on the account (Sub or Main), to which the
+        used API key is bound to. Order can be fetched by using either id or client_order_id parameter. For closed
+        orders, this call only returns information for the last 30 days. 'Order not found' error will be returned
+        for orders outside this time range.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Missing id POST param | Id parameter missing. |
+        | Invalid order id | Order id parameter can only be number. |
+        | Order not found. | Order with that id was not found in our system. |
+        </details>
+      operationId: GetOrderStatus
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OrderStatusRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/OrderStatusResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Order status
+      tags:
+        - Orders
+  /api/v2/ripple_address/:
+    post:
+      description: |
+        This API call is cached for 60 seconds. This call will be executed on the account (Sub or Main), to which
+        the used API key is bound to. This endpoint supports withdrawals of USD, BTC or EUR* IOU on the XRP Ledger.
+
+        *IOUs are supported globally except for Singapore. Also, EUR-IOUs are not supported in the US.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | User not verified | Your account needs to be verified before you can use this endpoint. |
+        | Your deposits are currently disabled | No new deposits can be made at this time. If a URL is provided you can follow it to resolve any issues which might be causing this. |
+        </details>
+      operationId: GetRippleIOUDepositAddress
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/RippleIOUDepositAddressResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Ripple IOU deposit address
+      tags:
+        - Deposits
+  /api/v2/ripple_withdrawal/:
+    post:
+      description: |
+        This call will be executed on the account (Sub or Main), to which the used
+        API key is bound to. This endpoint supports withdrawals of USD, BTC or EUR* IOU on the XRP Ledger.
+
+        *IOUs are supported globally except for Singapore. Also, EUR-IOUs are not supported in the US.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Missing amount and/or address POST parameters | One or both parameters missing. |
+        | User not verified | Your account needs to be verified before you can use this endpoint. |
+        | 'crypto_currency' withdrawals are currently unavailable for your account | Contact support for additional information. |
+        | Not allowed to withdraw to specified 'crypto_currency' address | API key is set for withdrawing to another 'crypto_currency' address. |
+        | Enter a number. Use "." as a decimal point | Amount parameter can only be number. |
+        | You have only 'available' 'crypto_currency' available. Check your account balance for details | Account has less available 'crypto_currency' than are required to make this withdrawal. |
+        | Your withdrawals are currently disabled | No new withdrawals can be opened at this time. If a URL is provided you can follow it to resolve any issues which might be causing this. |
+        | Ensure this value is greater than or equal to 'minimum_withdrawal_amount' | Minimum withdrawal amount is 'minimum_withdrawal_amount'. |
+        | Ensure this value has at least 'minimum_address_length' characters (it has x). Ensure this value has at most 'maximum_address_length' characters (it has x). | Address parameter must be between 'minimum_address_length' and 'maximum_address_length' characters long. |
+        </details>
+      operationId: RequestRippleIOUWithdrawal
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RippleIOUWithdrawalRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/RippleIOUWithdrawalResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Ripple IOU withdrawal
+      tags:
+        - Withdrawals
+  /api/v2/sell/instant/{market_symbol}/:
+    post:
+      description: |
+        Open an instant sell order. By placing an instant order you acknowledge that the execution of your order
+        depends on the market conditions and that these conditions may be subject to sudden changes that cannot be
+        foreseen. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Missing amount and/or price POST parameters | Missing one or both parameters. |
+        | 'parameter': Enter a number. Use "." as a decimal point. | 'parameter' can only be number. |
+        | Minimum order size is 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH | Order value must be at least 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH |
+        | You can only sell 'amount' 'currency'. Check your account balance for details. | Account has less 'available_currency' than is required to make this order. |
+        | Order could not be placed. | Order could not be placed (perhaps due to internal error or trade halt). Please retry placing order. |
+        </details>
+      operationId: OpenInstantSellOrder
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SellInstantOrderRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/BuySellOrderResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Sell instant order
+      tags:
+        - Orders
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/sell/market/{market_symbol}/:
+    post:
+      description: |
+        Open a sell market order. By placing a market order you acknowledge that the execution of your order depends
+        on the market conditions and that these conditions may be subject to sudden changes that cannot be
+        foreseen. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Missing amount and/or price POST parameters | Missing one or both parameters. |
+        | 'parameter': Enter a number. Use "." as a decimal point. | 'parameter' can only be number. |
+        | Minimum order size is 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH | Order value must be at least 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH |
+        | You can only sell 'amount' 'currency'. Check your account balance for details. | Account has less 'available_currency' than is required to make this order. |
+        | No buy orders for currency pair 'currency_pair' | The buy side of the orderbook for 'currency_pair' is empty, therefore a market sell order cannot be placed. |
+        | Maximum market sell amount at the moment is 'amount' 'currency'. Please use limit order instead. | Order amount exceeds the limit amount set for market sell orders. |
+        | Order could not be placed. | Order could not be placed (perhaps due to internal error or trade halt). Please retry placing order. |
+        </details>
+      operationId: OpenMarketSellOrder
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BuySellMarketOrderRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/BuySellOrderResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Sell market order
+      tags:
+        - Orders
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/sell/{market_symbol}/:
+    post:
+      description: |
+        Open a sell limit order. This call will be executed on the account (Sub or Main), to which the used API key
+        is bound to.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Missing amount and/or price POST parameters | Missing one or both parameters. |
+        | 'parameter': Enter a number. Use "." as a decimal point. | 'parameter' can only be number. |
+        | Minimum order size is 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH | Order value must be at least 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH |
+        | Price is more than 20% below market price. | Order price must not exceed 20% of current price. |
+        | You have only 'available_btc' BTC available. Check your account balance for details. | Account has less 'available_btc' than is required to make this order. |
+        | Buy if executed price must be lower than sell price. | 'limit_price' must be lower than 'price' parameter. |
+        | Both limit_price and daily_order cannot be set. | Only one of those parameters can be set. |
+        | Order could not be placed. | Order could not be placed (perhaps due to internal error or trade halt). Please retry placing order. |
+        </details>
+      operationId: OpenLimitSellOrder
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BuySellLimitOrderRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/BuySellOrderResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Sell limit order
+      tags:
+        - Orders
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/ticker/:
+    get:
+      description: Return ticker data for all currency pairs. Passing any GET parameters, will result in your request being rejected.
+      operationId: GetCurrencyPairTickers
+      responses:
+        '200':
+          content:
+            application/json:
+              example:
+                - ask: '2211.00'
+                  bid: '2188.97'
+                  high: '2811.00'
+                  last: '2211.00'
+                  low: '2188.97'
+                  open: '2211.00'
+                  open_24: '2211.00'
+                  pair: BTC/USD
+                  percent_change_24: '13.57'
+                  side: '0'
+                  timestamp: '1643640186'
+                  volume: '213.26801100'
+                  vwap: '2189.80'
+              schema:
+                items:
+                  $ref: '#/components/schemas/TickerWithPairResponse'
+                type: array
+          description: Get operation
+      security: []
+      summary: All currency pairs tickers
+      tags:
+        - Tickers
+  /api/v2/ticker/{market_symbol}/:
+    get:
+      description: Return ticker data for the requested currency pair. Passing any GET parameters, will result in your request being rejected.
+      operationId: GetMarketTicker
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TickerResponse'
+          description: Get operation
+      security: []
+      summary: Market ticker
+      tags:
+        - Tickers
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/ticker_hour/{market_symbol}/:
+    get:
+      description: Return hourly ticker data for the requested currency pair. Passing any GET parameters, will result in your request being rejected.
+      operationId: GetHourlyCurrencyPairTicker
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TickerHourResponse'
+          description: Get operation
+      security: []
+      summary: Hourly  ticker
+      tags:
+        - Tickers
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/trading-pairs-info/:
+    get:
+      description: Return trading pairs info.
+      operationId: GetTradingPairsInfo
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradingPairsInfoResponse'
+          description: Get operation
+      security: []
+      summary: Trading pairs info
+      tags:
+        - Market info
+  /api/v2/transactions/{market_symbol}/:
+    get:
+      description: Return transaction data from a given time frame.
+      operationId: GetTransactions
+      parameters:
+        - description: The time interval from which we want the transactions to be returned. Possible values are minute, hour (default) or day.
+          in: query
+          name: time
+          required: false
+          schema:
+            enum:
+              - day
+              - hour
+              - minute
+            example: minute
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsResponse'
+          description: Get operation
+      security: []
+      summary: Transactions
+      tags:
+        - Transactions public
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/transfer-from-main/:
+    post:
+      description: |
+        Transfers the desired balance from your Main Account to a Sub Account, specified by the subAccount
+        parameter. This call can only be performed by your Main Account.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | 'parameter': Enter a number. Use "." as a decimal point. | 'parameter' can only be number. |
+        | You have only 'available' 'currency' available. Check your account balance for details. | Account has less 'available_currency' than is required to make this transfer. |
+        | Select a valid choice. X is not one of the available choices. | X is not valid currency. Select a valid currency. |
+        | Sub account with identifier "X" does not exist. | Can't find sub account with id X. |
+        </details>
+      operationId: TransferFromMainToSub
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransferToFromMainRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TransferToFromMainResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Transfer balance from Main to Sub Account
+      tags:
+        - Sub account
+  /api/v2/transfer-to-main/:
+    post:
+      description: |
+        Transfers the desired balance from a Sub Account to your Main Account.
+        Can be called by either the Main Account or a Sub Account, but requires a permission in both cases.
+        The subAccount parameter must be provided if the Main Account is initiating the call.
+        If a Sub Account is making the call, then it is the target Sub Account for the transfer and no further
+        clarification is required.
+        In that case, passing this parameter will have no additional effect.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | 'parameter': Enter a number. Use "." as a decimal point. | 'parameter' can only be number. |
+        | You have only 'available' 'currency' available. Check your account balance for details. | Account has less 'available_currency' than is required to make this transfer. |
+        | Select a valid choice. X is not one of the available choices. | X is not valid currency. Select a valid currency. |
+        | Sub account with identifier "X" does not exist. | Can't find sub account with id X. |
+        </details>
+      operationId: TransferFromSubToMain
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransferToFromMainRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TransferToFromMainResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Transfer balance from Sub to Main account
+      tags:
+        - Sub account
+  /api/v2/user_transactions/:
+    post:
+      description: |
+        Return user transactions from a given time frame. This call will be executed on the account (Sub
+        or Main), to which the used API key is bound to.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Invalid offset | Offset parameter should be number from 0 to 200000. |
+        | Limit too large | Max value of limit parameter is 1000. |
+        | Invalid limit | Limit parameter should be number from 1 to 1000. |
+        | Invalid sort parameter | Sort parameter can only be 'asc' or 'desc'. |
+        | Invalid since_timestamp parameter | since_timestamp can only be digit. |
+        | since_timestamp parameter must be higher than .. | Make sure that since_timestamp is less than 30 days in the past. |
+        | Failed to convert since_timestamp parameter | Check the value of since_timestamp parameter. |
+        | Invalid until_timestamp parameter | until_timestamp can only be digit. |
+        | until_timestamp parameter must be higher than .. | Make sure that until_timestamp is less than 30 days in the past. |
+        | Failed to convert until_timestamp parameter | Check the value of until_timestamp parameter. |
+        </details>
+      operationId: GetUserTransactions
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserTransactionsRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                UserTransactionsResponse:
+                  value:
+                    - datetime: '2022-03-01 10:54:53.849000'
+                      fee: '0.62563'
+                      id: 1
+                      order_id: 1463489000206336
+                      self_trade: true
+                      self_trade_order_id: 1
+                      type: '1'
+                      '{currency_pair}': 1
+                      '{from_currency}': '-1.0'
+                      '{to_currency}': '1.0'
+                ErrorResponse:
+                  value:
+                    reason: The reason for the error.
+                    status: error
+              schema:
+                oneOf:
+                  - items:
+                      $ref: '#/components/schemas/UserTransactionsResponse'
+                    type: array
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: User transactions
+      tags:
+        - Transactions private
+  /api/v2/user_transactions/{market_symbol}/:
+    post:
+      description: |
+        Return user transactions for a currency pair from a given time frame. This call will be executed on
+        the account (Sub or Main), to which the used API key is bound to.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Invalid offset | Offset parameter should be number from 0 to 200000. |
+        | Limit too large | Max value of limit parameter is 1000. |
+        | Invalid limit | Limit parameter should be number from 1 to 1000. |
+        | Invalid sort parameter | Sort parameter can only be 'asc' or 'desc'. |
+        | Invalid since_timestamp parameter | since_timestamp can only be digit. |
+        | since_timestamp parameter must be higher than .. | Make sure that since_timestamp is less than 30 days in the past. |
+        | Failed to convert since_timestamp parameter | Check the value of since_timestamp parameter. |
+        | Invalid until_timestamp parameter | until_timestamp can only be digit. |
+        | until_timestamp parameter must be higher than .. | Make sure that until_timestamp is less than 30 days in the past. |
+        | Failed to convert until_timestamp parameter | Check the value of until_timestamp parameter. |
+        </details>
+      operationId: GetUserTransactionsForCurrencyPair
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserTransactionsRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                UserTransactionsResponse:
+                  value:
+                    - datetime: '2022-03-01 10:54:53.849000'
+                      fee: '0.62563'
+                      id: 1
+                      order_id: 1463489000206336
+                      self_trade: true
+                      self_trade_order_id: 1
+                      type: '1'
+                      '{currency_pair}': 1
+                      '{from_currency}': '-1.0'
+                      '{to_currency}': '1.0'
+                ErrorResponse:
+                  value:
+                    reason: The reason for the error.
+                    status: error
+              schema:
+                oneOf:
+                  - items:
+                      $ref: '#/components/schemas/UserTransactionsResponse'
+                    type: array
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: User transactions for currency pair
+      tags:
+        - Transactions private
+    parameters:
+      - in: path
+        name: market_symbol
+        required: true
+        schema:
+          type: string
+  /api/v2/websockets_token/:
+    post:
+      description: Generates token required for subscribing to private WebSocket channels.
+      operationId: GetWebsocketToken
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebsocketsTokenResponse'
+          description: Post operation
+      security: []
+      summary: Websockets token
+      tags:
+        - Websocket
+  /api/v2/withdrawal-requests/:
+    post:
+      description: |
+        Return user's withdrawal requests. This call will be executed on the account (Sub or Main), to which the
+        used API key is bound to.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Invalid timedelta | Timedelta needs to have only numeric characters. |
+        | Timedelta too large | Timedelta too large. |
+        | Invalid offset | Offset needs to be numeric characters between 0 and 200000. |
+        | Invalid limit | Limit needs to be numeric characters between 1 and 1000. |
+        | Invalid id | Id needs to have only numeric characters. |
+        | Both limit and offset must be present | Both limit and offset must be present. |
+        | Too many parameters | Pick one or combination of parameters and run again. |
+        </details>
+      operationId: GetWithdrawalRequests
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WithdrawalRequestsRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/WithdrawalRequestsResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Withdrawal requests
+      tags:
+        - Withdrawals
+  /api/v2/withdrawal/cancel/:
+    post:
+      description: |
+        Cancels a bank or crypto withdrawal request. This call can only be performed by your Main Account.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Cancelling bank withdrawals with sub account API keys is not supported. | This API endpoint can only be utilized by your main account. |
+        | Missing parameters: [...] | Parameters stated in the list ([...]) are required for this call. |
+        | No active bank withdrawal with id=X found. | Could not find any active bank withdrawal with the id X. Will return the same response for already cancelled withdrawal requests. |
+        | Cannot cancel a withdrawal in process (id=X). | The bank withdrawal request with id=X is currently being processed and cannot be cancelled. |
+        | Your withdrawals are currently disabled | No bank withdrawals can be canceled at this time. If a URL is provided you can follow it to resolve any issues which might be causing this. |
+        </details>
+      operationId: CancelWithdrawal
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CancelBankOrCryptoWithdrawalRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/CancelBankWithdrawalResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Cancel bank or crypto withdrawal
+      tags:
+        - Withdrawals
+  /api/v2/withdrawal/open/:
+    post:
+      description: |
+        Opens a bank withdrawal request (SEPA or international). Withdrawal requests opened via API are
+        automatically confirmed (no confirmation e-mail will be sent), but are processed just like withdrawals
+        opened through the platform's interface. This call can only be performed by your Main Account.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Opening bank withdrawals with sub account API keys is not supported. | This API endpoint can only be utilized by your main account. |
+        | 'X': ['This field is required.'] | Parameter X is required for this call. |
+        | 'X': ['Select a valid choice. Y is not one of the available choices.'] | Y is not a valid value for parameter X. |
+        | Bank withdrawals temporarily disabled. | No new bank withdrawals can be opened at this time. |
+        | Unsupported withdrawal type (must be either SEPA or international). | When opening bank withdrawals, you must specify one of the two supported types: SEPA or international. |
+        | When opening bank withdrawals, you must specify one of the two supported types: SEPA or international. | To open this withdrawal, your balance must have at least 'amount' of target currency available. |
+        | 'X': ['Enter a number. Use "." as a decimal point.'] | Parameter X can only be a decimal number. |
+        | Your withdrawals are currently disabled | No new withdrawals can be opened at this time. If a URL is provided you can follow it to resolve any issues which might be causing this. |
+        </details>
+      operationId: RequestFiatWithdrawal
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OpenBankWithdrawalRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/OpenBankWithdrawalResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Open bank withdrawal
+      tags:
+        - Withdrawals
+  /api/v2/withdrawal/status/:
+    post:
+      description: |
+        Checks the status of a fiat withdrawal request. This call can only be performed by your Main Account.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Performing bank withdrawal status checks with sub account API keys is not supported. | This API endpoint can only be utilized by your main account. |
+        | Missing parameters: [...]. | Parameters stated in the list ([...]) are required for this call. |
+        | No bank withdrawal with id=X found. | Could not find any bank withdrawal with the id X. |
+        </details>
+      operationId: GetFiatWithdrawalStatus
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BankWithdrawalStatusRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/BankWithdrawalStatusResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Fiat withdrawal status
+      tags:
+        - Withdrawals
+  /api/v2/{currency}_address/:
+    post:
+      description: |
+        This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | User not verified | Your account needs to be verified before you can use this endpoint. |
+        | Your deposits are currently disabled | No new deposits can be made at this time. If a URL is provided you can follow it to resolve any issues which might be causing this. |
+        </details>
+      operationId: GetCryptoDepositAddress
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/DepositAddressResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Crypto deposit address
+      tags:
+        - Deposits
+    parameters:
+      - in: path
+        name: currency
+        required: true
+        schema:
+          type: string
+  /api/v2/{currency}_withdrawal/:
+    post:
+      description: |
+        Request a crypto withdrawal.
+
+        <details>
+        <summary style='cursor: pointer'><strong>Possible errors</strong></summary>
+
+        | Reason | Action |
+        | ----------- | ----------- |
+        | Missing amount and/or address POST parameters | One or both parameters missing. |
+        | User not verified | Your account needs to be verified before you can use this endpoint. |
+        | 'crypto_currency' withdrawals are currently unavailable for your account | Contact support for additional information. |
+        | Not allowed to withdraw to specified 'crypto_currency' address | API key is set for withdrawing to another 'crypto_currency' address. |
+        | Enter a number. Use "." as a decimal point | Amount parameter can only be number. |
+        | You have only 'available' 'crypto_currency' available. Check your account balance for details | Account has less available 'crypto_currency' than are required to make this withdrawal. |
+        | Your withdrawals are currently disabled | No new withdrawals can be opened at this time. If a URL is provided you can follow it to resolve any issues which might be causing this. |
+        | Ensure this value is greater than or equal to 'minimum_withdrawal_amount' | Minimum withdrawal amount is 'minimum_withdrawal_amount'. |
+        | Ensure this value has at least 'minimum_address_length' characters (it has x). Ensure this value has at most 'maximum_address_length' characters (it has x). | Address parameter must be between 'minimum_address_length' and 'maximum_address_length' characters long. |
+        </details>
+      operationId: RequestCryptoWithdrawal
+      requestBody:
+        content:
+          www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CryptoWithdrawalRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/CryptoWithdrawalResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+          description: Post operation
+      security: []
+      summary: Crypto withdrawal
+      tags:
+        - Withdrawals
+    parameters:
+      - in: path
+        name: currency
+        required: true
+        schema:
+          type: string
+servers:
+  - description: Production server
+    url: https://www.bitstamp.net
+tags:
+  - description: Collection of endpoints that return ticker info.
+    name: Tickers
+    x-displayName: Tickers
+  - description: Collection of endpoints that return order book info.
+    name: Order book
+    x-displayName: Order book
+  - description: Collection of endpoints that return transaction info.
+    name: Transactions public
+    x-displayName: Transactions
+  - description: Collection of endpoints that return market info.
+    name: Market info
+    x-displayName: Market info
+  - description: Collection of endpoints that return account balances.
+    name: Account balances
+    x-displayName: Account balances
+  - description: Collection of endpoints that return fee info.
+    name: Fees
+    x-displayName: Fees
+  - description: Collection of endpoints for managing orders.
+    name: Orders
+    x-displayName: Orders
+  - description: Collection of endpoints for managing withdrawals.
+    name: Withdrawals
+    x-displayName: Withdrawals
+  - description: Collection of endpoints for managing deposits.
+    name: Deposits
+    x-displayName: Deposits
+  - description: Collection of endpoints for managing Sub Accounts.
+    name: Sub account
+    x-displayName: Sub account
+  - description: Collection of endpoints for managing liquidation addresses.
+    name: Liquidation
+    x-displayName: Liquidation
+  - description: Collection of endpoints for managing Websocket access.
+    name: Websocket
+    x-displayName: Websocket
+  - description: Collection of endpoints that return transaction info.
+    name: Transactions private
+    x-displayName: Transactions
+x-tagGroups:
+  - name: Public data functions
+    tags:
+      - Tickers
+      - Order book
+      - Transactions public
+      - Market info
+  - name: Private functions
+    tags:
+      - Account balances
+      - Fees
+      - Orders
+      - Withdrawals
+      - Deposits
+      - Sub account
+      - Liquidation
+      - Websocket
+      - Transactions private
