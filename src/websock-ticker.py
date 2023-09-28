@@ -2,7 +2,6 @@ import json
 import websocket
 import os
 import logging
-import sys
 
 # Configure logging
 logging.basicConfig(filename='websocket.log', level=logging.DEBUG)
@@ -16,7 +15,7 @@ def on_message(ws, message):
         logging.error(f"Error decoding JSON: {e}")
         logging.error(f"Faulty Message: {message}")
         print("An error occurred. Please check the 'websocket.log' for more details.")
-        ws.close()  # Close the websocket connection to exit the run_forever loop
+        os._exit(1)  # Forcefully exit the script
         return
 
     # Define the path to save the data
