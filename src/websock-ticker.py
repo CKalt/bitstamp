@@ -2,12 +2,17 @@ import json
 import websocket
 import os
 import logging
+import threading
+import time
 
 # Configure logging
 logging.basicConfig(filename='websocket.log', level=logging.DEBUG)
 
+# Global exit flag
+exit_flag = False
 
 def on_message(ws, message):
+    global exit_flag
     try:
         logging.debug(f"Received message: {message}")
         data = json.loads(message)
@@ -15,7 +20,7 @@ def on_message(ws, message):
         logging.error(f"Error decoding JSON: {e}")
         logging.error(f"Faulty Message: {message}")
         print("An error occurred. Please check the 'websocket.log' for more details.")
-        os._exit(1)  # Forcefully exit the script
+        exit_flag = True  # Set the exit flag to True
         return
 
     # Define the path to save the data
@@ -37,6 +42,13 @@ def on_message(ws, message):
     with open(path, "w") as f:
         json.dump(existing_data, f)
 
+def monitor_flag(ws):
+    global exit_flag
+    while True:
+        if exit_flag:
+            ws.close()
+            break
+        time.sleep(1)
 
 def on_error(ws, error):
     print(f"Error: {error}")
@@ -73,4 +85,6 @@ if __name__ == "__main__":
         on_close=on_close
     )
     ws.on_open = on_open
+    monitor_thread = threading.Thread(target=monitor_flag, args=(ws,))
+    monitor_thread.start()
     ws.run_forever()
