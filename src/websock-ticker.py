@@ -2,35 +2,44 @@ import json
 import websocket
 import os
 
+
 def on_message(ws, message):
     print("Received message:")
     print(message)
-    data = json.loads(message)
-    
+    try:
+        data = json.loads(message)
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON: {e}")
+        print(f"Message: {message}")
+        return
+
     # Define the path to save the data
     path = f"data/{currency_pair}_ticker.json"
-    
+
     # If the file does not exist, create it and initialize with an empty list
     if not os.path.exists(path):
         with open(path, "w") as f:
             json.dump([], f)
-    
+
     # Read existing data from file
     with open(path, "r") as f:
         existing_data = json.load(f)
-    
+
     # Append new data
     existing_data.append(data)
-    
+
     # Save updated data back to file
     with open(path, "w") as f:
         json.dump(existing_data, f)
 
+
 def on_error(ws, error):
     print(f"Error: {error}")
 
+
 def on_close(ws, close_status_code, close_msg):
     print("### closed ###")
+
 
 def on_open(ws):
     # Subscribe to live_trades channel for the currency pair
@@ -42,14 +51,15 @@ def on_open(ws):
     }
     ws.send(json.dumps(payload))
 
+
 if __name__ == "__main__":
     # Make sure data directory exists
     if not os.path.exists("data"):
         os.mkdir("data")
-    
+
     # Define the currency pair
     currency_pair = "btcusd"  # Change this to the currency pair you are interested in
-    
+
     # Initialize WebSocket connection
     ws = websocket.WebSocketApp(
         "wss://ws.bitstamp.net",
