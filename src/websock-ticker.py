@@ -11,6 +11,7 @@ logging.basicConfig(filename='websocket.log', level=logging.DEBUG)
 # Global exit flag
 exit_flag = False
 
+
 def on_message(ws, message):
     global exit_flag
     try:
@@ -20,6 +21,11 @@ def on_message(ws, message):
         logging.error(f"Error decoding JSON: {e}")
         logging.error(f"Faulty Message: {message}")
         print("An error occurred. Please check the 'websocket.log' for more details.")
+
+        # Write the erroneous message to a file for inspection
+        with open("error_message.txt", "w") as error_file:
+            error_file.write(message)
+
         exit_flag = True  # Set the exit flag to True
         return
 
@@ -42,6 +48,7 @@ def on_message(ws, message):
     with open(path, "w") as f:
         json.dump(existing_data, f)
 
+
 def monitor_flag(ws):
     global exit_flag
     while True:
@@ -49,6 +56,7 @@ def monitor_flag(ws):
             ws.close()
             break
         time.sleep(1)
+
 
 def on_error(ws, error):
     print(f"Error: {error}")
