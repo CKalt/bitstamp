@@ -7,6 +7,9 @@ import sys
 # Configure logging
 logging.basicConfig(filename='websocket.log', level=logging.DEBUG)
 
+class ExitScriptException(Exception):
+    pass
+
 def on_message(ws, message):
     try:
         logging.debug(f"Received message: {message}")
@@ -15,7 +18,7 @@ def on_message(ws, message):
         logging.error(f"Error decoding JSON: {e}")
         logging.error(f"Faulty Message: {message}")
         print("An error occurred. Please check the 'websocket.log' for more details.")
-        sys.exit(1)  # Exit the script with an error status code
+        raise ExitScriptException("Exiting script due to JSON decode error.")
     
     # Define the path to save the data
     path = f"data/{currency_pair}_ticker.json"
@@ -72,4 +75,9 @@ if __name__ == "__main__":
         on_close=on_close
     )
     ws.on_open = on_open
-    ws.run_forever()
+
+    try:
+        ws.run_forever()
+    except ExitScriptException as e:
+        print(e)
+        sys.exit(1)
