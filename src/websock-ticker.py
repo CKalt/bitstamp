@@ -2,10 +2,10 @@ import json
 import websocket
 import os
 import logging
+import sys
 
 # Configure logging
 logging.basicConfig(filename='websocket.log', level=logging.DEBUG)
-
 
 def on_message(ws, message):
     try:
@@ -14,8 +14,9 @@ def on_message(ws, message):
     except json.JSONDecodeError as e:
         logging.error(f"Error decoding JSON: {e}")
         logging.error(f"Faulty Message: {message}")
-        return
-
+        print("An error occurred. Please check the 'websocket.log' for more details.")
+        sys.exit(1)  # Exit the script with an error status code
+    
     # Define the path to save the data
     path = f"data/{currency_pair}_ticker.json"
 
