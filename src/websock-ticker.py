@@ -1,16 +1,19 @@
 import json
 import websocket
 import os
+import logging
+
+# Configure logging
+logging.basicConfig(filename='websocket.log', level=logging.DEBUG)
 
 
 def on_message(ws, message):
-    print("Received message:")
-    print(message)
     try:
+        logging.debug(f"Received message: {message}")
         data = json.loads(message)
     except json.JSONDecodeError as e:
-        print(f"Error decoding JSON: {e}")
-        print(f"Message: {message}")
+        logging.error(f"Error decoding JSON: {e}")
+        logging.error(f"Faulty Message: {message}")
         return
 
     # Define the path to save the data
