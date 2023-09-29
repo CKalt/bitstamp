@@ -32,6 +32,11 @@ async def trading_task(parameters):
             trading_frequency = parameters.get('default_frequency', 600)
 
         if all(k in parameters for k in ('bchbtc_price', 'bchusd_price', 'btcusd_price')):
+            # Check if any price is None, if so, skip this iteration
+            if None in (parameters['bchbtc_price'], parameters['bchusd_price'], parameters['btcusd_price']):
+                await asyncio.sleep(trading_frequency)
+                continue
+
             implied_bchusd_price = parameters['btcusd_price'] * parameters['bchbtc_price']
             arbitrage_opportunity = abs(implied_bchusd_price - parameters['bchusd_price'])
             if arbitrage_opportunity > parameters.get('arbitrage_opportunity_threshold', 0.5):
