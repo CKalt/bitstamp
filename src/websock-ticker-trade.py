@@ -53,23 +53,34 @@ async def trading_task(parameters):
         await asyncio.sleep(trading_frequency)
 
 # Subscribe to the WebSocket for a given symbol
-async def subscribe(url: str, symbol: str, parameters):
+async def subscribe(url: str, symbol: str, parameters: dict):
     channel = f"live_trades_{symbol}"
     log_filename = f"{symbol}.log"
-    while True:
+    subscribed = False  # Add a flag to track subscription status
+
+    while True:  # Keep trying to reconnect
         try:
             async with websockets.connect(url) as websocket:
-                await websocket.send(json.dumps({
-                    "event": "bts:subscribe",
-                    "data": {
-                        "channel": channel
-                    }
-                }))
-                asyncio.create_task(handle_messages(websocket, symbol, log_filename, parameters))
-                asyncio.create_task(trading_task(parameters))
+                if not subscribed:  # Only send subscription message if not already subscribed
+                    # Subscribing to the channel.
+                    await websocket.send(json.dumps({
+                        "event": "bts:subscribe",
+                        "data": {
+                            "channel": channel
+                        }
+                    }))
+                    subscribed = True  # Set the flag to True after subscribing
+
+                # Receiving messages.
+                async for message in websocket:
+                    print(f"{symbol}: {message}")
+                    # Appending messages to the log file.
+                    with open(log_filename, "a") as file:
+                        file.write(message + "\n")
         except websockets.ConnectionClosed:
             print(f"{symbol}: Connection closed, trying to reconnect in 5 seconds...")
-            time.sleep(5)
+            time.sleep(5)  # Wait for 5 seconds before trying to reconnect
+            subscribed = False  # Reset the flag to False after connection is closed
         except Exception as e:
             print(f"{symbol}: An error occurred: {e}")
 
