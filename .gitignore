@@ -3,4 +3,4 @@ env
 .influxdb
 influx/create-all-access-api-token.output
 data/
-*.log
+./*.log
