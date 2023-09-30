@@ -23,7 +23,12 @@ class TradingSystem:
     def start(self):
         data_streams = self.data_feeder.get_data(self.mode, self.file_paths)
         while True:
-            data = {pair: next(stream) for pair, stream in data_streams.items()}
-            decision, opportunity = self.trading_engine.make_decision(data, self.balances, self.parameters)
-            if decision:
-                self.trade_executor.execute_trade((decision, opportunity), self.balances, self.parameters)
+            try:
+                data = {pair: next(stream) for pair, stream in data_streams.items()}
+                print(f"Processing data: {data}")
+
+                decision, opportunity = self.trading_engine.make_decision(data, self.balances, self.parameters)
+                if decision:
+                    self.trade_executor.execute_trade((decision, opportunity), self.balances, self.parameters)
+            except StopIteration:
+                break  # Exit the loop when no more data is available

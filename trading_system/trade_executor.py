@@ -1,6 +1,8 @@
 
 class TradeExecutor:
     def execute_trade(self, trade, balances, parameters):
+        print(f"Executing trade: {trade}")
+
         cycle, opportunity = trade
         fee = opportunity * parameters['fee']
         risk_measure = parameters['risk_measure']

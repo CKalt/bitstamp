@@ -9,6 +9,8 @@ class TradingEngine:
         opportunity1 = (btc_balance * bchbtc_price * bchusd_price) / btcusd_price - btc_balance
         opportunity2 = (btc_balance / btcusd_price / bchusd_price) * bchbtc_price - btc_balance
 
+        print(f"Data: {data}, Opportunity1: {opportunity1}, Opportunity2: {opportunity2}")
+
         if opportunity1 > parameters['arbitrage_opportunity_threshold']:
             return 'cycle1', opportunity1
         elif opportunity2 > parameters['arbitrage_opportunity_threshold']:
