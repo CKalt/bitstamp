@@ -1,0 +1,11 @@
+
+{
+  "initial_balances": {
+    "USD": 10000,
+    "BTC": 10,
+    "BCH": 100
+  },
+  "fee": 0.003,
+  "arbitrage_opportunity_threshold": 0.5,
+  "risk_measure": 0.1
+}
