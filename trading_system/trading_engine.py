@@ -1,3 +1,5 @@
+import logging
+
 class TradingEngine:
     def make_decision(self, data, balances, parameters):
         try:
@@ -17,4 +19,5 @@ class TradingEngine:
                 return 'cycle2', opportunity2
             return None, None
         except Exception as e:
+            logging.error(f"Error making decision: {e}")
             print(f"Error making decision: {e}")

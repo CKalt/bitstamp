@@ -1,3 +1,5 @@
+import logging
+
 class TradeExecutor:
     def execute_trade(self, trade, balances, parameters):
         try:
@@ -24,4 +26,5 @@ class TradeExecutor:
 
             profit = opportunity - fee
         except Exception as e:
+            logging.error(f"Error executing trade: {e}")
             print(f"Error executing trade: {e}")
