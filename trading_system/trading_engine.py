@@ -3,21 +3,37 @@ import logging
 class TradingEngine:
     def make_decision(self, data, balances, parameters):
         try:
-            bchbtc_price = data['bchbtc'].get('price', 1)
-            bchusd_price = data['bchusd'].get('price', 1)
-            btcusd_price = data['btcusd'].get('price', 1)
-            btc_balance = balances['BTC']
+            prices = self.extract_prices(data)
+            opportunities = self.calculate_opportunities(prices, balances)
+            print(f"Data: {data}, Opportunity1: {opportunities[0]}, Opportunity2: {opportunities[1]}")
 
-            opportunity1 = (btc_balance * bchbtc_price * bchusd_price) / btcusd_price - btc_balance
-            opportunity2 = (btc_balance / btcusd_price / bchusd_price) * bchbtc_price - btc_balance
-
-            print(f"Data: {data}, Opportunity1: {opportunity1}, Opportunity2: {opportunity2}")
-
-            if opportunity1 > parameters['arbitrage_opportunity_threshold']:
-                return 'cycle1', opportunity1
-            elif opportunity2 > parameters['arbitrage_opportunity_threshold']:
-                return 'cycle2', opportunity2
+            cycle = self.determine_cycle(opportunities, parameters)
+            if cycle:
+                return cycle, opportunities[cycle - 1]
             return None, None
         except Exception as e:
             logging.error(f"Error making decision: {e}")
             print(f"Error making decision: {e}")
+
+    def extract_prices(self, data):
+        """Extract prices from the data."""
+        return {
+            'bchbtc': data['bchbtc'].get('price', 1),
+            'bchusd': data['bchusd'].get('price', 1),
+            'btcusd': data['btcusd'].get('price', 1)
+        }
+
+    def calculate_opportunities(self, prices, balances):
+        """Calculate the opportunities based on prices and balances."""
+        btc_balance = balances['BTC']
+        opportunity1 = (btc_balance * prices['bchbtc'] * prices['bchusd']) / prices['btcusd'] - btc_balance
+        opportunity2 = (btc_balance / prices['btcusd'] / prices['bchusd']) * prices['bchbtc'] - btc_balance
+        return opportunity1, opportunity2
+
+    def determine_cycle(self, opportunities, parameters):
+        """Determine the cycle based on opportunities and parameters."""
+        if opportunities[0] > parameters['arbitrage_opportunity_threshold']:
+            return 1
+        elif opportunities[1] > parameters['arbitrage_opportunity_threshold']:
+            return 2
+        return None
