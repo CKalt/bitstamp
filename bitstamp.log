@@ -1,5 +1,0 @@
-INFO:root:Request Method: POST
-INFO:root:Request URL: https://www.bitstamp.net/api/v2/buy/btcusd/
-INFO:root:Request Headers: {'X-Auth': 'BITSTAMP ddDMDGMq1sTdv2Ch4gdCbFvFCKaMG0XD', 'X-Auth-Signature': '83df3fa22ecddb22cc3d0b57d96e951af684e594cf46fd0efe9815dd536d4f2a', 'X-Auth-Nonce': '598e9bfc-124e-4873-bdcc-abe202a797b5', 'X-Auth-Timestamp': '1689005114605', 'X-Auth-Version': 'v2', 'Content-Type': 'application/x-www-form-urlencoded'}
-INFO:root:Request Payload: amount=0.01&price=25800
-INFO:root:Response: b'{"id": "1639096897728518", "market": "BTC/USD", "datetime": "2023-07-10 16:05:15.705000", "type": "0", "amount": "0.01000000", "price": "25800"}'
