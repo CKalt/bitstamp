@@ -7,5 +7,10 @@
   },
   "fee": 0.003,
   "arbitrage_opportunity_threshold": 0.5,
-  "risk_measure": 0.1
+  "risk_measure": 0.1,
+  "output_files": {
+    "log_file": "logs.jsonl",
+    "trade_file": "trades.jsonl",
+    "balance_file": "balances.jsonl"
+  }
 }

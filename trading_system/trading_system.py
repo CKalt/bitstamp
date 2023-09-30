@@ -25,7 +25,9 @@ class TradingSystem:
         while True:
             try:
                 data = {pair: next(stream) for pair, stream in data_streams.items()}
-                print(f"Processing data: {data}")
+                data_info = {"message": f"Processing data: {data}"}
+                with open(self.parameters['output_files']['log_file'], 'a') as log_file:
+                    log_file.write(json.dumps(data_info) + '\n')
 
                 decision, opportunity = self.trading_engine.make_decision(data, self.balances, self.parameters)
                 if decision:

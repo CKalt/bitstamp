@@ -3,7 +3,7 @@ Module: trade_executor.py
 Description: Contains the TradeExecutor class responsible for executing trades based on the provided trade data and updating balances.
 """
 
-import logging
+import json
 
 
 class TradeExecutor:
@@ -39,7 +39,9 @@ class TradeExecutor:
             None
         """
         try:
-            print(f"Executing trade: {trade}")
+            trade_info = {"message": f"Executing trade: {trade}"}
+            with open(parameters['output_files']['log_file'], 'a') as log_file:
+                log_file.write(json.dumps(trade_info) + '\n')
             cycle, opportunity = trade
             fee = self.calculate_fee(opportunity, parameters)
             required_btc = self.calculate_required_btc(balances, parameters)
@@ -51,8 +53,9 @@ class TradeExecutor:
 
             profit = opportunity - fee
         except Exception as e:
-            logging.error(f"Error executing trade: {e}")
-            print(f"Error executing trade: {e}")
+            error_info = {"level": "error", "message": str(e)}
+            with open(parameters['output_files']['log_file'], 'a') as log_file:
+                log_file.write(json.dumps(error_info) + '\n')
 
     def calculate_fee(self, opportunity, parameters):
         """Calculate the fee based on the opportunity and parameters."""

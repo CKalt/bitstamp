@@ -4,7 +4,7 @@ Module: trading_engine.py
 Description: Contains the TradingEngine class responsible for making trading decisions based on provided data and parameters.
 """
 
-import logging
+import json
 
 
 class TradingEngine:
@@ -48,8 +48,9 @@ class TradingEngine:
                 return cycle, opportunities[cycle - 1]
             return None, None
         except Exception as e:
-            logging.error(f"Error making decision: {e}")
-            print(f"Error making decision: {e}")
+            error_info = {"level": "error", "message": str(e)}
+            with open(parameters['output_files']['log_file'], 'a') as log_file:
+                log_file.write(json.dumps(error_info) + '\n')
 
     def extract_prices(self, data):
         """Extract prices from the data."""

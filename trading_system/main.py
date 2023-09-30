@@ -1,9 +1,5 @@
-import logging
+
 from trading_system import TradingSystem
-
-logging.basicConfig(filename='trading_system.log', level=logging.ERROR,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
-
 
 file_paths = {
     "bchbtc": "logs/bchbtc.log",
