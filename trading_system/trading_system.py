@@ -2,7 +2,7 @@
 import json
 from data_feeder import DataFeeder
 from trading_engine import TradingEngine
-from trade_executor import TradeExecutor
+
 
 class TradingSystem:
     def __init__(self, mode, file_paths):
@@ -10,7 +10,6 @@ class TradingSystem:
         self.file_paths = file_paths
         self.data_feeder = DataFeeder()
         self.trading_engine = TradingEngine()
-        self.trade_executor = TradeExecutor()
         self.balances = {}  
         self.parameters = self.load_parameters()
     
@@ -29,8 +28,12 @@ class TradingSystem:
                 with open(self.parameters['output_files']['log_file'], 'a') as log_file:
                     log_file.write(json.dumps(data_info) + '\n')
 
-                decision, opportunity = self.trading_engine.make_decision(data, self.balances, self.parameters)
-                if decision:
-                    self.trade_executor.execute_trade((decision, opportunity), self.balances, self.parameters)
+                # Updated part: Using the new make_decision method and handling its return values.
+                new_balances, profit = self.trading_engine.make_decision(data, self.balances, self.parameters)
+                self.balances.update(new_balances)
+                if profit > 0:
+                    trade_info = {"message": f"Executed trade with profit: {profit}"}
+                    with open(self.parameters['output_files']['log_file'], 'a') as log_file:
+                        log_file.write(json.dumps(trade_info) + '\n')
             except StopIteration:
                 break  # Exit the loop when no more data is available

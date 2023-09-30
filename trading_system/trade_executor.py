@@ -7,6 +7,21 @@ import json
 
 
 class TradeExecutor:
+    def execute_arbitrage_trade(self, trade_data, cycle, balances, fee):
+        initial_balances = balances.copy()
+        if cycle == 1:
+            # Execute trades for Cycle 1: USD -> BTC -> BCH -> USD
+            balances = self.execute_trade(balances, ("USD", "BTC"), trade_data['btcusd'], balances['USD'], fee)
+            balances = self.execute_trade(balances, ("BTC", "BCH"), trade_data['bchbtc'], balances['BTC'], fee)
+            balances = self.execute_trade(balances, ("BCH", "USD"), trade_data['bchusd'], balances['BCH'], fee)
+        elif cycle == 2:
+            # Execute trades for Cycle 2: USD -> BCH -> BTC -> USD
+            balances = self.execute_trade(balances, ("USD", "BCH"), trade_data['bchusd'], balances['USD'], fee)
+            balances = self.execute_trade(balances, ("BCH", "BTC"), 1 / trade_data['bchbtc'], balances['BCH'], fee)
+            balances = self.execute_trade(balances, ("BTC", "USD"), 1 / trade_data['btcusd'], balances['BTC'], fee)
+        profit = balances['USD'] - initial_balances['USD']
+        return balances, profit
+
     """
     A class used to represent the Trade Executor.
 
