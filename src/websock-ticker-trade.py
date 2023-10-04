@@ -1,105 +1,65 @@
-#! env/bin/python
-# src/websock-ticker-trade.py
-import json
-import asyncio
-import websockets
-import time
+import pandas as pd
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
-# Handle messages and update the latest prices
-async def handle_messages(websocket, symbol, log_filename, parameters):
-    async for message in websocket:
-        print(f"{symbol}: {message}")
-        with open(log_filename, "a") as file:
-            file.write(message + "\n")
+# Parameters to tweak
+FORECAST_HORIZON = 10  # Forecast 10 minutes into the future
+PRICE_CHANGE_THRESHOLD = 0.5  # Threshold for significant price change (this can be adjusted based on your data's scale)
+STOP_LOSS = -10  # Stop loss threshold
+TAKE_PROFIT = 10  # Take profit threshold
 
-        data = json.loads(message).get('data', {})
-        price = data.get('price')
+def backtest_hw_strategy(data, timestamps):
+    # Fit the Holt-Winters model to the data
+    model_hw = ExponentialSmoothing(data, trend="add", seasonal="add", seasonal_periods=24)
+    model_hw_fit = model_hw.fit()
+    
+    # Forecast the next price for each time step
+    hw_forecast = model_hw_fit.predict(start=FORECAST_HORIZON, end=len(data) + FORECAST_HORIZON - 1)
+    
+    # Initialize metrics and state
+    holding = False
+    buy_price = 0
+    buy_time = None
+    trades = []
 
-        if symbol == 'bchbtc':
-            parameters['bchbtc_price'] = price
-        elif symbol == 'bchusd':
-            parameters['bchusd_price'] = price
-        elif symbol == 'btcusd':
-            parameters['btcusd_price'] = price
+    # Iterate through the data and implement the trading strategy
+    for i in range(len(data) - FORECAST_HORIZON):
+        current_price = data.iloc[i]
+        forecasted_price = hw_forecast.iloc[i]
+        price_difference = forecasted_price - current_price
 
-# Trading task to execute trades at a certain frequency
-async def trading_task(parameters):
-    while True:
-        last_trade = parameters.get('last_trade', {})
-        if last_trade.get('potential_profit', 0) > parameters.get('profit_threshold', 100):
-            trading_frequency = parameters.get('increased_frequency', 300)
-        else:
-            trading_frequency = parameters.get('default_frequency', 600)
+        if not holding and price_difference > PRICE_CHANGE_THRESHOLD:
+            # Buy Entry Signal
+            buy_price = current_price
+            buy_time = timestamps.iloc[i]
+            holding = True
+        elif holding:
+            profit = current_price - buy_price
+            if (price_difference < -PRICE_CHANGE_THRESHOLD or
+                profit <= STOP_LOSS or
+                profit >= TAKE_PROFIT):
+                # Sell Exit Signal (based on forecast, stop loss, or take profit)
+                trades.append({
+                    "buy_time": buy_time,
+                    "sell_time": timestamps.iloc[i],
+                    "buy_price": buy_price,
+                    "sell_price": current_price,
+                    "profit": profit
+                })
+                holding = False
+            
+    return trades
 
-        if all(k in parameters for k in ('bchbtc_price', 'bchusd_price', 'btcusd_price')):
-            # Check if any price is None, if so, skip this iteration
-            if None in (parameters['bchbtc_price'], parameters['bchusd_price'], parameters['btcusd_price']):
-                await asyncio.sleep(trading_frequency)
-                continue
+# Load the BTC/USD dataset
+data = pd.read_csv('path_to_your_csv_file.csv')
+prices = data['price']
+timestamps = data['timestamp']
 
-            implied_bchusd_price = parameters['btcusd_price'] * parameters['bchbtc_price']
-            arbitrage_opportunity = abs(implied_bchusd_price - parameters['bchusd_price'])
-            if arbitrage_opportunity > parameters.get('arbitrage_opportunity_threshold', 0.5):
-                trade_amount = parameters['trade_amount']
-                potential_profit = arbitrage_opportunity * trade_amount
-                trade_data = {
-                    "timestamp": time.time(),
-                    "trade_type": "Buy" if implied_bchusd_price > parameters['bchusd_price'] else "Sell",
-                    "potential_profit": potential_profit
-                }
-                with open("trades.json", "a") as file:
-                    file.write(json.dumps(trade_data) + "\n")
-                parameters['last_trade'] = trade_data
-        await asyncio.sleep(trading_frequency)
+# Backtest the strategy on the entire BTC/USD dataset
+trades = backtest_hw_strategy(prices, timestamps)
 
-# Subscribe to the WebSocket for a given symbol
-async def subscribe(url: str, symbol: str, parameters: dict):
-    channel = f"live_trades_{symbol}"
-    log_filename = f"{symbol}.log"
-    subscribed = False  # Add a flag to track subscription status
-
-    while True:  # Keep trying to reconnect
-        try:
-            async with websockets.connect(url) as websocket:
-                if not subscribed:  # Only send subscription message if not already subscribed
-                    # Subscribing to the channel.
-                    await websocket.send(json.dumps({
-                        "event": "bts:subscribe",
-                        "data": {
-                            "channel": channel
-                        }
-                    }))
-                    subscribed = True  # Set the flag to True after subscribing
-
-                # Receiving messages.
-                async for message in websocket:
-                    print(f"{symbol}: {message}")
-                    # Appending messages to the log file.
-                    with open(log_filename, "a") as file:
-                        file.write(message + "\n")
-        except websockets.ConnectionClosed:
-            print(f"{symbol}: Connection closed, trying to reconnect in 5 seconds...")
-            time.sleep(5)  # Wait for 5 seconds before trying to reconnect
-            subscribed = False  # Reset the flag to False after connection is closed
-        except Exception as e:
-            print(f"{symbol}: An error occurred: {e}")
-
-# Main function to start the subscription tasks
-async def main():
-    url = 'wss://ws.bitstamp.net'
-    try:
-        with open("websock-ticker-config.json", "r") as file:
-            symbols = json.load(file)
-    except Exception as e:
-        print(f"Error reading configuration file: {e}")
-        return
-    try:
-        with open("parameters.json", "r") as file:
-            parameters = json.load(file)
-    except Exception as e:
-        print(f"Error reading parameters file: {e}")
-        return
-    await asyncio.gather(*(subscribe(url, symbol, parameters) for symbol in symbols))
-
-# Run the main function
-asyncio.get_event_loop().run_until_complete(main())
+# Print the trade details
+for trade in trades:
+    print(f"Buy Time: {trade['buy_time']}, Buy Price: {trade['buy_price']}")
+    print(f"Sell Time: {trade['sell_time']}, Sell Price: {trade['sell_price']}")
+    print(f"Profit: {trade['profit']}")
+    print('-' * 50)
