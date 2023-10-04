@@ -1,4 +1,3 @@
-
 """
 Module: trading_engine.py
 Description: Contains the TradingEngine class responsible for making trading decisions based on provided data and parameters.
@@ -25,6 +24,13 @@ class TradingEngine:
     """
 
     def make_decision(self, data, balances, parameters):
+        """
+        Make trading decisions based on provided data and parameters.
+        :param data: The trade data.
+        :param balances: The balances of different currencies.
+        :param parameters: The trading parameters.
+        :return: Updated balances and profit.
+        """
         prices = self.extract_prices(data)
         cycle, opportunity = self.calculate_arbitrage_opportunity(prices, parameters)
 
@@ -37,15 +43,27 @@ class TradingEngine:
         return balances, 0
 
     def extract_prices(self, data):
-        """Extract prices from the data."""
+        """
+        Extract prices from the data.
+        :param data: The trade data.
+        :return: A dictionary of prices.
+        """
         return {
-            'bchbtc': data['bchbtc'].get('price', 1),
-            'bchusd': data['bchusd'].get('price', 1),
-            'btcusd': data['btcusd'].get('price', 1)
+            'bchbtc': float(data['bchbtc'][1]),
+            'bchusd': float(data['bchusd'][1]),
+            'btcusd': float(data['btcusd'][1])
         }
 
     def calculate_arbitrage_opportunity(self, prices, parameters):
-        """Calculates and returns the arbitrage opportunity based on provided prices and parameters."""
-        # Calculations for arbitrage opportunity and cycle determination
-        # ... existing logic remains unchanged
-        return cycle, opportunity
+        """
+        Calculates and returns the arbitrage opportunity based on provided prices and parameters.
+        :param prices: The prices of different currency pairs.
+        :param parameters: The trading parameters.
+        :return: The cycle and arbitrage opportunity.
+        """
+        btc_balance = 1
+        effective_btc_1 = btc_balance / prices['bchbtc'] * prices['bchusd'] / prices['btcusd']
+        effective_btc_2 = btc_balance * prices['bchbtc'] * prices['bchusd'] / prices['btcusd']
+        opportunity1 = abs(effective_btc_1 - btc_balance)
+        opportunity2 = abs(effective_btc_2 - btc_balance)
+        return (1, opportunity1) if opportunity1 > opportunity2 else (2, opportunity2)

@@ -1,39 +1,54 @@
+"""
+Module: trading_system.py
+Description: Contains the TradingSystem class responsible for starting the trading system and executing trades based on provided data and decisions from the trading engine.
+"""
 
-import json
 from data_feeder import DataFeeder
 from trading_engine import TradingEngine
 
 
 class TradingSystem:
-    def __init__(self, mode, file_paths):
+    """
+    A class used to represent the Trading System.
+
+    ...
+
+    Methods
+    -------
+    __init__(mode, file_paths)
+        Initializes the Trading System with the mode, file paths, and other necessary components.
+    start()
+        Starts the trading system, executes trades, and prints the profit for each executed trade.
+    """
+
+    def __init__(self, mode, file_paths, parameters):
+        """
+        Initializes the Trading System with the mode, file paths, and other necessary components.
+        :param mode: The mode of the trading system (realtime or playback).
+        :param file_paths: The file paths for trade data in playback mode.
+        :param parameters: The trading parameters.
+        """
         self.mode = mode
         self.file_paths = file_paths
         self.data_feeder = DataFeeder()
         self.trading_engine = TradingEngine()
-        self.balances = {}  
-        self.parameters = self.load_parameters()
-    
-    def load_parameters(self):
-        with open("parameters.json", "r") as file:
-            parameters = json.load(file)
         self.balances = parameters["initial_balances"]
-        return parameters
-    
+
     def start(self):
+        """
+        Starts the trading system, executes trades, and prints the profit for each executed trade.
+        :return: Final balances and total profit.
+        """
+        total_profit = 0
         data_streams = self.data_feeder.get_data(self.mode, self.file_paths)
         while True:
             try:
                 data = {pair: next(stream) for pair, stream in data_streams.items()}
-                data_info = {"message": f"Processing data: {data}"}
-                with open(self.parameters['output_files']['log_file'], 'a') as log_file:
-                    log_file.write(json.dumps(data_info) + '\n')
-
-                # Updated part: Using the new make_decision method and handling its return values.
                 new_balances, profit = self.trading_engine.make_decision(data, self.balances, self.parameters)
                 self.balances.update(new_balances)
+                total_profit += profit
                 if profit > 0:
-                    trade_info = {"message": f"Executed trade with profit: {profit}"}
-                    with open(self.parameters['output_files']['log_file'], 'a') as log_file:
-                        log_file.write(json.dumps(trade_info) + '\n')
+                    print(f"Executed trade with profit: {profit}")
             except StopIteration:
-                break  # Exit the loop when no more data is available
+                break
+        return self.balances, total_profit
