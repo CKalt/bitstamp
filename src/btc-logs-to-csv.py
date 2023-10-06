@@ -12,17 +12,19 @@ def parse_log_to_csv(log_file_path, csv_output_path):
             try:
                 data = json.loads(line)
                 trade_data = data.get('data', {})
-                row = {
-                    'id': trade_data.get('id', ''),
-                    'timestamp': trade_data.get('timestamp', ''),
-                    'amount': trade_data.get('amount', ''),
-                    'price': trade_data.get('price', ''),
-                    'type': trade_data.get('type', ''),
-                    'microtimestamp': trade_data.get('microtimestamp', ''),
-                    'buy_order_id': trade_data.get('buy_order_id', ''),
-                    'sell_order_id': trade_data.get('sell_order_id', '')
-                }
-                writer.writerow(row)
+                # Check if trade_data is not None
+                if trade_data:
+                    row = {
+                        'id': trade_data.get('id', ''),
+                        'timestamp': trade_data.get('timestamp', ''),
+                        'amount': trade_data.get('amount', ''),
+                        'price': trade_data.get('price', ''),
+                        'type': trade_data.get('type', ''),
+                        'microtimestamp': trade_data.get('microtimestamp', ''),
+                        'buy_order_id': trade_data.get('buy_order_id', ''),
+                        'sell_order_id': trade_data.get('sell_order_id', '')
+                    }
+                    writer.writerow(row)
             except json.JSONDecodeError:
                 continue
 
