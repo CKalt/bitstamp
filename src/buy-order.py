@@ -29,7 +29,24 @@ with open(args.order_file, 'r') as f:
 timestamp = str(int(round(time.time() * 1000)))
 nonce = str(uuid.uuid4())
 content_type = 'application/x-www-form-urlencoded'
-payload = {'amount': str(order['amount']), 'price': str(order['price'])}
+
+order_type = order.get('order_type', 'limit-buy')
+
+if order_type == 'limit-buy':
+    endpoint = '/api/v2/buy/'
+    payload = {'amount': str(order['amount']), 'price': str(order['price'])}
+elif order_type == 'market-buy' or order_type == 'instant-buy':
+    endpoint = '/api/v2/buy/market/'
+    # Reading the price from the input JSON
+    price_value = str(order.get('price', '28113'))  # Defaulting to '28113' if not provided
+    payload = {'amount': str(order['amount']), 'price': price_value}
+    # Outputting the constructed JSON payload for verification
+    print(f"Constructed Trade Payload: {json.dumps(payload)}")
+else:
+    raise ValueError(f"Unsupported order type: {order_type}")
+
+url = 'https://www.bitstamp.net' + endpoint + order['currency_pair'] + '/'
+
 
 from urllib.parse import urlencode
 payload_string = urlencode(payload)

@@ -1,0 +1,10 @@
+
+{
+  "threshold": 0.5,
+  "trade_amount": 1,
+  "trading_frequency": 600,
+  "profit_threshold": 100,
+  "increased_frequency": 300,
+  "default_frequency": 600,
+  "arbitrage_opportunity_threshold": 0.5
+}
