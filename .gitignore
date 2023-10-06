@@ -4,3 +4,9 @@ env
 influx/create-all-access-api-token.output
 data/
 ./*.log
+*.csv
+*.log
+*.json
+logs/*
+trades/*
+*.tgz
