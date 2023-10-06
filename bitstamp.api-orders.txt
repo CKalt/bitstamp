@@ -1,0 +1,877 @@
+Orders
+
+Collection of endpoints for managing orders.
+Buy instant order
+
+Open a buy instant order. By placing an instant order you acknowledge that the execution of your order depends on the market conditions and that these conditions may be subject to sudden changes that cannot be foreseen. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+Possible errors
+Reason 	Action
+Missing amount and/or price POST parameters 	Missing one or both parameters.
+'parameter': Enter a number. Use "." as a decimal point. 	'parameter' can only be number.
+Minimum order size is 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH 	Order value must be at least 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH
+You can only buy 'amount' 'currency'. Check your account balance for details. 	Account has less 'available_currency' than is required to make this order.
+Maximum market buy amount at the moment is 'amount' 'currency'. Please use limit order instead. 	Order amount exceeds the limit amount set for market buy orders.
+Order could not be placed. 	Order could not be placed (perhaps due to internal error or trade halt). Please retry placing order.
+path Parameters
+market_symbol
+required
+	
+string
+Request Body schema: www-form-urlencoded
+amount
+required
+	
+number
+
+Amount in counter currency (Example: For BTC/USD pair, amount is quoted in USD)
+client_order_id	
+string
+
+Client order ID set by the client for internal reference. It should be unique, but there are no additional constraints or checks guaranteed on the field by Bitstamp.
+Responses
+Response Schema: application/json
+One of
+amount	
+string
+
+Amount.
+client_order_id	
+string
+
+Client order ID sent with request. Only returned if parameter was used in request.
+datetime	
+string <date-time>
+
+Date and time.
+id	
+string
+
+Order ID.
+market	
+string
+
+Market where the order was placed.
+price	
+string
+
+Price.
+type	
+string
+
+0 (buy) or 1 (sell).
+
+Response samples
+
+    200
+
+Content type
+application/json
+Example
+BuySellOrderResponse
+{
+
+    "amount": "45.00000000",
+    "client_order_id": "123456789",
+    "datetime": "2022-01-31 14:43:15.796000",
+    "id": "1234123412341234",
+    "market": "BTC/USD",
+    "price": "2211.00",
+    "type": "0"
+
+}
+Buy market order
+
+Open a buy market order. By placing a market order you acknowledge that the execution of your order depends on the market conditions and that these conditions may be subject to sudden changes that cannot be foreseen. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+Possible errors
+Reason 	Action
+Missing amount and/or price POST parameters 	Missing one or both parameters.
+'parameter': Enter a number. Use "." as a decimal point. 	'parameter' can only be number.
+Minimum order size is 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH 	Order value must be at least 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH
+You can only buy 'amount' 'currency'. Check your account balance for details. 	Account has less 'available_currency' than is required to make this order.
+Maximum market buy amount at the moment is 'amount' 'currency'. Please use limit order instead. 	Order amount exceeds the limit amount set for market buy orders.
+Order could not be placed. 	Order could not be placed (perhaps due to internal error or trade halt). Please retry placing order.
+path Parameters
+market_symbol
+required
+	
+string
+Request Body schema: www-form-urlencoded
+amount
+required
+	
+number
+
+Amount in base currency (Example: For BTC/USD pair, amount is quoted in BTC)
+client_order_id	
+string
+
+Client order ID set by the client for internal reference. It should be unique, but there are no additional constraints or checks guaranteed on the field by Bitstamp.
+Responses
+Response Schema: application/json
+One of
+amount	
+string
+
+Amount.
+client_order_id	
+string
+
+Client order ID sent with request. Only returned if parameter was used in request.
+datetime	
+string <date-time>
+
+Date and time.
+id	
+string
+
+Order ID.
+market	
+string
+
+Market where the order was placed.
+price	
+string
+
+Price.
+type	
+string
+
+0 (buy) or 1 (sell).
+
+Response samples
+
+    200
+
+Content type
+application/json
+Example
+BuySellOrderResponse
+{
+
+    "amount": "45.00000000",
+    "client_order_id": "123456789",
+    "datetime": "2022-01-31 14:43:15.796000",
+    "id": "1234123412341234",
+    "market": "BTC/USD",
+    "price": "2211.00",
+    "type": "0"
+
+}
+Buy limit order
+
+Open a buy limit order. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+Possible errors
+Reason 	Action
+Missing amount and/or price POST parameters 	Missing one or both parameters.
+'parameter': Enter a number. Use "." as a decimal point. 	'parameter' can only be number.
+Minimum order size is 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH 	Order value must be at least 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH
+Price is more than 20% above market price. 	Order price must not exceed 20% of current price.
+You need 'order_value' USD to open that order. You have only 'available_fiat' USD available. Check your account balance for details. 	Account has less 'available_fiat' than is required to make this order.
+Sell if executed price must be higher than buy price. 	'limit_price' must be larger than 'price' parameter.
+Both limit_price and daily_order cannot be set. 	Only one of those parameters can be set.
+Order could not be placed. 	Order could not be placed (perhaps due to internal error or trade halt). Please retry placing order.
+path Parameters
+market_symbol
+required
+	
+string
+Request Body schema: www-form-urlencoded
+amount
+required
+	
+number [ 1e-8 .. 92233720368 ]
+
+Amount.
+client_order_id	
+string
+
+Client order ID set by the client for internal reference. It should be unique, but there are no additional constraints or checks guaranteed on the field by Bitstamp.
+daily_order	
+boolean
+
+Opens buy limit order which will be canceled at 0:00 UTC unless it already has been executed.
+expire_time	
+integer <int32>
+
+Unix timestamp in milliseconds. Required in case of GTD order.
+fok_order	
+boolean
+
+A Fill-Or-Kill (FOK) order is an order that must be executed immediately in its entirety. If the order cannot be immediately executed in its entirety, it will be cancelled.
+gtd_order	
+boolean
+
+A Good-Till-Date (GTD) lets you select an expiration time up until which the order will be open. Note that all GTD orders are cancelled at 00:00:00 UTC.
+ioc_order	
+boolean
+
+An Immediate-Or-Cancel (IOC) order is an order that must be executed immediately. Any portion of an IOC order that cannot be filled immediately will be cancelled.
+limit_price	
+number [ 1e-8 .. 92233720368 ]
+
+If the order gets executed, a new sell order will be placed, with "limit_price" as its price.
+moc_order	
+boolean
+
+A Maker-Or-Cancel (MOC) order is an order that ensures it is not fully or partially filled when placed. In case it would be, the order is cancelled.
+price
+required
+	
+number [ 1e-8 .. 92233720368 ]
+
+Price.
+Responses
+Response Schema: application/json
+One of
+amount	
+string
+
+Amount.
+client_order_id	
+string
+
+Client order ID sent with request. Only returned if parameter was used in request.
+datetime	
+string <date-time>
+
+Date and time.
+id	
+string
+
+Order ID.
+market	
+string
+
+Market where the order was placed.
+price	
+string
+
+Price.
+type	
+string
+
+0 (buy) or 1 (sell).
+
+Response samples
+
+    200
+
+Content type
+application/json
+Example
+BuySellOrderResponse
+{
+
+    "amount": "45.00000000",
+    "client_order_id": "123456789",
+    "datetime": "2022-01-31 14:43:15.796000",
+    "id": "1234123412341234",
+    "market": "BTC/USD",
+    "price": "2211.00",
+    "type": "0"
+
+}
+Cancel all orders
+
+Cancel all open orders. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+Responses
+Response Schema: application/json
+Array of objects (Order)
+success	
+boolean
+
+"true" if all orders were successfully canceled and "false" otherwise
+
+Response samples
+
+    200
+
+Content type
+application/json
+{
+
+    "canceled": 
+
+[
+
+        {}
+    ],
+    "success": true
+
+}
+Cancel all orders for currency pair
+
+Cancel all open orders for a currency pair. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+path Parameters
+market_symbol
+required
+	
+string
+Responses
+Response Schema: application/json
+Array of objects (Order)
+success	
+boolean
+
+"true" if all orders were successfully canceled and "false" otherwise
+
+Response samples
+
+    200
+
+Content type
+application/json
+{
+
+    "canceled": 
+
+[
+
+        {}
+    ],
+    "success": true
+
+}
+Cancel order
+
+Cancel an order. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+Possible errors
+Reason 	Action
+Missing id POST param. 	Id parameter missing.
+Invalid id POST param. 	Id parameter must be a positive integer.
+Invalid client_cancel_id POST param. 	client_cancel_id parameter can contain at most 180 characters.
+Order not found 	Order with that id was not found in orderbook. Order might already be filled or canceled. Please check order status.
+Order cancellation failed due to internal error. Please try again. 	Please retry cancelling order.
+Order cancelattion failed due to trade halt. 	You can cancel order after trade halt is lifted.
+Request Body schema: www-form-urlencoded
+id	
+string
+
+Order ID.
+Responses
+
+Response samples
+
+    200
+
+Content type
+application/json
+Example
+CancelOrderResponse
+{
+
+    "amount": "0.02035278",
+    "id": 1453282316578816,
+    "price": "2100.45",
+    "type": 0
+
+}
+Trading pairs
+
+Returns all trading pairs that can be traded on selected account.
+Responses
+Response Schema: application/json
+Array
+name	
+string
+
+Trading pair.
+url_symbol	
+string
+
+URL symbol of trading pair.
+
+Response samples
+
+    200
+
+Content type
+application/json
+[
+
+    {
+        "name": "BTC/USD",
+        "url_symbol": "btcusd"
+    }
+
+]
+All open orders
+
+Return user's open orders. This API call is cached for 10 seconds. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+Responses
+Response Schema: application/json
+Array
+amount	
+string
+
+Remaining amount.
+amount_at_create	
+string
+
+Initial amount.
+client_order_id	
+string
+
+Client order id. (Only returned if order was placed with client order id parameter.)
+currency_pair	
+string
+
+Currency Pair.
+datetime	
+string
+
+Date and time.
+id	
+string
+
+Order ID.
+limit_price	
+string
+
+Limit price. (Only returned if limit order was placed with limit_price parameter.)
+market	
+string
+
+Market where the order was placed.
+price	
+string
+
+Price.
+type	
+string
+
+Type: 0 - buy; 1 - sell.
+
+Response samples
+
+    200
+
+Content type
+application/json
+[
+
+    {
+        "amount": "0.50000000",
+        "amount_at_create": "0.50000000",
+        "client_order_id": "1234123412341234",
+        "currency_pair": "BTC/USD",
+        "datetime": "2022-01-31 14:43:15",
+        "id": "1234123412341234",
+        "limit_price": "110.00",
+        "market": "BTC/USD",
+        "price": "100.00",
+        "type": "0"
+    }
+
+]
+Open orders
+
+Return user's open orders for currency pair. This API call is cached for 10 seconds. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+path Parameters
+market_symbol
+required
+	
+string
+Responses
+Response Schema: application/json
+Array
+amount	
+string
+
+Remaining amount.
+amount_at_create	
+string
+
+Initial amount.
+client_order_id	
+string
+
+Client order id. (Only returned if order was placed with client order id parameter.)
+datetime	
+string
+
+Date and time.
+id	
+string
+
+Order ID.
+limit_price	
+string
+
+Limit price. (Only returned if limit order was placed with limit_price parameter.)
+price	
+string
+
+Price.
+type	
+string
+
+Order type: 0 - buy; 1 - sell.
+
+Response samples
+
+    200
+
+Content type
+application/json
+[
+
+    {
+        "amount": "0.50000000",
+        "amount_at_create": "0.50000000",
+        "client_order_id": "1234123412341234",
+        "datetime": "2022-01-31 14:43:15",
+        "id": "1234123412341234",
+        "limit_price": "110.00",
+        "price": "100.00",
+        "type": "0"
+    }
+
+]
+Order status
+
+Returns order status. This call will be executed on the account (Sub or Main), to which the used API key is bound to. Order can be fetched by using either id or client_order_id parameter. For closed orders, this call only returns information for the last 30 days. 'Order not found' error will be returned for orders outside this time range.
+Possible errors
+Reason 	Action
+Missing id POST param 	Id parameter missing.
+Invalid order id 	Order id parameter can only be number.
+Order not found. 	Order with that id was not found in our system.
+Request Body schema: www-form-urlencoded
+client_order_id	
+string
+
+(Optional) Client order id. (Can only be used if order was placed with client order id parameter.).
+id	
+string
+
+Order ID.
+omit_transactions	
+boolean
+
+(Optional) Omits list of transactions for order ID. Possible value: True
+Responses
+Response Schema: application/json
+One of
+amount_remaining	
+number
+
+Amount remaining.
+client_order_id	
+string
+
+Client order id. (Only returned if order was placed with client order id parameter.).
+datetime	
+string
+
+Date and time.
+id	
+integer <int32>
+
+Order ID.
+market	
+string
+
+Market where the order was placed.
+status	
+string
+
+Open, Finished, Expired or Canceled.
+Array of objects (OrderTransaction)
+type	
+string
+
+Type: 0 - buy; 1 - sell.
+
+Response samples
+
+    200
+
+Content type
+application/json
+Example
+OrderStatusResponse
+{
+
+    "amount_remaining": "100.00",
+    "client_order_id": "0.50000000",
+    "datetime": "2022-01-31 14:43:15",
+    "id": 1458532827766784,
+    "market": "BTC/USD",
+    "status": "Open",
+    "transactions": 
+
+[
+
+        {}
+    ],
+    "type": "0"
+
+}
+Sell instant order
+
+Open an instant sell order. By placing an instant order you acknowledge that the execution of your order depends on the market conditions and that these conditions may be subject to sudden changes that cannot be foreseen. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+Possible errors
+path Parameters
+market_symbol
+required
+	
+string
+Request Body schema: www-form-urlencoded
+amount
+required
+	
+number
+
+Amount in base currency (Example: For BTC/USD pair, amount is quoted in BTC)
+amount_in_counter	
+boolean
+
+(Optional) Instant sell orders allow you to sell an amount of the base currency determined by the value of it in the counter-currency. Amount_in_counter sets the amount parameter to refer to the counter currency instead of the base currency of the selected trading pair. Possible value: True
+client_order_id	
+string
+
+Client order ID set by the client for internal reference. It should be unique, but there are no additional constraints or checks guaranteed on the field by Bitstamp.
+Responses
+Response Schema: application/json
+One of
+amount	
+string
+
+Amount.
+client_order_id	
+string
+
+Client order ID sent with request. Only returned if parameter was used in request.
+datetime	
+string <date-time>
+
+Date and time.
+id	
+string
+
+Order ID.
+market	
+string
+
+Market where the order was placed.
+price	
+string
+
+Price.
+type	
+string
+
+0 (buy) or 1 (sell).
+
+Response samples
+
+    200
+
+Content type
+application/json
+Example
+BuySellOrderResponse
+{
+
+    "amount": "45.00000000",
+    "client_order_id": "123456789",
+    "datetime": "2022-01-31 14:43:15.796000",
+    "id": "1234123412341234",
+    "market": "BTC/USD",
+    "price": "2211.00",
+    "type": "0"
+
+}
+Sell market order
+
+Open a sell market order. By placing a market order you acknowledge that the execution of your order depends on the market conditions and that these conditions may be subject to sudden changes that cannot be foreseen. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+Possible errors
+Reason 	Action
+Missing amount and/or price POST parameters 	Missing one or both parameters.
+'parameter': Enter a number. Use "." as a decimal point. 	'parameter' can only be number.
+Minimum order size is 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH 	Order value must be at least 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH
+You can only sell 'amount' 'currency'. Check your account balance for details. 	Account has less 'available_currency' than is required to make this order.
+No buy orders for currency pair 'currency_pair' 	The buy side of the orderbook for 'currency_pair' is empty, therefore a market sell order cannot be placed.
+Maximum market sell amount at the moment is 'amount' 'currency'. Please use limit order instead. 	Order amount exceeds the limit amount set for market sell orders.
+Order could not be placed. 	Order could not be placed (perhaps due to internal error or trade halt). Please retry placing order.
+path Parameters
+market_symbol
+required
+	
+string
+Request Body schema: www-form-urlencoded
+amount
+required
+	
+number
+
+Amount in base currency (Example: For BTC/USD pair, amount is quoted in BTC)
+client_order_id	
+string
+
+Client order ID set by the client for internal reference. It should be unique, but there are no additional constraints or checks guaranteed on the field by Bitstamp.
+Responses
+Response Schema: application/json
+One of
+amount	
+string
+
+Amount.
+client_order_id	
+string
+
+Client order ID sent with request. Only returned if parameter was used in request.
+datetime	
+string <date-time>
+
+Date and time.
+id	
+string
+
+Order ID.
+market	
+string
+
+Market where the order was placed.
+price	
+string
+
+Price.
+type	
+string
+
+0 (buy) or 1 (sell).
+
+Response samples
+
+    200
+
+Content type
+application/json
+Example
+BuySellOrderResponse
+{
+
+    "amount": "45.00000000",
+    "client_order_id": "123456789",
+    "datetime": "2022-01-31 14:43:15.796000",
+    "id": "1234123412341234",
+    "market": "BTC/USD",
+    "price": "2211.00",
+    "type": "0"
+
+}
+Sell limit order
+
+Open a sell limit order. This call will be executed on the account (Sub or Main), to which the used API key is bound to.
+Possible errors
+Reason 	Action
+Missing amount and/or price POST parameters 	Missing one or both parameters.
+'parameter': Enter a number. Use "." as a decimal point. 	'parameter' can only be number.
+Minimum order size is 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH 	Order value must be at least 10 USD / 10 EUR / 10 GBP / 10 USDT / 10 USDC / 10 PAX / 10 GUSD / 0.0002 BTC / 0.002 ETH
+Price is more than 20% below market price. 	Order price must not exceed 20% of current price.
+You have only 'available_btc' BTC available. Check your account balance for details. 	Account has less 'available_btc' than is required to make this order.
+Buy if executed price must be lower than sell price. 	'limit_price' must be lower than 'price' parameter.
+Both limit_price and daily_order cannot be set. 	Only one of those parameters can be set.
+Order could not be placed. 	Order could not be placed (perhaps due to internal error or trade halt). Please retry placing order.
+path Parameters
+market_symbol
+required
+	
+string
+Request Body schema: www-form-urlencoded
+amount
+required
+	
+number [ 1e-8 .. 92233720368 ]
+
+Amount.
+client_order_id	
+string
+
+Client order ID set by the client for internal reference. It should be unique, but there are no additional constraints or checks guaranteed on the field by Bitstamp.
+daily_order	
+boolean
+
+Opens buy limit order which will be canceled at 0:00 UTC unless it already has been executed.
+expire_time	
+integer <int32>
+
+Unix timestamp in milliseconds. Required in case of GTD order.
+fok_order	
+boolean
+
+A Fill-Or-Kill (FOK) order is an order that must be executed immediately in its entirety. If the order cannot be immediately executed in its entirety, it will be cancelled.
+gtd_order	
+boolean
+
+A Good-Till-Date (GTD) lets you select an expiration time up until which the order will be open. Note that all GTD orders are cancelled at 00:00:00 UTC.
+ioc_order	
+boolean
+
+An Immediate-Or-Cancel (IOC) order is an order that must be executed immediately. Any portion of an IOC order that cannot be filled immediately will be cancelled.
+limit_price	
+number [ 1e-8 .. 92233720368 ]
+
+If the order gets executed, a new sell order will be placed, with "limit_price" as its price.
+moc_order	
+boolean
+
+A Maker-Or-Cancel (MOC) order is an order that ensures it is not fully or partially filled when placed. In case it would be, the order is cancelled.
+price
+required
+	
+number [ 1e-8 .. 92233720368 ]
+
+Price.
+Responses
+Response Schema: application/json
+One of
+amount	
+string
+
+Amount.
+client_order_id	
+string
+
+Client order ID sent with request. Only returned if parameter was used in request.
+datetime	
+string <date-time>
+
+Date and time.
+id	
+string
+
+Order ID.
+market	
+string
+
+Market where the order was placed.
+price	
+string
+
+Price.
+type	
+string
+
+0 (buy) or 1 (sell).
+
+Response samples
+
+    200
+
+Content type
+application/json
+Example
+BuySellOrderResponse
+{
+
+    "amount": "45.00000000",
+    "client_order_id": "123456789",
+    "datetime": "2022-01-31 14:43:15.796000",
+    "id": "1234123412341234",
+    "market": "BTC/USD",
+    "price": "2211.00",
+    "type": "0"
+
+}
