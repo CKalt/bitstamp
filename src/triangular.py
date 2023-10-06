@@ -87,26 +87,26 @@ def triangular_arbitrage(bchbtc_path, bchusd_path, btcusd_path, profit_threshold
                 
                 f.write("-" * 50 + "\n")
                 f.write(f"1. Trading 1 BTC for BCH using {prices['bchbtc']:.8f} BCH/BTC\n")
+                f.write(f"   Timestamp (Epoch) for BCH/BTC price: {last_updates['bchbtc'].timestamp()}\n")
                 f.write(f"   Initial: 1 BTC\n")
                 bch_amount = (1.0 / prices['bchbtc']) * (1 - transaction_fee)
                 f.write(f"   After Trade (minus fee): {bch_amount:.8f} BCH\n")
                 
                 f.write("-" * 50 + "\n")
                 f.write(f"2. Trading {bch_amount:.8f} BCH for USD using {prices['bchusd']:.2f} BCH/USD\n")
+                f.write(f"   Timestamp (Epoch) for BCH/USD price: {last_updates['bchusd'].timestamp()}\n")
                 usd_amount = bch_amount * prices['bchusd'] * (1 - transaction_fee)
                 f.write(f"   After Trade (minus fee): ${usd_amount:.2f}\n")
                 
                 f.write("-" * 50 + "\n")
                 f.write(f"3. Trading ${usd_amount:.2f} for BTC using {prices['btcusd']:.2f} USD/BTC\n")
+                f.write(f"   Timestamp (Epoch) for BTC/USD price: {last_updates['btcusd'].timestamp()}\n")
                 final_btc_amount = usd_amount / prices['btcusd'] * (1 - transaction_fee)
                 f.write(f"   After Trade (minus fee): {final_btc_amount:.8f} BTC\n")
                 
                 f.write("-" * 50 + "\n")
                 f.write(f"Profit: {profit_or_loss:.8f} BTC\n")
                 f.write("=" * 50 + "\n\n")
-
-
-
 
 
 
