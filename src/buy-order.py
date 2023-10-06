@@ -1,3 +1,5 @@
+#! env/bin/python
+# src/buy-order.py
 import hashlib
 import hmac
 import time
@@ -27,16 +29,38 @@ with open(args.order_file, 'r') as f:
 timestamp = str(int(round(time.time() * 1000)))
 nonce = str(uuid.uuid4())
 content_type = 'application/x-www-form-urlencoded'
-payload = {'amount': str(order['amount']), 'price': str(order['price'])}
+
+order_type_endpoint = {
+    "instant-buy": "buy/instant",
+    "market-buy": "buy/market",
+    "limit-buy": "buy/limit"
+}
+url_endpoint = order_type_endpoint.get(order['order_type'])
+if not url_endpoint:
+    raise ValueError("Unsupported order type")
+
+if order['order_type'] == "limit-buy":
+    payload = {
+        'amount': str(order['amount']),
+        'price': str(order['price'])
+        # ... add other fields like 'fok_order', 'gtd_order', 'ioc_order', 'limit_price', 'moc_order' based on the order JSON if they exist
+    }
+elif order['order_type'] in ["instant-buy", "market-buy"]:
+    payload = {
+        'amount': str(order['amount'])
+    }
+    if 'client_order_id' in order:
+        payload['client_order_id'] = order['client_order_id']
+else:
+    raise ValueError("Unsupported order type for payload")
 
 from urllib.parse import urlencode
 payload_string = urlencode(payload)
 
-# '' (empty string) in message represents any query parameters or an empty string in case there are none
 message = 'BITSTAMP ' + api_key + \
     'POST' + \
     'www.bitstamp.net' + \
-    '/api/v2/buy/' + order['currency_pair'] + '/' + \
+    f'/api/v2/{url_endpoint}/{order["currency_pair"]}/' + \
     '' + \
     content_type + \
     nonce + \
@@ -57,7 +81,7 @@ headers = {
 # Set up logging
 logging.basicConfig(filename='bitstamp.log', level=logging.INFO)
 
-url = 'https://www.bitstamp.net/api/v2/buy/' + order['currency_pair'] + '/'
+url = f'https://www.bitstamp.net/api/v2/{url_endpoint}/{order["currency_pair"]}/'
 if args.verbose:
     print(f"Request Method: POST")
     print(f"Request URL: {url}")
