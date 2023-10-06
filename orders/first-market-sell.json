@@ -1,7 +1,7 @@
 {
-    "order_type": "market-buy",
+    "order_type": "market-sell",
     "currency_pair": "btcusd",
     "amount": 0.001000,
-    "price": 28100.0
+    "price": 38100.0
 }
   

@@ -45,6 +45,13 @@ elif order_type == 'market-buy' or order_type == 'instant-buy':
     payload = {'amount': str(order['amount']), 'price': price_value}
     # Outputting the constructed JSON payload for verification
     print(f"Constructed Trade Payload: {json.dumps(payload)}")
+elif order_type == 'market-sell' or order_type == 'instant-sell':
+    endpoint = '/api/v2/sell/market/'
+    # Reading the price from the input JSON
+    price_value = str(order.get('price', '28113'))  # Defaulting to '28113' if not provided
+    payload = {'amount': str(order['amount']), 'price': price_value}
+    # Outputting the constructed JSON payload for verification
+    print(f"Constructed Trade Payload: {json.dumps(payload)}")
 else:
     raise ValueError(f"Unsupported order type: {order_type}")
 
@@ -55,11 +62,10 @@ from urllib.parse import urlencode
 payload_string = urlencode(payload)
 
 # '' (empty string) in message represents any query parameters or an empty string in case there are none
-hmac_endpoint = '/api/v2/buy/' if order_type != 'limit-sell' else endpoint
 message = 'BITSTAMP ' + api_key + \
     'POST' + \
     'www.bitstamp.net' + \
-    hmac_endpoint + order['currency_pair'] + '/' + \
+    endpoint + order['currency_pair'] + '/' + \
     '' + \
     content_type + \
     nonce + \
