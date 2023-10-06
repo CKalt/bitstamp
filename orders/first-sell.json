@@ -1,0 +1,6 @@
+{
+    "order_type": "limit-sell",
+    "currency_pair": "btcusd",
+    "amount": 0.01,
+    "price": 30000
+}

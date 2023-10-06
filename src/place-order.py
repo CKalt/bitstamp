@@ -35,6 +35,9 @@ order_type = order.get('order_type', 'limit-buy')
 if order_type == 'limit-buy':
     endpoint = '/api/v2/buy/'
     payload = {'amount': str(order['amount']), 'price': str(order['price'])}
+elif order_type == 'limit-sell':
+    endpoint = '/api/v2/sell/'
+    payload = {'amount': str(order['amount']), 'price': str(order['price'])}
 elif order_type == 'market-buy' or order_type == 'instant-buy':
     endpoint = '/api/v2/buy/market/'
     # Reading the price from the input JSON
@@ -52,10 +55,11 @@ from urllib.parse import urlencode
 payload_string = urlencode(payload)
 
 # '' (empty string) in message represents any query parameters or an empty string in case there are none
+hmac_endpoint = '/api/v2/buy/' if order_type != 'limit-sell' else endpoint
 message = 'BITSTAMP ' + api_key + \
     'POST' + \
     'www.bitstamp.net' + \
-    '/api/v2/buy/' + order['currency_pair'] + '/' + \
+    hmac_endpoint + order['currency_pair'] + '/' + \
     '' + \
     content_type + \
     nonce + \
@@ -76,7 +80,7 @@ headers = {
 # Set up logging
 logging.basicConfig(filename='bitstamp.log', level=logging.INFO)
 
-url = 'https://www.bitstamp.net/api/v2/buy/' + order['currency_pair'] + '/'
+url = 'https://www.bitstamp.net' + endpoint + order['currency_pair'] + '/'
 if args.verbose:
     print(f"Request Method: POST")
     print(f"Request URL: {url}")
@@ -95,6 +99,7 @@ r = requests.post(
 )
 
 if not r.status_code == 200:
+    print(f"Error Response from Bitstamp API: {r.text}")
     logging.error(f"Unexpected status code: {r.status_code}")
     logging.error(f"Response text: {r.text}")
     raise Exception('Status code not 200')
