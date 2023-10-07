@@ -1,0 +1,6 @@
+The attached python script correctly implements a client side api call to perform limit and market buy orders to the bitstamp api.  Here's an example run, showing the response indicating the order was placed correctly.
+
+python src/place-order.py orders/first.json 
+b'{"id": "1670346620911616", "market": "BTC/USD", "datetime": "2023-10-06 23:20:42.653000", "type": "0", "amount": "0.01000000", "price": "15800"}'
+
+Please read the doc and json files and add the ability for the place-order.py script to place market sell orders with the first-sell.json file attached.
