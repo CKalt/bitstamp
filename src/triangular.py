@@ -13,12 +13,15 @@ logging.basicConfig(level=logging.INFO,
                     filename='logs/triangular.log')
 
 # Trade file setup
+last_trade_timestamp = None
+
 trade_file = 'trades/trades.txt'
 if not os.path.exists('trades'):
     os.makedirs('trades')
 
 
 def triangular_arbitrage(bchbtc_path, bchusd_path, btcusd_path, profit_threshold=0.0, transaction_fee=0.002, ttl=60, verbose=True):
+    SKIP_TRADE_DELAY = 60  # 60 seconds
     # Load the datasets and convert timestamp column
     bchbtc_data = pd.read_csv(bchbtc_path).assign(
         timestamp=lambda x: pd.to_datetime(x['timestamp'], unit='s'))
@@ -79,8 +82,17 @@ def triangular_arbitrage(bchbtc_path, bchusd_path, btcusd_path, profit_threshold
         final_btc = usd_after_conversion / \
             prices['btcusd'] * (1 - transaction_fee)
         profit_or_loss = final_btc - 1.0
-
+        
+        # Skip logic based on SKIP_TRADE_DELAY
+        global last_trade_timestamp
         if profit_or_loss > profit_threshold:
+            
+            # Skip logic based on SKIP_TRADE_DELAY
+            if last_trade_timestamp and (event_timestamp.timestamp() - last_trade_timestamp) < SKIP_TRADE_DELAY:
+                continue
+
+            last_trade_timestamp = event_timestamp.timestamp()
+
             # Append to trades file
             with open(trade_file, 'a') as f:
                 f.write(f"Timestamp (Epoch): {event_timestamp.timestamp()}\n")
@@ -108,16 +120,6 @@ def triangular_arbitrage(bchbtc_path, bchusd_path, btcusd_path, profit_threshold
                 f.write("-" * 50 + "\n")
                 f.write(f"Profit: {profit_or_loss:.8f} BTC\n")
                 f.write("=" * 50 + "\n\n")
-
-
-
-
-
-
-
-
-
-
 
             logging.info(f"Profitable event detected at {event_timestamp} with profit {profit_or_loss:.8f} BTC")
             profitable_events.append({
