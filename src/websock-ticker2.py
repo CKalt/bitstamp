@@ -1,6 +1,5 @@
 #! env/bin/python
 # src/websock-ticker2.py
-print(trades[0])  # This will print the details of the first trade.
 import json
 import asyncio
 import websockets
