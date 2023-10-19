@@ -48,6 +48,13 @@ def triangular_arbitrage(bchbtc_path, bchusd_path, btcusd_path, profit_threshold
         'btcusd': None
     }
 
+    # Initialize the counts for stale data
+    stale_counts = {
+        'bchbtc': 0,
+        'bchusd': 0,
+        'btcusd': 0
+    }
+
     profitable_events = []
 
     for _, row in all_data.iterrows():
@@ -68,6 +75,14 @@ def triangular_arbitrage(bchbtc_path, bchusd_path, btcusd_path, profit_threshold
             event_timestamp - last_updates['bchusd']).seconds > ttl if last_updates['bchusd'] else True
         is_btcusd_stale = (
             event_timestamp - last_updates['btcusd']).seconds > ttl if last_updates['btcusd'] else True
+
+        # Increment the stale counts based on staleness checks
+        if is_bchbtc_stale:
+            stale_counts['bchbtc'] += 1
+        if is_bchusd_stale:
+            stale_counts['bchusd'] += 1
+        if is_btcusd_stale:
+            stale_counts['btcusd'] += 1
 
         if is_bchbtc_stale or is_bchusd_stale or is_btcusd_stale:
             if verbose:
@@ -143,6 +158,10 @@ def triangular_arbitrage(bchbtc_path, bchusd_path, btcusd_path, profit_threshold
             print(f"BTC/USD Price: {event['btcusd_price']:.2f} | Final BTC: {(((1.0 / event['bchbtc_price']) * (1 - transaction_fee)) * event['bchusd_price'] * (1 - transaction_fee)) / event['btcusd_price'] * (1 - transaction_fee):.8f}")
             print(f"Profit: {event['profit_or_loss']:.8f} BTC")
             print("-" * 50)
+
+    # Reporting the stale counts before the summary
+    for pair, count in stale_counts.items():
+        logging.info(f"{pair} was stale {count} times.")
 
     # Summary
     with open(trade_file, 'a') as f:
