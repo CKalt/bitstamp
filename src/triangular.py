@@ -56,6 +56,7 @@ def triangular_arbitrage(bchbtc_path, bchusd_path, btcusd_path, profit_threshold
     }
 
     profitable_events = []
+    trade_number = 1
 
     for _, row in all_data.iterrows():
         event_pair = row['pair']
@@ -110,8 +111,8 @@ def triangular_arbitrage(bchbtc_path, bchusd_path, btcusd_path, profit_threshold
 
             # Append to trades file
             with open(trade_file, 'a') as f:
-                f.write(f"Timestamp (Epoch): {event_timestamp.timestamp()}\n")
-                f.write(f"Timestamp (Human): {event_timestamp}\n")
+                f.write(f"Trade {trade_number}: Timestamp (Epoch): {event_timestamp.timestamp()}\n")
+                f.write(f"Trade {trade_number}: Timestamp (Human): {event_timestamp}\n")
                 
                 f.write("-" * 50 + "\n")
                 f.write(f"1. Trading 1 BTC for BCH using {prices['bchbtc']:.8f} BCH/BTC\n")
@@ -133,7 +134,7 @@ def triangular_arbitrage(bchbtc_path, bchusd_path, btcusd_path, profit_threshold
                 f.write(f"   After Trade (minus fee): {final_btc_amount:.8f} BTC\n")
                 
                 f.write("-" * 50 + "\n")
-                f.write(f"Profit: {profit_or_loss:.8f} BTC\n")
+                f.write(f"Profit for Trade {trade_number}: {profit_or_loss:.8f} BTC\n")
                 f.write("=" * 50 + "\n\n")
 
             logging.info(f"Profitable event detected at {event_timestamp} with profit {profit_or_loss:.8f} BTC")
@@ -144,6 +145,7 @@ def triangular_arbitrage(bchbtc_path, bchusd_path, btcusd_path, profit_threshold
                 'bchusd_price': prices['bchusd'],
                 'btcusd_price': prices['btcusd']
             })
+            trade_number += 1
         else:
             logging.info(f"No arbitrage opportunity at {event_timestamp}")
 
