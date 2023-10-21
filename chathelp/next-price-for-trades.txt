@@ -1,0 +1,5 @@
+Please review the following code and help me understand how to modify it. I have a specific request.
+
+1. I would like to refactor the code so that it is broken into pieces.
+
+2. I would you to enhance the code so that the "hypothetical" trades that take place are based on the next trading price in the history rather than the current one.  In other words make the algorithm so that the current prices cause the trade trigger but the next trade in the history is used for the computation involving the profit potential. We shall be assuming that a market order is executed at the next price rather than the previous price. Does this make sense? 
