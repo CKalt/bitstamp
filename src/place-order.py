@@ -1,11 +1,11 @@
 #!env/bin/python
-# src/buy-order.py
+# src/place-orders.py
+from urllib.parse import urlencode
 import hashlib
 import hmac
 import time
 import requests
 import uuid
-import sys
 import json
 import argparse
 import logging
@@ -13,7 +13,8 @@ import logging
 # Command line arguments
 parser = argparse.ArgumentParser(description='Process Bitstamp orders.')
 parser.add_argument('order_file', type=str, help='Order file')
-parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+parser.add_argument('-v', '--verbose', action='store_true',
+                    help='Verbose output')
 args = parser.parse_args()
 
 # Read API configuration from file
@@ -41,14 +42,16 @@ elif order_type == 'limit-sell':
 elif order_type == 'market-buy' or order_type == 'instant-buy':
     endpoint = '/api/v2/buy/market/'
     # Reading the price from the input JSON
-    price_value = str(order.get('price', '28113'))  # Defaulting to '28113' if not provided
+    # Defaulting to '28113' if not provided
+    price_value = str(order.get('price', '28113'))
     payload = {'amount': str(order['amount']), 'price': price_value}
     # Outputting the constructed JSON payload for verification
     print(f"Constructed Trade Payload: {json.dumps(payload)}")
 elif order_type == 'market-sell' or order_type == 'instant-sell':
     endpoint = '/api/v2/sell/market/'
     # Reading the price from the input JSON
-    price_value = str(order.get('price', '28113'))  # Defaulting to '28113' if not provided
+    # Defaulting to '28113' if not provided
+    price_value = str(order.get('price', '28113'))
     payload = {'amount': str(order['amount']), 'price': price_value}
     # Outputting the constructed JSON payload for verification
     print(f"Constructed Trade Payload: {json.dumps(payload)}")
@@ -58,7 +61,6 @@ else:
 url = 'https://www.bitstamp.net' + endpoint + order['currency_pair'] + '/'
 
 
-from urllib.parse import urlencode
 payload_string = urlencode(payload)
 
 # '' (empty string) in message represents any query parameters or an empty string in case there are none
@@ -73,7 +75,8 @@ message = 'BITSTAMP ' + api_key + \
     'v2' + \
     payload_string
 message = message.encode('utf-8')
-signature = hmac.new(API_SECRET, msg=message, digestmod=hashlib.sha256).hexdigest()
+signature = hmac.new(API_SECRET, msg=message,
+                     digestmod=hashlib.sha256).hexdigest()
 headers = {
     'X-Auth': 'BITSTAMP ' + api_key,
     'X-Auth-Signature': signature,
@@ -110,8 +113,10 @@ if not r.status_code == 200:
     logging.error(f"Response text: {r.text}")
     raise Exception('Status code not 200')
 
-string_to_sign = (nonce + timestamp + r.headers.get('Content-Type')).encode('utf-8') + r.content
-signature_check = hmac.new(API_SECRET, msg=string_to_sign, digestmod=hashlib.sha256).hexdigest()
+string_to_sign = (nonce + timestamp +
+                  r.headers.get('Content-Type')).encode('utf-8') + r.content
+signature_check = hmac.new(
+    API_SECRET, msg=string_to_sign, digestmod=hashlib.sha256).hexdigest()
 if not r.headers.get('X-Server-Auth-Signature') == signature_check:
     logging.error('Signatures do not match')
     raise Exception('Signatures do not match')
