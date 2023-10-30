@@ -45,8 +45,10 @@ def create_payload(order):
 def create_message(api_key, endpoint, currency_pair, content_type, nonce, timestamp, payload_string):
     return f"BITSTAMP {api_key}POSTwww.bitstamp.net{endpoint}{currency_pair}/{content_type}{nonce}{timestamp}v2{payload_string}"
 
+
 def setup_logging():
     logging.basicConfig(filename='bitstamp.log', level=logging.INFO)
+
 
 def fetch_order_status(api_key, API_SECRET, order_id):
     url = f"https://www.bitstamp.net/api/v2/order_status/"
@@ -54,7 +56,7 @@ def fetch_order_status(api_key, API_SECRET, order_id):
     nonce = str(uuid.uuid4())
     content_type = 'application/x-www-form-urlencoded'
     payload = {'id': order_id}
-    
+
     # Create the payload string
     payload_string = urlencode(payload)
 
@@ -74,7 +76,8 @@ def fetch_order_status(api_key, API_SECRET, order_id):
     message = message.encode('utf-8')
 
     # Calculate the signature
-    signature = hmac.new(API_SECRET, msg=message, digestmod=hashlib.sha256).hexdigest()
+    signature = hmac.new(API_SECRET, msg=message,
+                         digestmod=hashlib.sha256).hexdigest()
 
     # Set headers for the request
     headers = {
@@ -92,8 +95,10 @@ def fetch_order_status(api_key, API_SECRET, order_id):
     if r.status_code == 200:
         return json.loads(r.content.decode('utf-8'))
     else:
-        print(f"Error fetching order status. Status Code: {r.status_code}. Message: {r.text}")
+        print(
+            f"Error fetching order status. Status Code: {r.status_code}. Message: {r.text}")
         return None
+
 
 def main():
     # Command line arguments
@@ -172,15 +177,20 @@ def main():
         order_id = order_response['id']
         print(f"Fetched order ID: {order_id}")
 
-        for i in range(5):
-            time.sleep(1)
+        order_status = None
+        iteration = 1
+        while order_status != "Finished":
+            time.sleep(0.5)  # Wait for 0.5 seconds before each check
             status = fetch_order_status(api_key, API_SECRET, order_id)
             if status:
-                print(f"Order status for iteration {i + 1}:")
+                print(f"Order status for iteration {iteration}:")
                 print(json.dumps(status, indent=4))
+                order_status = status.get("status")
             else:
                 print(
-                    f"Failed to retrieve order status for iteration {i + 1}.")
+                    f"Failed to retrieve order status for iteration {iteration}.")
+
+            iteration += 1  # Increment the iteration count
     else:
         print("Order ID not found in response. Can't fetch status.")
 
