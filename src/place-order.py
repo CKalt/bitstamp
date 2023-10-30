@@ -45,21 +45,40 @@ def create_payload(order):
 def create_message(api_key, endpoint, currency_pair, content_type, nonce, timestamp, payload_string):
     return f"BITSTAMP {api_key}POSTwww.bitstamp.net{endpoint}{currency_pair}/{content_type}{nonce}{timestamp}v2{payload_string}"
 
-
 def setup_logging():
     logging.basicConfig(filename='bitstamp.log', level=logging.INFO)
 
 def fetch_order_status(api_key, API_SECRET, order_id):
     url = f"https://www.bitstamp.net/api/v2/order_status/"
-    nonce = str(uuid.uuid4())
     timestamp = str(int(round(time.time() * 1000)))
+    nonce = str(uuid.uuid4())
     content_type = 'application/x-www-form-urlencoded'
     payload = {'id': order_id}
-    message = create_message(api_key, url, "", content_type, nonce, timestamp, urlencode(payload))
+    
+    # Create the payload string
+    payload_string = urlencode(payload)
 
-    signature = hmac.new(API_SECRET, msg=message.encode('utf-8'), digestmod=hashlib.sha256).hexdigest()
+    # Construct the message string according to Bitstamp documentation
+    message = (
+        'BITSTAMP ' + api_key +
+        'POST' +
+        'www.bitstamp.net' +
+        '/api/v2/order_status/' +
+        '' +
+        content_type +
+        nonce +
+        timestamp +
+        'v2' +
+        payload_string
+    )
+    message = message.encode('utf-8')
+
+    # Calculate the signature
+    signature = hmac.new(API_SECRET, msg=message, digestmod=hashlib.sha256).hexdigest()
+
+    # Set headers for the request
     headers = {
-        'X-Auth': f'BITSTAMP {api_key}',
+        'X-Auth': 'BITSTAMP ' + api_key,
         'X-Auth-Signature': signature,
         'X-Auth-Nonce': nonce,
         'X-Auth-Timestamp': timestamp,
@@ -67,7 +86,8 @@ def fetch_order_status(api_key, API_SECRET, order_id):
         'Content-Type': content_type
     }
 
-    r = requests.post(url, headers=headers, data=urlencode(payload))
+    # Make the request
+    r = requests.post(url, headers=headers, data=payload_string)
 
     if r.status_code == 200:
         return json.loads(r.content.decode('utf-8'))
