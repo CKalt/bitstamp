@@ -1,9 +1,11 @@
-Below are two python listings. The first is called `place-orders.py` and the second is called `websock-ticker2.py`. The comment at the top of each listing identifies the file path.  Below these listings, I also am providing bitstamp doc detail on their Websockeet API v2 which will help you to satisfy this request.
+Below are two python listings. The first is called `place-orders.py` and the second is called `websock-ticker2.py`. The comment at the top of each listing identifies the file path.  Below these listings, I also am providing bitstamp doc on their Websockeet API v2 which will help you to satisfy this request.
 
-You will see that place-orders.py connects to the bitstamp API in order to place orders for trades.  What I need to do is add code that will, after each order has been placed, use bitstamp's Websocket API V2 to monitor it's status using the `Private My Orders` and `Private My Trades` channels as specified in the doc.
+`place-orders.py` connects to the bitstamp API to place orders for trades. 
+
+What I need you to do is add code that will, when an order has been placed, call a blocking function that will use bitstamp's Websocket API V2 to monitor its status using the `Private My Orders` and `Private My Trades` channels as specified in the doc. The function will continue to block until all trades related to the order have been finalized.
+
 
 Now for the listings.
-
 ---------------------------------------------
 #!env/bin/python
 # src/place-orders.py
