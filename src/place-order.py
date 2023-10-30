@@ -49,19 +49,15 @@ def create_message(api_key, endpoint, currency_pair, content_type, nonce, timest
 def setup_logging():
     logging.basicConfig(filename='bitstamp.log', level=logging.INFO)
 
-
 def fetch_order_status(api_key, API_SECRET, order_id):
-    endpoint = "/api/v2/order_status/"
-    content_type = 'application/x-www-form-urlencoded'
-    timestamp = str(int(round(time.time() * 1000)))
+    url = f"https://www.bitstamp.net/api/v2/order_status/"
     nonce = str(uuid.uuid4())
-
+    timestamp = str(int(round(time.time() * 1000)))
+    content_type = 'application/x-www-form-urlencoded'
     payload = {'id': order_id}
-    message = create_message(
-        api_key, endpoint, '', content_type, nonce, timestamp, urlencode(payload))
+    message = create_message(api_key, url, "", content_type, nonce, timestamp, urlencode(payload))
 
-    signature = hmac.new(API_SECRET, msg=message.encode(
-        'utf-8'), digestmod=hashlib.sha256).hexdigest()
+    signature = hmac.new(API_SECRET, msg=message.encode('utf-8'), digestmod=hashlib.sha256).hexdigest()
     headers = {
         'X-Auth': f'BITSTAMP {api_key}',
         'X-Auth-Signature': signature,
@@ -71,15 +67,13 @@ def fetch_order_status(api_key, API_SECRET, order_id):
         'Content-Type': content_type
     }
 
-    r = requests.post(
-        f"https://www.bitstamp.net{endpoint}", headers=headers, data=urlencode(payload))
+    r = requests.post(url, headers=headers, data=urlencode(payload))
 
     if r.status_code == 200:
-        return r.json()
+        return json.loads(r.content.decode('utf-8'))
     else:
-        logging.error(f"Error fetching order status: {r.text}")
+        print(f"Error fetching order status. Status Code: {r.status_code}. Message: {r.text}")
         return None
-
 
 def main():
     # Command line arguments
@@ -153,14 +147,20 @@ def main():
     print(r.content)
 
     order_response = json.loads(r.content.decode('utf-8'))
+
     if 'id' in order_response:
         order_id = order_response['id']
+        print(f"Fetched order ID: {order_id}")
 
         for i in range(5):
             time.sleep(1)
             status = fetch_order_status(api_key, API_SECRET, order_id)
             if status:
+                print(f"Order status for iteration {i + 1}:")
                 print(json.dumps(status, indent=4))
+            else:
+                print(
+                    f"Failed to retrieve order status for iteration {i + 1}.")
     else:
         print("Order ID not found in response. Can't fetch status.")
 
