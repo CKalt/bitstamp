@@ -10,12 +10,32 @@ import time
 import uuid
 from urllib.parse import urlencode
 import requests
+import os
 
+def setup_logging(log_dir, currency_pair, order_type):
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    
+    # Clear previous handlers
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+
+    # If log_dir is provided, setup file logging
+    if log_dir:
+        os.makedirs(f"trades/{log_dir}", exist_ok=True)
+        log_file = f"trades/{log_dir}/{currency_pair}-{order_type}.log"
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.INFO)
+        logger.addHandler(file_handler)
+    else:
+        # Only add StreamHandler to ensure console logging when log_dir is missing
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        logger.addHandler(console_handler)
 
 def read_config(file_name):
     with open(file_name, 'r') as f:
         return json.load(f)
-
 
 def read_order_data(file_name):
     with open(file_name, 'r') as f:
@@ -35,7 +55,7 @@ def create_payload(order):
         endpoint = f"/api/v2/{'buy' if order_type in ['market-buy', 'instant-buy'] else 'sell'}/market/"
         price_value = str(order.get('price', '28113'))
         payload = {'amount': str(order['amount']), 'price': price_value}
-        print(f"Constructed Trade Payload: {json.dumps(payload)}")
+        logging.info(f"Constructed Trade Payload: {json.dumps(payload)}")
     else:
         raise ValueError(f"Unsupported order type: {order_type}")
 
@@ -44,10 +64,6 @@ def create_payload(order):
 
 def create_message(api_key, endpoint, currency_pair, content_type, nonce, timestamp, payload_string):
     return f"BITSTAMP {api_key}POSTwww.bitstamp.net{endpoint}{currency_pair}/{content_type}{nonce}{timestamp}v2{payload_string}"
-
-
-def setup_logging():
-    logging.basicConfig(filename='bitstamp.log', level=logging.INFO)
 
 
 def fetch_order_status(api_key, API_SECRET, order_id):
@@ -95,7 +111,7 @@ def fetch_order_status(api_key, API_SECRET, order_id):
     if r.status_code == 200:
         return json.loads(r.content.decode('utf-8'))
     else:
-        print(
+        logging.info(
             f"Error fetching order status. Status Code: {r.status_code}. Message: {r.text}")
         return None
 
@@ -103,16 +119,40 @@ def fetch_order_status(api_key, API_SECRET, order_id):
 def main():
     # Command line arguments
     parser = argparse.ArgumentParser(description='Process Bitstamp orders.')
-    parser.add_argument('order_file', type=str, help='Order file')
+    parser.add_argument('--order_file', type=str, help='Order file (optional if order details are provided)', default=None)
+    parser.add_argument('--order_type', type=str,
+                        help='Type of the order e.g. market-buy, market-sell')
+    parser.add_argument('--currency_pair', type=str,
+                        help='Currency pair e.g. btcusd')
+    parser.add_argument('--amount', type=float, help='Amount to order')
+    parser.add_argument('--price', type=float,
+                        help='Price of the order', default=None)
     parser.add_argument('-v', '--verbose',
                         action='store_true', help='Verbose output')
+    parser.add_argument('--log_dir', type=str,
+                        help='Directory for log files', default=None)
     args = parser.parse_args()
 
     # Read configurations
     config = read_config('.bitstamp')
     api_key = config['api_key']
     API_SECRET = bytes(config['api_secret'], 'utf-8')
-    order = read_order_data(args.order_file)
+
+    # Use command line arguments if provided, else fallback to reading the JSON file
+    if args.order_type and args.currency_pair and args.amount:
+        order = {
+            'order_type': args.order_type,
+            'currency_pair': args.currency_pair,
+            'amount': args.amount,
+        }
+        if args.price:
+            order['price'] = args.price
+    else:
+        if args.order_file:
+            order = read_order_data(args.order_file)
+        else:
+            raise ValueError(
+                "Either provide order details through command line options or via a JSON file.")
 
     timestamp = str(int(round(time.time() * 1000)))
     nonce = str(uuid.uuid4())
@@ -132,14 +172,14 @@ def main():
         'Content-Type': content_type
     }
 
-    setup_logging()
+    setup_logging(args.log_dir, order['currency_pair'], order['order_type'])
 
     url = f"https://www.bitstamp.net{endpoint}{order['currency_pair']}/"
     if args.verbose:
-        print(f"Request Method: POST")
-        print(f"Request URL: {url}")
-        print(f"Request Headers: {headers}")
-        print(f"Request Payload: {urlencode(payload)}")
+        logging.info(f"Request Method: POST")
+        logging.info(f"Request URL: {url}")
+        logging.info(f"Request Headers: {headers}")
+        logging.info(f"Request Payload: {urlencode(payload)}")
     else:
         logging.info(f"Request Method: POST")
         logging.info(f"Request URL: {url}")
@@ -150,7 +190,7 @@ def main():
 
     if r.status_code != 200:
         error_message = f"Error Response from Bitstamp API: {r.text}"
-        print(error_message)
+        logging.info(error_message)
         logging.error(f"Unexpected status code: {r.status_code}")
         logging.error(error_message)
         raise Exception('Status code not 200')
@@ -165,17 +205,17 @@ def main():
         raise Exception('Signatures do not match')
 
     if args.verbose:
-        print(f"Response: {r.content}")
+        logging.info(f"Response: {r.content}")
     else:
         logging.info(f"Response: {r.content}")
 
-    print(r.content)
+    logging.info(r.content)
 
     order_response = json.loads(r.content.decode('utf-8'))
 
     if 'id' in order_response:
         order_id = order_response['id']
-        print(f"Fetched order ID: {order_id}")
+        logging.info(f"Fetched order ID: {order_id}")
 
         order_status = None
         iteration = 1
@@ -183,16 +223,16 @@ def main():
             time.sleep(0.5)  # Wait for 0.5 seconds before each check
             status = fetch_order_status(api_key, API_SECRET, order_id)
             if status:
-                print(f"Order status for iteration {iteration}:")
-                print(json.dumps(status, indent=4))
+                logging.info(f"Order status for iteration {iteration}:")
+                logging.info(json.dumps(status, indent=4))
                 order_status = status.get("status")
             else:
-                print(
+                logging.info(
                     f"Failed to retrieve order status for iteration {iteration}.")
 
             iteration += 1  # Increment the iteration count
     else:
-        print("Order ID not found in response. Can't fetch status.")
+        logging.info("Order ID not found in response. Can't fetch status.")
 
 
 if __name__ == '__main__':
