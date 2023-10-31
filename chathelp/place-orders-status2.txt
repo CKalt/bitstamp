@@ -1,0 +1,366 @@
+Let us please analyze these two python scripts as well as a text document taken from the bitstamp doc site on their websocket API, and discuss creating a new scrypt that makes use of code found in each of them.  
+
+Specifically I wish to be able to make use of the code found in each python script to create a new script for placing market orders (buy or sell) using logic from place-order.py on which can do this using the bitstamp API, and then upon obtaining the api response with it's order id proceed to use the websocket code demonstrated in websock-ticker2 along with the details from the document on how to do this.
+
+Please read the websock doc which is after the two source code listing to learn how to listen for order and trade status using these channels:
+`Private My Orders` and `Private My Trades` channels 
+
+----------------------------------------
+#!env/bin/python
+# src/place-orders.py
+from urllib.parse import urlencode
+import hashlib
+import hmac
+import time
+import requests
+import uuid
+import json
+import argparse
+import logging
+
+# Command line arguments
+parser = argparse.ArgumentParser(description='Process Bitstamp orders.')
+parser.add_argument('order_file', type=str, help='Order file')
+parser.add_argument('-v', '--verbose', action='store_true',
+                    help='Verbose output')
+args = parser.parse_args()
+
+# Read API configuration from file
+with open('.bitstamp', 'r') as f:
+    config = json.load(f)
+api_key = config['api_key']
+API_SECRET = bytes(config['api_secret'], 'utf-8')
+
+# Read order data from file
+with open(args.order_file, 'r') as f:
+    order = json.load(f)
+
+timestamp = str(int(round(time.time() * 1000)))
+nonce = str(uuid.uuid4())
+content_type = 'application/x-www-form-urlencoded'
+
+order_type = order.get('order_type', 'limit-buy')
+
+if order_type == 'limit-buy':
+    endpoint = '/api/v2/buy/'
+    payload = {'amount': str(order['amount']), 'price': str(order['price'])}
+elif order_type == 'limit-sell':
+    endpoint = '/api/v2/sell/'
+    payload = {'amount': str(order['amount']), 'price': str(order['price'])}
+elif order_type == 'market-buy' or order_type == 'instant-buy':
+    endpoint = '/api/v2/buy/market/'
+    # Reading the price from the input JSON
+    # Defaulting to '28113' if not provided
+    price_value = str(order.get('price', '28113'))
+    payload = {'amount': str(order['amount']), 'price': price_value}
+    # Outputting the constructed JSON payload for verification
+    print(f"Constructed Trade Payload: {json.dumps(payload)}")
+elif order_type == 'market-sell' or order_type == 'instant-sell':
+    endpoint = '/api/v2/sell/market/'
+    # Reading the price from the input JSON
+    # Defaulting to '28113' if not provided
+    price_value = str(order.get('price', '28113'))
+    payload = {'amount': str(order['amount']), 'price': price_value}
+    # Outputting the constructed JSON payload for verification
+    print(f"Constructed Trade Payload: {json.dumps(payload)}")
+else:
+    raise ValueError(f"Unsupported order type: {order_type}")
+
+url = 'https://www.bitstamp.net' + endpoint + order['currency_pair'] + '/'
+
+
+payload_string = urlencode(payload)
+
+# '' (empty string) in message represents any query parameters or an empty string in case there are none
+message = 'BITSTAMP ' + api_key + \
+    'POST' + \
+    'www.bitstamp.net' + \
+    endpoint + order['currency_pair'] + '/' + \
+    '' + \
+    content_type + \
+    nonce + \
+    timestamp + \
+    'v2' + \
+    payload_string
+message = message.encode('utf-8')
+signature = hmac.new(API_SECRET, msg=message,
+                     digestmod=hashlib.sha256).hexdigest()
+headers = {
+    'X-Auth': 'BITSTAMP ' + api_key,
+    'X-Auth-Signature': signature,
+    'X-Auth-Nonce': nonce,
+    'X-Auth-Timestamp': timestamp,
+    'X-Auth-Version': 'v2',
+    'Content-Type': content_type
+}
+
+# Set up logging
+logging.basicConfig(filename='bitstamp.log', level=logging.INFO)
+
+url = 'https://www.bitstamp.net' + endpoint + order['currency_pair'] + '/'
+if args.verbose:
+    print(f"Request Method: POST")
+    print(f"Request URL: {url}")
+    print(f"Request Headers: {headers}")
+    print(f"Request Payload: {payload_string}")
+else:
+    logging.info(f"Request Method: POST")
+    logging.info(f"Request URL: {url}")
+    logging.info(f"Request Headers: {headers}")
+    logging.info(f"Request Payload: {payload_string}")
+
+r = requests.post(
+    url,
+    headers=headers,
+    data=payload_string
+)
+
+if not r.status_code == 200:
+    print(f"Error Response from Bitstamp API: {r.text}")
+    logging.error(f"Unexpected status code: {r.status_code}")
+    logging.error(f"Response text: {r.text}")
+    raise Exception('Status code not 200')
+
+string_to_sign = (nonce + timestamp +
+                  r.headers.get('Content-Type')).encode('utf-8') + r.content
+signature_check = hmac.new(
+    API_SECRET, msg=string_to_sign, digestmod=hashlib.sha256).hexdigest()
+if not r.headers.get('X-Server-Auth-Signature') == signature_check:
+    logging.error('Signatures do not match')
+    raise Exception('Signatures do not match')
+
+if args.verbose:
+    print(f"Response: {r.content}")
+else:
+    logging.info(f"Response: {r.content}")
+print(r.content)
+
+----------------------------------------
+#! env/bin/python
+# src/websock-ticker2.py
+import json
+import asyncio
+import websockets
+import time
+
+async def subscribe(url: str, symbol: str):
+    channel = f"live_trades_{symbol}"
+    log_filename = f"{symbol}.log"
+
+    while True:  # Keep trying to reconnect
+        try:
+            async with websockets.connect(url) as websocket:
+                # Subscribing to the channel.
+                await websocket.send(json.dumps({
+                    "event": "bts:subscribe",
+                    "data": {
+                        "channel": channel
+                    }
+                }))
+
+                # Receiving messages.
+                async for message in websocket:
+                    print(f"{symbol}: {message}")
+                    # Appending messages to the log file.
+                    with open(log_filename, "a") as file:
+                        file.write(message + "\n")
+        except websockets.ConnectionClosed:
+            print(f"{symbol}: Connection closed, trying to reconnect in 5 seconds...")
+            time.sleep(5)  # Wait for 5 seconds before trying to reconnect
+        except Exception as e:
+            print(f"{symbol}: An error occurred: {e}")
+
+async def main():
+    # URL for the Bitstamp WebSocket API.
+    url = 'wss://ws.bitstamp.net'
+
+    # Reading the configuration file.
+    try:
+        with open("websock-ticker-config.json", "r") as file:
+            symbols = json.load(file)
+    except Exception as e:
+        print(f"Error reading configuration file: {e}")
+        return
+
+    # Starting subscription tasks.
+    await asyncio.gather(*(subscribe(url, symbol) for symbol in symbols))
+
+asyncio.get_event_loop().run_until_complete(main())
+
+----------------------------------------
+BITSTAMP DOC
+Websocket API v2
+What Is WebSocket?
+
+WebSocket is a protocol providing full-duplex communications channels over a single TCP connection. The WebSocket protocol was standardized by the IETF as RFC 6455 in 2011, and the WebSocket API in Web IDL is being standardized by the W3C.
+Connection
+
+Bitstamp uses its implementation of websocket server for real time data streaming. Server is accessible on the following address: wss://ws.bitstamp.net.
+
+Documentation about websocket protocol can be found on the following link: https://websockets.readthedocs.io/en/stable/.
+
+Once you open a connection via websocket handshake (using HTTP upgrade header), you can subscribe to desired channels.
+
+After this is accomplished, you will start to receive a stream of live events for every channel you are subscribed to.
+Subscriptions
+
+Public channels
+
+To subscribe to a channel, JSON message must be sent to the server. It should have a following structure:
+JSON
+
+{
+    "event": "bts:subscribe",
+    "data": {
+        "channel": "[channel_name]"
+    }
+}
+
+Private channels
+
+To subscribe to a channel, JSON message must be sent to the server. It should have a following structure:
+JSON
+
+{
+    "event": "bts:subscribe",
+    "data": {
+        "channel": "[channel_name]-[user-id]", "auth": "[token]"
+    }
+}
+
+Token value and user id are generated via HTTP API. See Websockets token section of HTTP API documentation here.
+Unsubscriptions
+
+You can also unsubscribe from the channel if you no longer need its stream. Again, you need to send a message to the server.
+
+Its structure is nearly identical to the subscription JSON:
+JSON
+
+{
+    "event": "bts:unsubscribe",
+    "data": {
+        "channel": "[channel_name]"
+    }
+}
+
+Note: Messages described and defined in this article are the only ones that will be processed by the server. Any other form of message or correct form of message with unexpected content will result in an error response.
+Channels
+
+Currency pairs: btcusd, btceur, btcgbp, btcpax, gbpusd, eurusd, xrpusd, xrpeur, xrpbtc, xrpgbp, ltcbtc, ltcusd, ltceur, ltcgbp, ethbtc, ethusd, etheur, ethgbp, ethpax, bchusd, bcheur, bchbtc, paxusd, xlmbtc, xlmusd, xlmeur, xlmgbp, linkusd, linkeur, linkgbp, linkbtc, usdcusd, usdceur, btcusdc, ethusdc, eth2eth, aaveusd, aaveeur, aavebtc, batusd, bateur, umausd, umaeur, daiusd, kncusd, knceur, mkrusd, mkreur, zrxusd, zrxeur, gusdusd, algousd, algoeur, algobtc, audiousd, audioeur, audiobtc, crvusd, crveur, snxusd, snxeur, uniusd, unieur, unibtc, yfiusd, yfieur, compusd, compeur, grtusd, grteur, lrcusd, lrceur, usdtusd, usdteur, usdcusdt, btcusdt, ethusdt, xrpusdt, eurteur, eurtusd, flrusd, flreur, manausd, manaeur, maticusd, maticeur, sushiusd, sushieur, chzusd, chzeur, enjusd, enjeur, hbarusd, hbareur, alphausd, alphaeur, axsusd, axseur, sandusd, sandeur, storjusd, storjeur, adausd, adaeur, adabtc, fetusd, feteur, sklusd, skleur, slpusd, slpeur, sxpusd, sxpeur, sgbusd, sgbeur, avaxusd, avaxeur, dydxusd, dydxeur, ftmusd, ftmeur, shibusd, shibeur, ampusd, ampeur, ensusd, enseur, galausd, galaeur, perpusd, perpeur, wbtcbtc, ctsiusd, ctsieur, cvxusd, cvxeur, imxusd, imxeur, nexousd, nexoeur, antusd, anteur, godsusd, godseur, radusd, radeur, bandusd, bandeur, injusd, injeur, rlyusd, rlyeur, rndrusd, rndreur, vegausd, vegaeur, 1inchusd, 1incheur, solusd, soleur, apeusd, apeeur, mplusd, mpleur, eurocusdc, euroceur, dotusd, doteur, nearusd, neareur, ldousd, ldoeur, dgldusd, dgldeur, dogeusd, dogeeur, suiusd, suieur, pyusdusd, pyusdeur
+
+Below tables include definitions of all existing channels you can subscribe to. Replacing [channel_name] placeholder in one of JSON messages defined in previous paragraphs will subscribe or unsubscribe you to a channel. You also need to replace [currency_pair] placeholder with one of pairs defined at the beginning of this paragraph.
+
+Public channels
+Name 	Event 	Channel
+Live ticker 	trade 	live_trades_[currency_pair]
+Live orders 	order_created, order_changed or order_deleted 	live_orders_[currency_pair]
+Live order book 	data 	order_book_[currency_pair]
+Live detail order book 	data 	detail_order_book_[currency_pair]
+Live full order book 	data 	diff_order_book_[currency_pair]
+
+Private channels
+Name 	Event 	Channel
+Private My Orders 	order_created, order_changed or order_deleted 	private-my_orders_[currency_pair]
+Private My Trades 	trade 	private-my_trades_[currency_pair]
+Private Live Trades 	self_trade 	private-live_trades_[currency_pair]
+Channel JSON structure
+
+Live ticker - JavaScript example: live_trades_v2.html
+Property 	Description
+id 	Trade unique ID.
+amount 	Trade amount.
+amount_str 	Trade amount represented in string format.
+price 	Trade price.
+price_str 	Trade price represented in string format.
+type 	Trade type (0 - buy; 1 - sell).
+timestamp 	Trade timestamp.
+microtimestamp 	Trade microtimestamp.
+buy_order_id 	Trade buy order ID.
+sell_order_id 	Trade sell order ID.
+
+Live order book - JavaScript example: order_book_v2.html
+Property 	Description
+bids 	List of top 100 bids.
+asks 	List of top 100 asks.
+timestamp 	Order book timestamp.
+microtimestamp 	Order book microtimestamp.
+
+Live detail order book
+Property 	Description
+bids 	List of top 100 bids [price, amount, order id].
+asks 	List of top 100 asks [price, amount, order id].
+timestamp 	Order book timestamp.
+microtimestamp 	Order book microtimestamp.
+
+Live full order book - JavaScript example: diff_order_book_v2.html
+Property 	Description
+bids 	List of changed bids since last broadcast.
+asks 	List of changed asks since last broadcast.
+timestamp 	Order book timestamp.
+microtimestamp 	Order book microtimestamp.
+
+Live orders - JavaScript example: live_orders_v2.html
+Property 	Description
+id 	Order ID.
+amount 	Order amount.
+amount_str 	Order amount represented in string format.
+price 	Order price.
+price_str 	Order price represented in string format.
+order_type 	Order type (0 - buy; 1 - sell).
+datetime 	Order datetime.
+microtimestamp 	Order action timestamp represented in microseconds.
+
+Private My Orders
+Property 	Description
+id 	Order ID.
+id_str 	Order ID represented in string format.
+client_order_id 	Client order ID (if used when placing order).
+amount 	Order amount.
+amount_str 	Order amount represented in string format.
+price 	Order price.
+price_str 	Order price represented in string format.
+order_type 	Order type (0 - buy, 1 - sell).
+datetime 	Order datetime.
+microtimestamp 	Order action timestamp represented in microseconds.
+trade_account_id 	ID of related trade account (0 for main account, Unique ID for sub accounts).
+
+Private My Trades
+Property 	Description
+id 	Trade ID.
+order_id 	Order ID associated with the trade.
+client_order_id 	Client order ID associated with the trade.
+amount 	Trade amount.
+price 	Trade price.
+fee 	Trade fee.
+side 	Trade side (buy or sell).
+microtimestamp 	Trade timestamp represented in microseconds.
+trade_account_id 	ID of related trade account (0 for main account, Unique ID for sub accounts).
+Other technical information
+
+1. Heartbeat
+
+If you wish to determine that websocket server is responsive, you should do so by websocket heartbeat. This is a form of control message or "PING / PONG" communication. You can do so by sending the following JSON message to the server:
+JSON
+
+{
+    "event": "bts:heartbeat"
+}
+
+2. Forced reconnection
+
+In case of websocket server you are currently connected to is to go under maintenance, you will receive a warning message asking you to reconnect. Such a message will look like this:
+JSON
+
+{
+    "event": "bts:request_reconnect",
+    "channel": "",
+    "data": ""
+}
+
+After you receive this request, you will have a few seconds to reconnect. Without doing so, you will automatically be disconnected. If you send reconnection request, you will be placed to a new server. Consequentially, you can continue without any message loss.
+
+3. Maximum connection age
+
+Maximum connection age is 90 days from the time the connection is established. When that period of time elapses, you will be automatically disconnected and will need to re-connect.
+
+---------------------------------------------

@@ -7,7 +7,6 @@ import pandas as pd
 import time
 import csv
 
-
 # Directory to save the historical data
 HISTORICAL_DATA_DIR = "historical_data"
 
@@ -21,6 +20,7 @@ data_buffers = {
     'bchusd': None,
     'btcusd': None
 }
+
 
 async def subscribe(url: str, symbol: str):
     channel = f"live_trades_{symbol}"
@@ -69,49 +69,67 @@ def check_arbitrage_opportunity():
     bchusd_price = data_buffers['bchusd']['price']
     btcusd_price = data_buffers['btcusd']['price']
 
-    final_btc = ((1 / bchbtc_price) * (1 - TRANSACTION_FEE) * bchusd_price * (1 - TRANSACTION_FEE)) / btcusd_price * (1 - TRANSACTION_FEE)
+    final_btc = ((1 / bchbtc_price) * (1 - TRANSACTION_FEE) * bchusd_price *
+                 (1 - TRANSACTION_FEE)) / btcusd_price * (1 - TRANSACTION_FEE)
     profit_or_loss = final_btc - 1.0
 
     if profit_or_loss > PROFIT_THRESHOLD:
         last_arbitrage_timestamp = current_time
         print("Arbitrage Opportunity Detected!")
         print(f"Timestamp: {current_time}")
-        print(f"BCH/BTC Price: {bchbtc_price:.8f} | BCH Obtained: {(1.0 / bchbtc_price) * (1 - TRANSACTION_FEE):.8f}")
-        print(f"BCH/USD Price: {bchusd_price:.2f} | USD Obtained: {((1.0 / bchbtc_price) * (1 - TRANSACTION_FEE)) * bchusd_price * (1 - TRANSACTION_FEE):.2f}")
-        print(f"BTC/USD Price: {btcusd_price:.2f} | Final BTC: {final_btc:.8f}")
+        print(
+            f"BCH/BTC Price: {bchbtc_price:.8f} | BCH Obtained: {(1.0 / bchbtc_price) * (1 - TRANSACTION_FEE):.8f}")
+        print(
+            f"BCH/USD Price: {bchusd_price:.2f} | USD Obtained: {((1.0 / bchbtc_price) * (1 - TRANSACTION_FEE)) * bchusd_price * (1 - TRANSACTION_FEE):.2f}")
+        print(
+            f"BTC/USD Price: {btcusd_price:.2f} | Final BTC: {final_btc:.8f}")
         print(f"Profit: {profit_or_loss:.8f} BTC")
         print("-" * 50)
-        
+
         # Check and create trades directory if not exists
         if not os.path.exists('trades'):
             os.makedirs('trades')
-        
+
         # Write trade details to the file
         with open('trades/live-trades.txt', 'a') as file:
-            file.write(f"Trade {last_arbitrage_timestamp}: Timestamp (Epoch): {current_time.timestamp()}\n")
-            file.write(f"Trade {last_arbitrage_timestamp}: Timestamp (Human): {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            file.write(
+                f"Trade {last_arbitrage_timestamp}: Timestamp (Epoch): {current_time.timestamp()}\n")
+            file.write(
+                f"Trade {last_arbitrage_timestamp}: Timestamp (Human): {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
             file.write("-" * 50 + "\n")
-            file.write(f"1. Trading 1 BTC for BCH using {bchbtc_price:.8f} BCH/BTC\n")
-            file.write(f"Timestamp (Epoch) for BCH/BTC price: {data_buffers['bchbtc']['timestamp'].timestamp()}\n")
+            file.write(
+                f"1. Trading 1 BTC for BCH using {bchbtc_price:.8f} BCH/BTC\n")
+            file.write(
+                f"Timestamp (Epoch) for BCH/BTC price: {data_buffers['bchbtc']['timestamp'].timestamp()}\n")
             file.write(f"Initial: 1 BTC\n")
-            file.write(f"After Trade (minus fee): {(1.0 / bchbtc_price) * (1 - TRANSACTION_FEE):.8f} BCH\n")
+            file.write(
+                f"After Trade (minus fee): {(1.0 / bchbtc_price) * (1 - TRANSACTION_FEE):.8f} BCH\n")
             file.write("-" * 50 + "\n")
-            file.write(f"2. Trading {(1.0 / bchbtc_price) * (1 - TRANSACTION_FEE):.8f} BCH for USD using {bchusd_price:.2f} BCH/USD\n")
-            file.write(f"Timestamp (Epoch) for BCH/USD price: {data_buffers['bchusd']['timestamp'].timestamp()}\n")
-            file.write(f"After Trade (minus fee): {((1.0 / bchbtc_price) * (1 - TRANSACTION_FEE)) * bchusd_price * (1 - TRANSACTION_FEE):.2f} USD\n")
+            file.write(
+                f"2. Trading {(1.0 / bchbtc_price) * (1 - TRANSACTION_FEE):.8f} BCH for USD using {bchusd_price:.2f} BCH/USD\n")
+            file.write(
+                f"Timestamp (Epoch) for BCH/USD price: {data_buffers['bchusd']['timestamp'].timestamp()}\n")
+            file.write(
+                f"After Trade (minus fee): {((1.0 / bchbtc_price) * (1 - TRANSACTION_FEE)) * bchusd_price * (1 - TRANSACTION_FEE):.2f} USD\n")
             file.write("-" * 50 + "\n")
-            file.write(f"3. Trading {((1.0 / bchbtc_price) * (1 - TRANSACTION_FEE)) * bchusd_price * (1 - TRANSACTION_FEE):.2f} USD for BTC using {btcusd_price:.2f} USD/BTC\n")
-            file.write(f"Timestamp (Epoch) for BTC/USD price: {data_buffers['btcusd']['timestamp'].timestamp()}\n")
+            file.write(
+                f"3. Trading {((1.0 / bchbtc_price) * (1 - TRANSACTION_FEE)) * bchusd_price * (1 - TRANSACTION_FEE):.2f} USD for BTC using {btcusd_price:.2f} USD/BTC\n")
+            file.write(
+                f"Timestamp (Epoch) for BTC/USD price: {data_buffers['btcusd']['timestamp'].timestamp()}\n")
             file.write(f"After Trade (minus fee): {final_btc:.8f} BTC\n")
             file.write("-" * 50 + "\n")
-            file.write(f"Profit for Trade {last_arbitrage_timestamp}: {profit_or_loss:.8f} BTC\n")
+            file.write(
+                f"Profit for Trade {last_arbitrage_timestamp}: {profit_or_loss:.8f} BTC\n")
             file.write("=" * 50 + "\n\n")
+
+
 def log_trade_data(symbol, data):
     """Log the trade data to a CSV file."""
     file_path = os.path.join(HISTORICAL_DATA_DIR, f"{symbol}.csv")
     file_exists = os.path.isfile(file_path)
     with open(file_path, 'a', newline='') as csvfile:
-        fieldnames = ['id', 'timestamp', 'amount', 'price', 'type', 'microtimestamp', 'buy_order_id', 'sell_order_id']
+        fieldnames = ['id', 'timestamp', 'amount', 'price', 'type',
+                      'microtimestamp', 'buy_order_id', 'sell_order_id']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         if not file_exists:
             writer.writeheader()
@@ -126,9 +144,6 @@ def log_trade_data(symbol, data):
             'sell_order_id': data['data']['sell_order_id'],
         }
         writer.writerow(trade_data)
-
-
-
 
 
 def log_data_to_file(symbol, data):
@@ -206,6 +221,7 @@ def process_real_time_data(symbol, data):
             print(f"Unexpected data format for {symbol}: {data}")
     except Exception as e:
         print(f"{symbol}: An error occurred: {str(e)}: {data}")
+
 
 async def main():
     url = 'wss://ws.bitstamp.net'

@@ -1,0 +1,14 @@
+Token value and user id are generated via HTTP API. See Websockets token section of HTTP API documentation here
+
+https://www.bitstamp.net/api/v2/websockets_token/
+
+Content type
+application/json
+
+{
+
+    "token": "vRQqHEFoxp23seihJnbhPGt0lgBG5EFe",
+    "user_id": 1,
+    "valid_sec": 60
+
+}
