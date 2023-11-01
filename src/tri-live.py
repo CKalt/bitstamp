@@ -91,14 +91,25 @@ last_arbitrage_timestamp = None
 
 def check_arbitrage_opportunity():
     global last_arbitrage_timestamp
+    print("Checking for arbitrage opportunity...")
+    # Print the value of ALWAYS_PROFITABLE
+    print(f"Value of ALWAYS_PROFITABLE: {ALWAYS_PROFITABLE}")
     current_time = pd.Timestamp.now()
 
     for symbol, data in data_buffers.items():
         if data is None:
+            print(f"No data for {symbol}. Exiting check.")
             return
-        if (current_time - data['timestamp']).seconds > DATA_FRESHNESS_THRESHOLD:
+
+        age_of_data = (current_time - data['timestamp']).seconds
+        if age_of_data > DATA_FRESHNESS_THRESHOLD:
+            recommended_threshold = age_of_data + 10  # Adding 10 seconds for buffer
+            print(f"Data for {symbol} is {age_of_data} seconds old, which exceeds the freshness threshold. "
+                  f"If you want this to be considered fresh, raise the threshold to at least {recommended_threshold} seconds.")
             return
+
     if last_arbitrage_timestamp and (current_time - last_arbitrage_timestamp).seconds < SKIP_TRADE_DELAY:
+        print(f"Waiting due to trade delay. Exiting check.")
         return
 
     bchbtc_price = data_buffers['bchbtc']['price']
@@ -112,7 +123,6 @@ def check_arbitrage_opportunity():
     if ALWAYS_PROFITABLE or profit_or_loss > PROFIT_THRESHOLD:
         # Execute trades immediately upon detecting opportunity
         execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time)
-
         last_arbitrage_timestamp = current_time
         print("Arbitrage Opportunity Detected!")
         print(f"Timestamp: {current_time}")
