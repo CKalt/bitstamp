@@ -6,6 +6,15 @@ import websockets
 import pandas as pd
 import time
 import csv
+import subprocess
+
+TRADE_COUNT = 0  # default, you might set this from command line args
+BTC_AMOUNT = 0.001000  # default, you might set this from command line args
+DRY_RUN = True  # default, you might set this from command line args
+ALWAYS_PROFITABLE = True  # this can be changed manually if needed
+if not DRY_RUN:
+    ALWAYS_PROFITABLE = False
+
 
 # Directory to save the historical data
 HISTORICAL_DATA_DIR = "historical_data"
@@ -20,6 +29,33 @@ data_buffers = {
     'bchusd': None,
     'btcusd': None
 }
+
+
+def execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time):
+    global TRADE_COUNT
+    global BTC_AMOUNT
+    global DRY_RUN
+
+    # Extract necessary data
+    trade_timestamp = current_time.timestamp()
+    trade_bch_amount = (BTC_AMOUNT / bchbtc_price) * (1 - TRANSACTION_FEE)
+    trade_usd_amount = trade_bch_amount * bchusd_price * (1 - TRANSACTION_FEE)
+
+    # Create the commands
+    trade1_cmd = f"python src/place-order.py --order_type 'market-sell' --currency_pair 'bchbtc' --btc_amount {BTC_AMOUNT} --price {bchbtc_price} --log_dir {trade_timestamp}"
+    trade2_cmd = f"python src/place-order.py --order_type 'market-sell' --currency_pair 'bchusd' --btc_amount {trade_bch_amount} --price {bchusd_price} --log_dir {trade_timestamp}"
+    trade3_cmd = f"python src/place-order.py --order_type 'market-buy' --currency_pair 'btcusd' --btc_amount {trade_usd_amount} --price {btcusd_price} --log_dir {trade_timestamp}"
+
+    if DRY_RUN:
+        print("Dry Run: ", trade1_cmd)
+        print("Dry Run: ", trade2_cmd)
+        print("Dry Run: ", trade3_cmd)
+    else:
+        subprocess.Popen(trade1_cmd, shell=True)
+        subprocess.Popen(trade2_cmd, shell=True)
+        subprocess.Popen(trade3_cmd, shell=True)
+
+    TRADE_COUNT += 1
 
 
 async def subscribe(url: str, symbol: str):
@@ -73,7 +109,10 @@ def check_arbitrage_opportunity():
                  (1 - TRANSACTION_FEE)) / btcusd_price * (1 - TRANSACTION_FEE)
     profit_or_loss = final_btc - 1.0
 
-    if profit_or_loss > PROFIT_THRESHOLD:
+    if ALWAYS_PROFITABLE or profit_or_loss > PROFIT_THRESHOLD:
+        # Execute trades immediately upon detecting opportunity
+        execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time)
+
         last_arbitrage_timestamp = current_time
         print("Arbitrage Opportunity Detected!")
         print(f"Timestamp: {current_time}")
@@ -92,6 +131,8 @@ def check_arbitrage_opportunity():
 
         # Write trade details to the file
         with open('trades/live-trades.txt', 'a') as file:
+            file.write(
+                f"Mode: {'DRY_RUN' if DRY_RUN else 'LIVE'}, {'ALWAYS_PROFITABLE' if ALWAYS_PROFITABLE else 'REAL PROFIT'}\n")
             file.write(
                 f"Trade {last_arbitrage_timestamp}: Timestamp (Epoch): {current_time.timestamp()}\n")
             file.write(
@@ -152,72 +193,21 @@ def log_data_to_file(symbol, data):
     with open(log_filename, "a") as file:
         file.write(json.dumps(data) + "\n")
 
-    """Log the received data to a .log file inside the historical_data directory."""
-    log_filename = os.path.join(HISTORICAL_DATA_DIR, f"{symbol}.log")
-    with open(log_filename, "a") as file:
-        file.write(json.dumps(data) + "\n")
-
-    """Log the received data to a .log file."""
-    log_filename = f"{symbol}.log"
-    with open(log_filename, "a") as file:
-        file.write(json.dumps(data) + "\n")
-
 
 def process_real_time_data(symbol, data):
     try:
-        # Log the received data first
-        log_data_to_file(symbol, data)
-
-        # Then process the data as before
-        if 'data' in data and 'timestamp' in data['data']:
-            timestamp_value = int(data['data']['timestamp'])
-            timestamp = pd.to_datetime(timestamp_value, unit='s')
-            price = data['data']['price']
-            data_buffers[symbol] = {'timestamp': timestamp, 'price': price}
-            print(f"Updated {symbol}: {timestamp} with price {price:.8f}")
-            check_arbitrage_opportunity()
-        elif 'event' in data and data['event'] == 'bts:subscription_succeeded':
-            print(f"Subscription succeeded for {symbol}.")
-        else:
-            print(f"Unexpected data format for {symbol}: {data}")
-    except Exception as e:
-        print(f"{symbol}: An error occurred: {str(e)}: {data}")
-
-    try:
-        if 'data' in data and 'timestamp' in data['data']:
-            timestamp_value = int(data['data']['timestamp'])
-            timestamp = pd.to_datetime(timestamp_value, unit='s')
-            price = data['data']['price']
-            data_buffers[symbol] = {'timestamp': timestamp, 'price': price}
-            print(f"Updated {symbol}: {timestamp} with price {price:.8f}")
-            log_trade_data(symbol, data)
-            check_arbitrage_opportunity()
-        elif 'event' in data and data['event'] == 'bts:subscription_succeeded':
-            print(f"Subscription succeeded for {symbol}.")
-        else:
-            print(f"Unexpected data format for {symbol}: {data}")
-    except Exception as e:
-        print(f"{symbol}: An error occurred: {str(e)}: {data}")
-
-    try:
         # Check if the received message is a trade message
         if 'data' in data and 'timestamp' in data['data']:
-            # Convert the timestamp to an integer and then to a datetime
             timestamp_value = int(data['data']['timestamp'])
             timestamp = pd.to_datetime(timestamp_value, unit='s')
-
             price = data['data']['price']
             data_buffers[symbol] = {'timestamp': timestamp, 'price': price}
             print(f"Updated {symbol}: {timestamp} with price {price:.8f}")
-            check_arbitrage_opportunity()
-
-            # Log the trade data
             log_trade_data(symbol, data)
+            check_arbitrage_opportunity()
         elif 'event' in data and data['event'] == 'bts:subscription_succeeded':
-            # Handle subscription confirmation messages
             print(f"Subscription succeeded for {symbol}.")
         else:
-            # Print unexpected data formats for diagnosis
             print(f"Unexpected data format for {symbol}: {data}")
     except Exception as e:
         print(f"{symbol}: An error occurred: {str(e)}: {data}")
