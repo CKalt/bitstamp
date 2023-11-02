@@ -41,15 +41,21 @@ def execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time):
     trade_bch_amount = (BTC_AMOUNT / bchbtc_price) * (1 - TRANSACTION_FEE)
     trade_usd_amount = trade_bch_amount * bchusd_price * (1 - TRANSACTION_FEE)
 
+    # Decide the script to run based on DRY_RUN mode
+    script_name = 'src/place-order-dry-run.py' if DRY_RUN else 'src/place-order.py'
+
     # Create the commands
-    trade1_cmd = f"python src/place-order.py --order_type 'market-sell' --currency_pair 'bchbtc' --btc_amount {BTC_AMOUNT} --price {bchbtc_price} --log_dir {trade_timestamp}"
-    trade2_cmd = f"python src/place-order.py --order_type 'market-sell' --currency_pair 'bchusd' --btc_amount {trade_bch_amount} --price {bchusd_price} --log_dir {trade_timestamp}"
-    trade3_cmd = f"python src/place-order.py --order_type 'market-buy' --currency_pair 'btcusd' --btc_amount {trade_usd_amount} --price {btcusd_price} --log_dir {trade_timestamp}"
+    trade1_cmd = f"python {script_name} --order_type 'market-sell' --currency_pair 'bchbtc' --btc_amount {BTC_AMOUNT} --price {bchbtc_price} --log_dir {trade_timestamp}"
+    trade2_cmd = f"python {script_name} --order_type 'market-sell' --currency_pair 'bchusd' --btc_amount {trade_bch_amount} --price {bchusd_price} --log_dir {trade_timestamp}"
+    trade3_cmd = f"python {script_name} --order_type 'market-buy' --currency_pair 'btcusd' --btc_amount {trade_usd_amount} --price {btcusd_price} --log_dir {trade_timestamp}"
 
     if DRY_RUN:
         print("Dry Run: ", trade1_cmd)
         print("Dry Run: ", trade2_cmd)
         print("Dry Run: ", trade3_cmd)
+        subprocess.Popen(trade1_cmd, shell=True)
+        subprocess.Popen(trade2_cmd, shell=True)
+        subprocess.Popen(trade3_cmd, shell=True)
     else:
         subprocess.Popen(trade1_cmd, shell=True)
         subprocess.Popen(trade2_cmd, shell=True)
@@ -96,21 +102,25 @@ def check_arbitrage_opportunity():
     print(f"Value of ALWAYS_PROFITABLE: {ALWAYS_PROFITABLE}")
     current_time = pd.Timestamp.now()
 
-    for symbol, data in data_buffers.items():
-        if data is None:
-            print(f"No data for {symbol}. Exiting check.")
-            return
-
-        age_of_data = (current_time - data['timestamp']).seconds
-        if age_of_data > DATA_FRESHNESS_THRESHOLD:
-            recommended_threshold = age_of_data + 10  # Adding 10 seconds for buffer
-            print(f"Data for {symbol} is {age_of_data} seconds old, which exceeds the freshness threshold. "
-                  f"If you want this to be considered fresh, raise the threshold to at least {recommended_threshold} seconds.")
-            return
-
-    if last_arbitrage_timestamp and (current_time - last_arbitrage_timestamp).seconds < SKIP_TRADE_DELAY:
-        print(f"Waiting due to trade delay. Exiting check.")
+    # Check if any data buffer is missing
+    missing_data = [symbol for symbol, data in data_buffers.items() if data is None]
+    if missing_data and DRY_RUN and ALWAYS_PROFITABLE:
+        print(f"Missing data for symbols: {', '.join(missing_data)}. Waiting for data.")
         return
+
+    if not ALWAYS_PROFITABLE:
+        for symbol, data in data_buffers.items():
+            age_of_data = (current_time - data['timestamp']).seconds
+            if age_of_data > DATA_FRESHNESS_THRESHOLD:
+                recommended_threshold = age_of_data + 10  # Adding 10 seconds for buffer
+                print(f"Data for {symbol} is {age_of_data} seconds old, which exceeds the freshness threshold. "
+                      f"If you want this to be considered fresh, raise the threshold to at least {recommended_threshold} seconds.")
+                return
+
+        if last_arbitrage_timestamp and (current_time - last_arbitrage_timestamp).seconds < SKIP_TRADE_DELAY:
+            print(f"Waiting due to trade delay. Exiting check.")
+            return
+
 
     bchbtc_price = data_buffers['bchbtc']['price']
     bchusd_price = data_buffers['bchusd']['price']
@@ -123,6 +133,7 @@ def check_arbitrage_opportunity():
     if ALWAYS_PROFITABLE or profit_or_loss > PROFIT_THRESHOLD:
         # Execute trades immediately upon detecting opportunity
         execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time)
+
         last_arbitrage_timestamp = current_time
         print("Arbitrage Opportunity Detected!")
         print(f"Timestamp: {current_time}")
