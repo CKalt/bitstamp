@@ -88,7 +88,12 @@ async def subscribe(url: str, symbol: str):
 # Constants
 PROFIT_THRESHOLD = 0.0001
 TRANSACTION_FEE = 0.002
-DATA_FRESHNESS_THRESHOLD = 60  # seconds
+# Freshness thresholds for different currency pairs
+DATA_FRESHNESS_THRESHOLDS = {
+    'btcusd': 120,  # 2 minutes for BTC/USD
+    'bchbtc': 1800, # 30 minutes for BCH/BTC
+    'bchusd': 1800  # 30 minutes for BCH/USD
+}
 SKIP_TRADE_DELAY = 60  # seconds
 
 # Global variable for last arbitrage timestamp
@@ -110,10 +115,12 @@ def check_arbitrage_opportunity():
 
     if not ALWAYS_PROFITABLE:
         for symbol, data in data_buffers.items():
+            # Use the specific freshness threshold for the current symbol
+            freshness_threshold = DATA_FRESHNESS_THRESHOLDS.get(symbol, 60)
             age_of_data = (current_time - data['timestamp']).seconds
-            if age_of_data > DATA_FRESHNESS_THRESHOLD:
+            if age_of_data > freshness_threshold:
                 recommended_threshold = age_of_data + 10  # Adding 10 seconds for buffer
-                print(f"Data for {symbol} is {age_of_data} seconds old, which exceeds the freshness threshold. "
+                print(f"Data for {symbol} is {age_of_data} seconds old, which exceeds the freshness threshold of {freshness_threshold} seconds. "
                       f"If you want this to be considered fresh, raise the threshold to at least {recommended_threshold} seconds.")
                 return
 
