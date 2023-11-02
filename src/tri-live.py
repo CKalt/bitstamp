@@ -11,7 +11,7 @@ import subprocess
 TRADE_COUNT = 0  # default, you might set this from command line args
 BTC_AMOUNT = 0.001000  # default, you might set this from command line args
 DRY_RUN = True  # default, you might set this from command line args
-ALWAYS_PROFITABLE = True  # this can be changed manually if needed
+ALWAYS_PROFITABLE = False  # this can be changed manually if needed
 if not DRY_RUN:
     ALWAYS_PROFITABLE = False
 
@@ -107,12 +107,12 @@ def check_arbitrage_opportunity():
     print(f"Value of ALWAYS_PROFITABLE: {ALWAYS_PROFITABLE}")
     current_time = pd.Timestamp.now()
 
-    # Check if any data buffer is missing
-    missing_data = [symbol for symbol, data in data_buffers.items() if data is None]
-    if missing_data and DRY_RUN and ALWAYS_PROFITABLE:
-        print(f"Missing data for symbols: {', '.join(missing_data)}. Waiting for data.")
+    # Check if any data buffer is missing or None
+    missing_or_none_data = [symbol for symbol, data in data_buffers.items() if data is None]
+    if missing_or_none_data:
+        print(f"Missing or None data for symbols: {', '.join(missing_or_none_data)}. Waiting for data.")
         return
-
+    
     if not ALWAYS_PROFITABLE:
         for symbol, data in data_buffers.items():
             # Use the specific freshness threshold for the current symbol
