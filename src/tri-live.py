@@ -44,25 +44,22 @@ def execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time):
     # Decide the script to run based on DRY_RUN mode
     script_name = 'src/place-order-dry-run.py' if DRY_RUN else 'src/place-order.py'
 
-    # Create the commands
-    trade1_cmd = f"python {script_name} --order_type 'market-sell' --currency_pair 'bchbtc' --btc_amount {BTC_AMOUNT} --price {bchbtc_price} --log_dir {trade_timestamp}"
-    trade2_cmd = f"python {script_name} --order_type 'market-sell' --currency_pair 'bchusd' --btc_amount {trade_bch_amount} --price {bchusd_price} --log_dir {trade_timestamp}"
-    trade3_cmd = f"python {script_name} --order_type 'market-buy' --currency_pair 'btcusd' --btc_amount {trade_usd_amount} --price {btcusd_price} --log_dir {trade_timestamp}"
+    # Adjusted the amount used in commands for each trade to reflect the correct amount for the particular trade.
+    trade1_cmd = f"python {script_name} --order_type 'market-sell' --currency_pair 'bchbtc' --amount {BTC_AMOUNT} --price {bchbtc_price} --log_dir {trade_timestamp}"
+    trade2_cmd = f"python {script_name} --order_type 'market-sell' --currency_pair 'bchusd' --amount {trade_bch_amount} --price {bchusd_price} --log_dir {trade_timestamp}"
+    trade3_cmd = f"python {script_name} --order_type 'market-buy' --currency_pair 'btcusd' --amount {trade_usd_amount} --price {btcusd_price} --log_dir {trade_timestamp}"
 
     if DRY_RUN:
         print("Dry Run: ", trade1_cmd)
         print("Dry Run: ", trade2_cmd)
         print("Dry Run: ", trade3_cmd)
-        subprocess.Popen(trade1_cmd, shell=True)
-        subprocess.Popen(trade2_cmd, shell=True)
-        subprocess.Popen(trade3_cmd, shell=True)
     else:
-        subprocess.Popen(trade1_cmd, shell=True)
-        subprocess.Popen(trade2_cmd, shell=True)
-        subprocess.Popen(trade3_cmd, shell=True)
+        # These subprocess calls are blocking, consider subprocess.Popen to run them concurrently.
+        subprocess.run(trade1_cmd, shell=True)
+        subprocess.run(trade2_cmd, shell=True)
+        subprocess.run(trade3_cmd, shell=True)
 
     TRADE_COUNT += 1
-
 
 async def subscribe(url: str, symbol: str):
     channel = f"live_trades_{symbol}"
