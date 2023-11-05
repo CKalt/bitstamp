@@ -8,6 +8,9 @@ import time
 import csv
 import subprocess
 
+print(f"Current working directory: {os.getcwd()}")
+
+
 TRADE_COUNT = 0  # default, you might set this from command line args
 BTC_AMOUNT = 0.001000  # default, you might set this from command line args
 DRY_RUN = True  # default, you might set this from command line args
@@ -136,7 +139,9 @@ def check_arbitrage_opportunity():
 
     if ALWAYS_PROFITABLE or profit_or_loss > PROFIT_THRESHOLD:
         # Execute trades immediately upon detecting opportunity
+        print("about to call execute_trade");
         execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time)
+        print("back from execute_trade");
 
         last_arbitrage_timestamp = current_time
         print("Arbitrage Opportunity Detected!")
@@ -151,8 +156,11 @@ def check_arbitrage_opportunity():
         print("-" * 50)
 
         # Check and create trades directory if not exists
-        if not os.path.exists('trades'):
-            os.makedirs('trades')
+        SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+        TRADES_DIR = os.path.join(SCRIPT_DIR, 'trades')
+        if not os.path.exists(TRADES_DIR):
+            print(f"Making TRADES_DIR ({TRADES_DIR})...")
+            os.makedirs(TRADES_DIR)
 
         # Write trade details to the file
         with open('trades/live-trades.txt', 'a') as file:
