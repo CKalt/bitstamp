@@ -14,7 +14,7 @@ print(f"Current working directory: {os.getcwd()}")
 TRADE_COUNT = 0  # default, you might set this from command line args
 BTC_AMOUNT = 0.001000  # default, you might set this from command line args
 DRY_RUN = True  # default, you might set this from command line args
-ALWAYS_PROFITABLE = False  # this can be changed manually if needed
+ALWAYS_PROFITABLE = True  # this can be changed manually if needed
 if not DRY_RUN:
     ALWAYS_PROFITABLE = False
 
