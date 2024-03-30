@@ -1,4 +1,5 @@
 # src/tri-live.py
+import argparse
 import json
 import os
 import asyncio
@@ -34,6 +35,27 @@ data_buffers = {
 }
 
 
+def read_historical_data(symbol):
+    file_path = os.path.join(HISTORICAL_DATA_DIR, f"{symbol}.csv")
+    with open(file_path, 'r') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            # Convert the row data to the same format as the websocket data
+            data = {
+                'data': {
+                    'id': row['id'],
+                    'timestamp': row['timestamp'],
+                    'amount': row['amount'],
+                    'price': row['price'],
+                    'type': row['type'],
+                    'microtimestamp': row['microtimestamp'],
+                    'buy_order_id': row['buy_order_id'],
+                    'sell_order_id': row['sell_order_id'],
+                }
+            }
+            yield data
+
+
 def execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time):
     global TRADE_COUNT
     global BTC_AMOUNT
@@ -64,6 +86,7 @@ def execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time):
 
     TRADE_COUNT += 1
 
+
 async def subscribe(url: str, symbol: str):
     channel = f"live_trades_{symbol}"
 
@@ -91,7 +114,7 @@ TRANSACTION_FEE = 0.002
 # Freshness thresholds for different currency pairs
 DATA_FRESHNESS_THRESHOLDS = {
     'btcusd': 120,  # 2 minutes for BTC/USD
-    'bchbtc': 1800, # 30 minutes for BCH/BTC
+    'bchbtc': 1800,  # 30 minutes for BCH/BTC
     'bchusd': 1800  # 30 minutes for BCH/USD
 }
 SKIP_TRADE_DELAY = 60  # seconds
@@ -108,11 +131,13 @@ def check_arbitrage_opportunity():
     current_time = pd.Timestamp.now()
 
     # Check if any data buffer is missing or None
-    missing_or_none_data = [symbol for symbol, data in data_buffers.items() if data is None]
+    missing_or_none_data = [symbol for symbol,
+                            data in data_buffers.items() if data is None]
     if missing_or_none_data:
-        print(f"Missing or None data for symbols: {', '.join(missing_or_none_data)}. Waiting for data.")
+        print(
+            f"Missing or None data for symbols: {', '.join(missing_or_none_data)}. Waiting for data.")
         return
-    
+
     if not ALWAYS_PROFITABLE:
         for symbol, data in data_buffers.items():
             # Use the specific freshness threshold for the current symbol
@@ -128,7 +153,6 @@ def check_arbitrage_opportunity():
             print(f"Waiting due to trade delay. Exiting check.")
             return
 
-
     bchbtc_price = data_buffers['bchbtc']['price']
     bchusd_price = data_buffers['bchusd']['price']
     btcusd_price = data_buffers['btcusd']['price']
@@ -139,9 +163,9 @@ def check_arbitrage_opportunity():
 
     if ALWAYS_PROFITABLE or profit_or_loss > PROFIT_THRESHOLD:
         # Execute trades immediately upon detecting opportunity
-        print("about to call execute_trade");
+        print("about to call execute_trade")
         execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time)
-        print("back from execute_trade");
+        print("back from execute_trade")
 
         last_arbitrage_timestamp = current_time
         print("Arbitrage Opportunity Detected!")
@@ -197,8 +221,8 @@ def check_arbitrage_opportunity():
             file.write("=" * 50 + "\n\n")
 
 
-def log_trade_data(symbol, data):
-    """Log the trade data to a CSV file."""
+def log_ticker_data(symbol, data):
+    """Log the ticker data to a CSV file."""
     file_path = os.path.join(HISTORICAL_DATA_DIR, f"{symbol}.csv")
     file_exists = os.path.isfile(file_path)
     with open(file_path, 'a', newline='') as csvfile:
@@ -207,7 +231,7 @@ def log_trade_data(symbol, data):
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         if not file_exists:
             writer.writeheader()
-        trade_data = {
+        ticker_data = {
             'id': data['data']['id'],
             'timestamp': data['data']['timestamp'],
             'amount': data['data']['amount'],
@@ -217,7 +241,7 @@ def log_trade_data(symbol, data):
             'buy_order_id': data['data']['buy_order_id'],
             'sell_order_id': data['data']['sell_order_id'],
         }
-        writer.writerow(trade_data)
+        writer.writerow(ticker_data)
 
 
 def log_data_to_file(symbol, data):
@@ -236,7 +260,7 @@ def process_real_time_data(symbol, data):
             price = data['data']['price']
             data_buffers[symbol] = {'timestamp': timestamp, 'price': price}
             print(f"Updated {symbol}: {timestamp} with price {price:.8f}")
-            log_trade_data(symbol, data)
+            log_ticker_data(symbol, data)
             check_arbitrage_opportunity()
         elif 'event' in data and data['event'] == 'bts:subscription_succeeded':
             print(f"Subscription succeeded for {symbol}.")
@@ -247,9 +271,21 @@ def process_real_time_data(symbol, data):
 
 
 async def main():
-    url = 'wss://ws.bitstamp.net'
-    with open("websock-ticker-config.json", "r") as file:
-        symbols = json.load(file)
-    await asyncio.gather(*(subscribe(url, symbol) for symbol in symbols))
+    parser = argparse.ArgumentParser(description='Crypto Arbitrage Bot')
+    parser.add_argument('--dry-run', action='store_true', help='Run in dry-run mode (simulate trades)')
+    parser.add_argument('--ticker-mode', choices=['historical', 'live'], default='live',
+                        help='Ticker data mode: "historical" for historical data, "live" for real-time data')
+    args = parser.parse_args()
+
+    if args.ticker_mode == 'historical':
+        for symbol in symbols:
+            historical_data = read_historical_data(symbol)
+            for data in historical_data:
+                process_real_time_data(symbol, data)  # Use existing function
+    else:  # 'live' mode
+        url = 'wss://ws.bitstamp.net'
+        with open("websock-ticker-config.json", "r") as file:
+            symbols = json.load(file)
+        await asyncio.gather(*(subscribe(url, symbol) for symbol in symbols))
 
 asyncio.get_event_loop().run_until_complete(main())
