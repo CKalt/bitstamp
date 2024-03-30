@@ -9,3 +9,5 @@ data/
 logs/*
 trades/*
 *.tgz
+# But don't ignore .csv files in the ./test_data directory
+!test_data/*.csv

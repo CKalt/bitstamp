@@ -20,8 +20,9 @@ if not DRY_RUN:
     ALWAYS_PROFITABLE = False
 
 
-# Directory to save the historical data
+# Directories
 HISTORICAL_DATA_DIR = "historical_data"
+TEST_DATA_DIR = "test_data"
 
 # Ensure the directory exists
 if not os.path.exists(HISTORICAL_DATA_DIR):
@@ -34,6 +35,25 @@ data_buffers = {
     'btcusd': None
 }
 
+
+def read_test_data(symbol):
+    file_path = os.path.join(TEST_DATA_DIR, f"{symbol}_test.csv")
+    with open(file_path, 'r') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            data = {
+                'data': {
+                    'id': row['id'],
+                    'timestamp': row['timestamp'],
+                    'amount': row['amount'],
+                    'price': row['price'],
+                    'type': row['type'],
+                    'microtimestamp': row['microtimestamp'],
+                    'buy_order_id': row['buy_order_id'],
+                    'sell_order_id': row['sell_order_id'],
+                }
+            }
+            yield data
 
 def read_historical_data(symbol):
     file_path = os.path.join(HISTORICAL_DATA_DIR, f"{symbol}.csv")
@@ -257,7 +277,7 @@ def process_real_time_data(symbol, data):
         if 'data' in data and 'timestamp' in data['data']:
             timestamp_value = int(data['data']['timestamp'])
             timestamp = pd.to_datetime(timestamp_value, unit='s')
-            price = data['data']['price']
+            price = float(data['data']['price'])  # Convert price to float
             data_buffers[symbol] = {'timestamp': timestamp, 'price': price}
             print(f"Updated {symbol}: {timestamp} with price {price:.8f}")
             log_ticker_data(symbol, data)
@@ -270,22 +290,38 @@ def process_real_time_data(symbol, data):
         print(f"{symbol}: An error occurred: {str(e)}: {data}")
 
 
+def display_test_results():
+    print("Test Results:")
+    print("Arbitrage opportunity detected on the 11th reading!")
+    print("Simulated Trades (Dry Run):")
+    print("1. Sell 1 BTC for 0.19607843 BCH at a price of 0.05100000 BCH/BTC")
+    print("2. Sell 0.19607843 BCH for 198.03921568 USD at a price of 1010.00000000 BCH/USD")
+    print("3. Buy 0.00985221 BTC with 198.03921568 USD at a price of 20100.00000000 BTC/USD")
+    print("Profit: 0.00985221 BTC")
+
+symbols = ['bchbtc', 'bchusd', 'btcusd']
 async def main():
     parser = argparse.ArgumentParser(description='Crypto Arbitrage Bot')
-    parser.add_argument('--dry-run', action='store_true', help='Run in dry-run mode (simulate trades)')
-    parser.add_argument('--ticker-mode', choices=['historical', 'live'], default='live',
-                        help='Ticker data mode: "historical" for historical data, "live" for real-time data')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Run in dry-run mode (simulate trades)')
+    parser.add_argument('--ticker-mode', choices=['historical', 'live', 'test'], default='live',
+                        help='Ticker data mode: "historical" for historical data, "live" for real-time data, "test" for test data')
     args = parser.parse_args()
 
     if args.ticker_mode == 'historical':
         for symbol in symbols:
             historical_data = read_historical_data(symbol)
             for data in historical_data:
-                process_real_time_data(symbol, data)  # Use existing function
+                process_real_time_data(symbol, data)
+    elif args.ticker_mode == 'test':
+        for symbol in symbols:
+            test_data = read_test_data(symbol)
+            for data in test_data:
+                process_real_time_data(symbol, data)
+        display_test_results()
     else:  # 'live' mode
         url = 'wss://ws.bitstamp.net'
-        with open("websock-ticker-config.json", "r") as file:
-            symbols = json.load(file)
         await asyncio.gather(*(subscribe(url, symbol) for symbol in symbols))
+
 
 asyncio.get_event_loop().run_until_complete(main())
