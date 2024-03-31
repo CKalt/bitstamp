@@ -399,6 +399,10 @@ def display_run_options():
     print()
 
 
+async def async_data_stream(data):
+    for item in data:
+        yield item
+
 symbols = ['bchbtc', 'bchusd', 'btcusd']
 
 
@@ -440,12 +444,24 @@ async def main():
             "profit": 0.0
         }
 
-        data_stream = merge_sorted(*[read_test_data(symbol) for symbol in symbols],
-                                   key=lambda x: pd.to_datetime(x['timestamp'], unit='s'))
+        test_data = [read_test_data(symbol) for symbol in symbols]
+        # Ensure that 'timestamp' is converted to integer if it's a string
+        for data_list in test_data:
+            for data in data_list:
+                data['timestamp'] = int(data['timestamp'])
+
+        merged_data = sorted(itertools.chain(*test_data),
+                             key=lambda x: pd.to_datetime(x['timestamp'], unit='s'))
+
+        data_stream = async_data_stream(merged_data)
 
         async for data in data_stream:
+            # Find the symbol safely, provide a default value if not found
             symbol = next(
-                symbol for symbol in symbols if f"{symbol}_test.csv" in data['id'])
+                (s for s in symbols if f"{s}_test.csv" in data['id']), None)
+            if symbol is None:
+                continue  # Skip this iteration if the symbol was not found
+
             process_real_time_data(symbol, data)
 
             # Check if an arbitrage opportunity was detected
