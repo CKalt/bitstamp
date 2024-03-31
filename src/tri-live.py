@@ -8,25 +8,24 @@ import pandas as pd
 import time
 import csv
 import subprocess
-
-print(f"Current working directory: {os.getcwd()}")
-
+import heapq
+import random
+import itertools
 
 TRADE_COUNT = 0  # default, you might set this from command line args
 BTC_AMOUNT = 0.001000  # default, you might set this from command line args
 DRY_RUN = True  # default, you might set this from command line args
 ALWAYS_PROFITABLE = True  # this can be changed manually if needed
-if not DRY_RUN:
-    ALWAYS_PROFITABLE = False
-
 
 # Directories
 HISTORICAL_DATA_DIR = "historical_data"
 TEST_DATA_DIR = "test_data"
 
-# Ensure the directory exists
+# Ensure directories exists
 if not os.path.exists(HISTORICAL_DATA_DIR):
     os.makedirs(HISTORICAL_DATA_DIR)
+if not os.path.exists(TEST_DATA_DIR):
+    os.makedirs(TEST_DATA_DIR)
 
 # Global data buffers for real-time data
 data_buffers = {
@@ -36,44 +35,124 @@ data_buffers = {
 }
 
 
+def merge_sorted(*iterables, key=None):
+    h = []
+    for iterable in iterables:
+        for item in iterable:
+            heapq.heappush(h, (key(item), item))
+    while h:
+        yield heapq.heappop(h)[1]
+
+
+def generate_test_data():
+    num_initial_events = 10
+    num_profitable_events = 3
+    min_interval = 1
+    max_interval = 5
+
+    for symbol in symbols:
+        base_timestamp = pd.Timestamp.now()
+        test_data = []
+
+        # Generate initial events with randomized timestamps
+        for i in range(num_initial_events):
+            interval = random.randint(min_interval, max_interval)
+            timestamp = base_timestamp + pd.Timedelta(seconds=interval)
+            base_timestamp = timestamp
+
+            test_data.append({
+                'id': str(i + 1),
+                'timestamp': str(int(timestamp.timestamp())),
+                'amount': f'{random.uniform(0.1, 1.0):.8f}',
+                'price': f'{random.uniform(1000, 2000):.8f}',
+                'type': str(random.randint(0, 1)),
+                'microtimestamp': f'{int(timestamp.timestamp() * 1000000)}',
+                'buy_order_id': str(random.randint(1000000000, 9999999999)),
+                'sell_order_id': str(random.randint(1000000000, 9999999999)),
+            })
+
+        # Generate profitable events
+        profitable_prices = {
+            'bchbtc': 0.05,
+            'bchusd': 1010.0,
+            'btcusd': 20100.0,
+        }
+
+        for i in range(num_profitable_events):
+            interval = random.randint(min_interval, max_interval)
+            timestamp = base_timestamp + pd.Timedelta(seconds=interval)
+            base_timestamp = timestamp
+
+            test_data.append({
+                'id': str(num_initial_events + i + 1),
+                'timestamp': str(int(timestamp.timestamp())),
+                'amount': f'{random.uniform(0.1, 1.0):.8f}',
+                'price': f'{profitable_prices[symbol]:.8f}',
+                'type': str(random.randint(0, 1)),
+                'microtimestamp': f'{int(timestamp.timestamp() * 1000000)}',
+                'buy_order_id': str(random.randint(1000000000, 9999999999)),
+                'sell_order_id': str(random.randint(1000000000, 9999999999)),
+            })
+
+        # Write test data to CSV file
+        file_path = os.path.join(TEST_DATA_DIR, f"{symbol}_test.csv")
+        with open(file_path, 'w', newline='') as csvfile:
+            fieldnames = ['id', 'timestamp', 'amount', 'price', 'type',
+                          'microtimestamp', 'buy_order_id', 'sell_order_id']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(test_data)
+
+# Generate expected results JSON
+    expected_results = {
+        "arbitrage_opportunity_detected": True,
+        "profitable_timestamp": 1711884985,
+        "trades": [
+            {
+                "trade_type": "sell",
+                "currency_pair": "bchbtc",
+                "amount": 1.0,
+                "price": 0.05
+            },
+            {
+                "trade_type": "sell",
+                "currency_pair": "bchusd",
+                "amount": 19.60784314,
+                "price": 1010.0
+            },
+            {
+                "trade_type": "buy",
+                "currency_pair": "btcusd",
+                "amount": 19720.78431373,
+                "price": 20100.0
+            }
+        ],
+        "profit": 0.00985221
+    }
+
+    # Write expected results to JSON file
+    expected_results_file = os.path.join(
+        TEST_DATA_DIR, "expected_results.json")
+    with open(expected_results_file, "w") as json_file:
+        json.dump(expected_results, json_file, indent=4)
+
+    print("Test data and expected results generated successfully.")
+
+
 def read_test_data(symbol):
     file_path = os.path.join(TEST_DATA_DIR, f"{symbol}_test.csv")
     with open(file_path, 'r') as csvfile:
         reader = csv.DictReader(csvfile)
-        for row in reader:
-            data = {
-                'data': {
-                    'id': row['id'],
-                    'timestamp': row['timestamp'],
-                    'amount': row['amount'],
-                    'price': row['price'],
-                    'type': row['type'],
-                    'microtimestamp': row['microtimestamp'],
-                    'buy_order_id': row['buy_order_id'],
-                    'sell_order_id': row['sell_order_id'],
-                }
-            }
-            yield data
+        data = list(reader)
+    return data
+
 
 def read_historical_data(symbol):
     file_path = os.path.join(HISTORICAL_DATA_DIR, f"{symbol}.csv")
     with open(file_path, 'r') as csvfile:
         reader = csv.DictReader(csvfile)
-        for row in reader:
-            # Convert the row data to the same format as the websocket data
-            data = {
-                'data': {
-                    'id': row['id'],
-                    'timestamp': row['timestamp'],
-                    'amount': row['amount'],
-                    'price': row['price'],
-                    'type': row['type'],
-                    'microtimestamp': row['microtimestamp'],
-                    'buy_order_id': row['buy_order_id'],
-                    'sell_order_id': row['sell_order_id'],
-                }
-            }
-            yield data
+        data = list(reader)
+    return data
 
 
 def execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time):
@@ -156,7 +235,7 @@ def check_arbitrage_opportunity():
     if missing_or_none_data:
         print(
             f"Missing or None data for symbols: {', '.join(missing_or_none_data)}. Waiting for data.")
-        return
+        return None
 
     if not ALWAYS_PROFITABLE:
         for symbol, data in data_buffers.items():
@@ -167,11 +246,11 @@ def check_arbitrage_opportunity():
                 recommended_threshold = age_of_data + 10  # Adding 10 seconds for buffer
                 print(f"Data for {symbol} is {age_of_data} seconds old, which exceeds the freshness threshold of {freshness_threshold} seconds. "
                       f"If you want this to be considered fresh, raise the threshold to at least {recommended_threshold} seconds.")
-                return
+                return None
 
         if last_arbitrage_timestamp and (current_time - last_arbitrage_timestamp).seconds < SKIP_TRADE_DELAY:
             print(f"Waiting due to trade delay. Exiting check.")
-            return
+            return None
 
     bchbtc_price = data_buffers['bchbtc']['price']
     bchusd_price = data_buffers['bchusd']['price']
@@ -240,6 +319,10 @@ def check_arbitrage_opportunity():
                 f"Profit for Trade {last_arbitrage_timestamp}: {profit_or_loss:.8f} BTC\n")
             file.write("=" * 50 + "\n\n")
 
+        return profit_or_loss
+
+    return None
+
 
 def log_ticker_data(symbol, data):
     """Log the ticker data to a CSV file."""
@@ -264,13 +347,6 @@ def log_ticker_data(symbol, data):
         writer.writerow(ticker_data)
 
 
-def log_data_to_file(symbol, data):
-    """Log the received data to a .log file inside the historical_data directory."""
-    log_filename = os.path.join(HISTORICAL_DATA_DIR, f"{symbol}.log")
-    with open(log_filename, "a") as file:
-        file.write(json.dumps(data) + "\n")
-
-
 def process_real_time_data(symbol, data):
     try:
         # Check if the received message is a trade message
@@ -290,7 +366,7 @@ def process_real_time_data(symbol, data):
         print(f"{symbol}: An error occurred: {str(e)}: {data}")
 
 
-def display_test_results():
+def display_test_results(actual_results):
     print("Test Results:")
     print("Arbitrage opportunity detected on the 11th reading!")
     print("Simulated Trades (Dry Run):")
@@ -299,26 +375,103 @@ def display_test_results():
     print("3. Buy 0.00985221 BTC with 198.03921568 USD at a price of 20100.00000000 BTC/USD")
     print("Profit: 0.00985221 BTC")
 
+    # Load expected results from JSON file
+    with open(os.path.join(TEST_DATA_DIR, "expected_results.json"), "r") as json_file:
+        expected_results = json.load(json_file)
+
+    # Compare actual results with expected results
+    if actual_results == expected_results:
+        print("Test passed! Actual results match the expected results.")
+    else:
+        print("Test failed! Actual results do not match the expected results.")
+        print("Expected results:")
+        print(json.dumps(expected_results, indent=4))
+        print("Actual results:")
+        print(json.dumps(actual_results, indent=4))
+
+
+def display_run_options():
+    print("Run Options:")
+    print(f"  Ticker Mode: {args.ticker_mode}")
+    print(f"  Dry Run: {DRY_RUN}")
+    print(f"  Always Profitable: {ALWAYS_PROFITABLE}")
+    print(f"  Generate Test Data: {args.generate_test_data}")
+    print()
+
+
 symbols = ['bchbtc', 'bchusd', 'btcusd']
+
+
 async def main():
+    global actual_results
+    global DRY_RUN
+    global ALWAYS_PROFITABLE
+
     parser = argparse.ArgumentParser(description='Crypto Arbitrage Bot')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--ticker-mode', choices=['historical', 'live', 'test'], default='live',
+                       help='Ticker data mode: "historical" for historical data, "live" for real-time data, "test" for test data')
+    group.add_argument('--generate-test-data', action='store_true',
+                       help='Generate randomized test data')
     parser.add_argument('--dry-run', action='store_true',
                         help='Run in dry-run mode (simulate trades)')
-    parser.add_argument('--ticker-mode', choices=['historical', 'live', 'test'], default='live',
-                        help='Ticker data mode: "historical" for historical data, "live" for real-time data, "test" for test data')
+    parser.add_argument('--always-profitable', action='store_true',
+                        help='Consider every arbitrage opportunity as profitable (default: False)')
     args = parser.parse_args()
 
-    if args.ticker_mode == 'historical':
-        for symbol in symbols:
-            historical_data = read_historical_data(symbol)
-            for data in historical_data:
-                process_real_time_data(symbol, data)
-    elif args.ticker_mode == 'test':
-        for symbol in symbols:
-            test_data = read_test_data(symbol)
-            for data in test_data:
-                process_real_time_data(symbol, data)
-        display_test_results()
+    if args.generate_test_data:
+        generate_test_data()
+        print("Test data generated successfully. Exiting.")
+        return
+
+    DRY_RUN = args.dry_run or args.ticker_mode == 'test' or args.ticker_mode == 'historical'
+    ALWAYS_PROFITABLE = args.always_profitable
+
+    if args.generate_test_data:
+        generate_test_data()
+        print("Test data generated successfully. Exiting.")
+        return
+
+    if args.ticker_mode == 'test':
+        actual_results = {
+            "arbitrage_opportunity_detected": False,
+            "profitable_timestamp": None,
+            "trades": [],
+            "profit": 0.0
+        }
+
+        data_stream = merge_sorted(*[read_test_data(symbol) for symbol in symbols],
+                                   key=lambda x: pd.to_datetime(x['timestamp'], unit='s'))
+
+        async for data in data_stream:
+            symbol = next(
+                symbol for symbol in symbols if f"{symbol}_test.csv" in data['id'])
+            process_real_time_data(symbol, data)
+
+            # Check if an arbitrage opportunity was detected
+            if last_arbitrage_timestamp is not None:
+                actual_results["arbitrage_opportunity_detected"] = True
+                actual_results["profitable_timestamp"] = int(
+                    last_arbitrage_timestamp.timestamp())
+
+            # Capture the profit
+            profit_or_loss = check_arbitrage_opportunity()
+            if profit_or_loss is not None:
+                actual_results["profit"] = profit_or_loss
+
+        display_test_results(actual_results)
+
+    elif args.ticker_mode == 'historical':
+        data_reader = read_test_data if args.ticker_mode == 'test' else read_historical_data
+        data_streams = [data_reader(symbol) for symbol in symbols]
+        merged_data = sorted(itertools.chain(
+            *data_streams), key=lambda x: pd.to_datetime(x['timestamp'], unit='s'))
+
+        for data in merged_data:
+            symbol = next(
+                symbol for symbol in symbols if f"{symbol}_test.csv" in data['id'] or f"{symbol}.csv" in data['id'])
+            process_real_time_data(symbol, data)
+
     else:  # 'live' mode
         url = 'wss://ws.bitstamp.net'
         await asyncio.gather(*(subscribe(url, symbol) for symbol in symbols))
