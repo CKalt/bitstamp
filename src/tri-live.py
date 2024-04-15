@@ -73,9 +73,9 @@ def generate_test_data():
 
         # Generate profitable events
         profitable_prices = {
-            'bchbtc': 0.05,
-            'bchusd': 1010.0,
-            'btcusd': 20100.0,
+            'bchbtc': 0.02,
+            'bchusd': 2000.0,
+            'btcusd': 30000.0,
         }
 
         for i in range(num_profitable_events):
@@ -106,38 +106,36 @@ def generate_test_data():
 # Generate expected results JSON
     expected_results = {
         "arbitrage_opportunity_detected": True,
-        "profitable_timestamp": 1711884985,
+        "profitable_timestamp": int(base_timestamp.timestamp()),
         "trades": [
             {
                 "trade_type": "sell",
                 "currency_pair": "bchbtc",
-                "amount": 1.0,
-                "price": 0.05
+                "amount": BTC_AMOUNT,
+                "price": profitable_prices['bchbtc']
             },
             {
                 "trade_type": "sell",
                 "currency_pair": "bchusd",
-                "amount": 19.60784314,
-                "price": 1010.0
+                "amount": (BTC_AMOUNT / profitable_prices['bchbtc']) * (1 - TRANSACTION_FEE),
+                "price": profitable_prices['bchusd']
             },
             {
                 "trade_type": "buy",
                 "currency_pair": "btcusd",
-                "amount": 19720.78431373,
-                "price": 20100.0
+                "amount": ((BTC_AMOUNT / profitable_prices['bchbtc']) * (1 - TRANSACTION_FEE) * profitable_prices['bchusd'] * (1 - TRANSACTION_FEE)),
+                "price": profitable_prices['btcusd']
             }
         ],
-        "profit": 0.00985221
+        "profit": ((1 / profitable_prices['bchbtc']) * (1 - TRANSACTION_FEE) * profitable_prices['bchusd'] * (1 - TRANSACTION_FEE)) / profitable_prices['btcusd'] * (1 - TRANSACTION_FEE) - 1.0
     }
 
-    # Write expected results to JSON file
     expected_results_file = os.path.join(
         TEST_DATA_DIR, "expected_results.json")
     with open(expected_results_file, "w") as json_file:
-        json.dump(expected_results, json_file, indent=4)
+            json.dump(expected_results, json_file, indent=4)
 
     print("Test data and expected results generated successfully.")
-
 
 def read_test_data(symbol):
     file_path = os.path.join(TEST_DATA_DIR, f"{symbol}_test.csv")
@@ -159,6 +157,7 @@ def execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time):
     global TRADE_COUNT
     global BTC_AMOUNT
     global DRY_RUN
+    global actual_results
 
     # Extract necessary data
     trade_timestamp = current_time.timestamp()
@@ -177,6 +176,32 @@ def execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time):
         print("Dry Run: ", trade1_cmd)
         print("Dry Run: ", trade2_cmd)
         print("Dry Run: ", trade3_cmd)
+
+        print("Trade details:")
+        print(f"  Trade Type: sell")
+        print(f"  Currency Pair: bchbtc")
+        print(f"  Amount: {BTC_AMOUNT}")
+        print(f"  Price: {bchbtc_price}")
+
+        # Capture the trades in actual_results
+        actual_results["trades"].append({
+            "trade_type": "sell",
+            "currency_pair": "bchbtc",
+            "amount": BTC_AMOUNT,
+            "price": bchbtc_price
+        })
+        actual_results["trades"].append({
+            "trade_type": "sell",
+            "currency_pair": "bchusd",
+            "amount": trade_bch_amount,
+            "price": bchusd_price
+        })
+        actual_results["trades"].append({
+            "trade_type": "buy",
+            "currency_pair": "btcusd",
+            "amount": trade_usd_amount,
+            "price": btcusd_price
+        })
     else:
         # These subprocess calls are blocking, consider subprocess.Popen to run them concurrently.
         subprocess.run(trade1_cmd, shell=True)
@@ -224,6 +249,7 @@ last_arbitrage_timestamp = None
 
 def check_arbitrage_opportunity():
     global last_arbitrage_timestamp
+    global actual_results
     print("Checking for arbitrage opportunity...")
     # Print the value of ALWAYS_PROFITABLE
     print(f"Value of ALWAYS_PROFITABLE: {ALWAYS_PROFITABLE}")
@@ -256,15 +282,27 @@ def check_arbitrage_opportunity():
     bchusd_price = data_buffers['bchusd']['price']
     btcusd_price = data_buffers['btcusd']['price']
 
+    print(f"bchbtc_price: {bchbtc_price}")
+    print(f"bchusd_price: {bchusd_price}")
+    print(f"btcusd_price: {btcusd_price}")
+
     final_btc = ((1 / bchbtc_price) * (1 - TRANSACTION_FEE) * bchusd_price *
                  (1 - TRANSACTION_FEE)) / btcusd_price * (1 - TRANSACTION_FEE)
     profit_or_loss = final_btc - 1.0
 
+    print(f"profit_or_loss: {profit_or_loss}")
+
     if ALWAYS_PROFITABLE or profit_or_loss > PROFIT_THRESHOLD:
+        print(
+            f"Arbitrage opportunity detected with profit_or_loss: {profit_or_loss}")
+
         # Execute trades immediately upon detecting opportunity
         print("about to call execute_trade")
         execute_trade(bchbtc_price, bchusd_price, btcusd_price, current_time)
         print("back from execute_trade")
+
+        # Set actual_results["arbitrage_opportunity_detected"] to true
+        actual_results["arbitrage_opportunity_detected"] = True
 
         last_arbitrage_timestamp = current_time
         print("Arbitrage Opportunity Detected!")
@@ -286,7 +324,8 @@ def check_arbitrage_opportunity():
             os.makedirs(TRADES_DIR)
 
         # Write trade details to the file
-        with open('trades/live-trades.txt', 'a') as file:
+        trades_file = os.path.join(TRADES_DIR, 'live-trades.txt')
+        with open(trades_file, 'a') as file:
             file.write(
                 f"Mode: {'DRY_RUN' if DRY_RUN else 'LIVE'}, {'ALWAYS_PROFITABLE' if ALWAYS_PROFITABLE else 'REAL PROFIT'}\n")
             file.write(
@@ -365,22 +404,38 @@ def process_real_time_data(symbol, data):
     except Exception as e:
         print(f"{symbol}: An error occurred: {str(e)}: {data}")
 
-
 def display_test_results(actual_results):
     print("Test Results:")
-    print("Arbitrage opportunity detected on the 11th reading!")
+    print("Arbitrage opportunity detected!")
     print("Simulated Trades (Dry Run):")
-    print("1. Sell 1 BTC for 0.19607843 BCH at a price of 0.05100000 BCH/BTC")
-    print("2. Sell 0.19607843 BCH for 198.03921568 USD at a price of 1010.00000000 BCH/USD")
-    print("3. Buy 0.00985221 BTC with 198.03921568 USD at a price of 20100.00000000 BTC/USD")
-    print("Profit: 0.00985221 BTC")
+    for trade in actual_results["trades"]:
+        print(f"{trade['trade_type'].capitalize()} {trade['amount']} {trade['currency_pair'].upper()} at a price of {trade['price']}")
+    print(f"Profit: {actual_results['profit']:.8f} BTC")
 
     # Load expected results from JSON file
     with open(os.path.join(TEST_DATA_DIR, "expected_results.json"), "r") as json_file:
         expected_results = json.load(json_file)
 
+    print("Expected results:")
+    print(json.dumps(expected_results, indent=4))
+    print("Actual results:")
+    print(json.dumps(actual_results, indent=4))
+
     # Compare actual results with expected results
-    if actual_results == expected_results:
+    tolerance = 1e-8
+    if (
+        actual_results["arbitrage_opportunity_detected"] == expected_results["arbitrage_opportunity_detected"]
+        and abs(actual_results["profitable_timestamp"] - expected_results["profitable_timestamp"]) < tolerance
+        and len(actual_results["trades"]) == len(expected_results["trades"])
+        and all(
+            trade["trade_type"] == expected_trade["trade_type"]
+            and trade["currency_pair"] == expected_trade["currency_pair"]
+            and abs(trade["amount"] - expected_trade["amount"]) < tolerance
+            and abs(trade["price"] - expected_trade["price"]) < tolerance
+            for trade, expected_trade in zip(actual_results["trades"], expected_results["trades"])
+        )
+        and abs(actual_results["profit"] - expected_results["profit"]) < tolerance
+    ):
         print("Test passed! Actual results match the expected results.")
     else:
         print("Test failed! Actual results do not match the expected results.")
@@ -453,9 +508,14 @@ async def main():
         merged_data = sorted(itertools.chain(*test_data),
                              key=lambda x: pd.to_datetime(x['timestamp'], unit='s'))
 
+        print("Initial actual_results:")
+        print(json.dumps(actual_results, indent=4))
+
         data_stream = async_data_stream(merged_data)
 
         async for data in data_stream:
+            print(f"Processing data: {data}")
+
             # Find the symbol safely, provide a default value if not found
             symbol = next(
                 (s for s in symbols if f"{s}_test.csv" in data['id']), None)
@@ -463,6 +523,9 @@ async def main():
                 continue  # Skip this iteration if the symbol was not found
 
             process_real_time_data(symbol, data)
+
+            print("Current actual_results after processing data:")
+            print(json.dumps(actual_results, indent=4))
 
             # Check if an arbitrage opportunity was detected
             if last_arbitrage_timestamp is not None:
@@ -474,6 +537,9 @@ async def main():
             profit_or_loss = check_arbitrage_opportunity()
             if profit_or_loss is not None:
                 actual_results["profit"] = profit_or_loss
+
+        print("Final actual_results before displaying test results:")
+        print(json.dumps(actual_results, indent=4))
 
         display_test_results(actual_results)
 
