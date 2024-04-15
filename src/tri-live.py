@@ -528,15 +528,10 @@ async def main():
             print(json.dumps(actual_results, indent=4))
 
             # Check if an arbitrage opportunity was detected
-            if last_arbitrage_timestamp is not None:
-                actual_results["arbitrage_opportunity_detected"] = True
-                actual_results["profitable_timestamp"] = int(
-                    last_arbitrage_timestamp.timestamp())
-
-            # Capture the profit
-            profit_or_loss = check_arbitrage_opportunity()
-            if profit_or_loss is not None:
-                actual_results["profit"] = profit_or_loss
+            if actual_results["arbitrage_opportunity_detected"]:
+                print("Arbitrage opportunity detected in main!")
+                print(f"Profitable Timestamp: {actual_results['profitable_timestamp']}")
+                print(f"Profit: {actual_results['profit']}")
 
         print("Final actual_results before displaying test results:")
         print(json.dumps(actual_results, indent=4))
