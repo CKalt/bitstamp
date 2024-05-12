@@ -291,6 +291,8 @@ def check_arbitrage_opportunity():
     profit_or_loss = final_btc - 1.0
 
     print(f"profit_or_loss: {profit_or_loss}")
+    print(f"ALWAYS_PROFITABLE: {ALWAYS_PROFITABLE}")
+    print(f"profit_or_loss > PROFIT_THRESHOLD: {profit_or_loss > PROFIT_THRESHOLD}")
 
     if ALWAYS_PROFITABLE or profit_or_loss > PROFIT_THRESHOLD:
         print(
@@ -303,6 +305,9 @@ def check_arbitrage_opportunity():
 
         # Set actual_results["arbitrage_opportunity_detected"] to true
         actual_results["arbitrage_opportunity_detected"] = True
+        actual_results["profitable_timestamp"] = int(current_time.timestamp())
+        actual_results["profit"] = profit_or_loss
+        print(f"Updated actual_results: {actual_results}")
 
         last_arbitrage_timestamp = current_time
         print("Arbitrage Opportunity Detected!")
