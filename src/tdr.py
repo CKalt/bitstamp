@@ -36,19 +36,34 @@ async def subscribe_to_websocket(url, symbol, data_manager):
     while True:
         try:
             async with websockets.connect(url) as websocket:
+                print(f"Connected to WebSocket for {symbol}")
                 await websocket.send(json.dumps({
                     "event": "bts:subscribe",
                     "data": {"channel": channel}
                 }))
-                async for message in websocket:
-                    data = json.loads(message)
-                    if data['event'] == 'trade':
-                        price = data['data']['price']
-                        timestamp = data['data']['timestamp']
-                        data_manager.add_trade(symbol, price, timestamp)
+                while True:
+                    try:
+                        message = await asyncio.wait_for(websocket.recv(), timeout=30)
+                        data = json.loads(message)
+                        if data['event'] == 'trade':
+                            price = data['data']['price']
+                            timestamp = data['data']['timestamp']
+                            data_manager.add_trade(symbol, price, timestamp)
+                    except asyncio.TimeoutError:
+                        try:
+                            pong = await websocket.ping()
+                            await asyncio.wait_for(pong, timeout=10)
+                            print(f"Ping successful for {symbol}, connection still alive")
+                        except asyncio.TimeoutError:
+                            print(f"Ping timeout for {symbol}, reconnecting...")
+                            break
+                    except websockets.ConnectionClosed:
+                        print(f"WebSocket connection closed for {symbol}, reconnecting...")
+                        break
         except Exception as e:
             print(f"WebSocket error for {symbol}: {e}")
-            await asyncio.sleep(5)
+        print(f"Attempting to reconnect to WebSocket for {symbol} in 5 seconds...")
+        await asyncio.sleep(5)
 
 class OrderPlacer:
     def __init__(self, config_file='.bitstamp'):
