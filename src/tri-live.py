@@ -560,3 +560,24 @@ async def main():
 
 
 asyncio.get_event_loop().run_until_complete(main())
+
+----------------------------
+
+def check_arbitrage_opportunity():
+    # ...
+    bchbtc_price = data_buffers['bchbtc']['price']
+    bchusd_price = data_buffers['bchusd']['price']
+    btcusd_price = data_buffers['btcusd']['price']
+
+    print(f"bchbtc_price: {bchbtc_price}")
+    print(f"bchusd_price: {bchusd_price}")
+    print(f"btcusd_price: {btcusd_price}")
+
+    final_btc = ((1 / bchbtc_price) * (1 - TRANSACTION_FEE) * bchusd_price *
+                 (1 - TRANSACTION_FEE)) / btcusd_price * (1 - TRANSACTION_FEE)
+    profit_or_loss = final_btc - 1.0
+
+    print(f"profit_or_loss: {profit_or_loss}")
+    print(f"ALWAYS_PROFITABLE: {ALWAYS_PROFITABLE}")
+    print(f"profit_or_loss > PROFIT_THRESHOLD: {profit_or_loss > PROFIT_THRESHOLD}")
+    # ...

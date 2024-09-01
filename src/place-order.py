@@ -41,7 +41,6 @@ def read_order_data(file_name):
     with open(file_name, 'r') as f:
         return json.load(f)
 
-
 def create_payload(order):
     order_type = order.get('order_type', 'limit-buy')
     payload = {}
@@ -55,16 +54,21 @@ def create_payload(order):
         endpoint = f"/api/v2/{'buy' if order_type in ['market-buy', 'instant-buy'] else 'sell'}/market/"
         price_value = str(order.get('price', '28113'))
         payload = {'amount': str(order['amount']), 'price': price_value}
-        logging.info(f"Constructed Trade Payload: {json.dumps(payload)}")
+    elif order_type == 'limit-stop-buy':
+        endpoint = "/api/v2/buy/stop-order/"
+        payload = {
+            'amount': str(order['amount']),
+            'limit_price': str(order['limit_price']),
+            'stop_price': str(order['trigger_price'])
+        }
     else:
         raise ValueError(f"Unsupported order type: {order_type}")
 
+    logging.info(f"Constructed Trade Payload: {json.dumps(payload)}")
     return payload, endpoint
-
 
 def create_message(api_key, endpoint, currency_pair, content_type, nonce, timestamp, payload_string):
     return f"BITSTAMP {api_key}POSTwww.bitstamp.net{endpoint}{currency_pair}/{content_type}{nonce}{timestamp}v2{payload_string}"
-
 
 def fetch_order_status(api_key, API_SECRET, order_id):
     url = f"https://www.bitstamp.net/api/v2/order_status/"
@@ -115,18 +119,21 @@ def fetch_order_status(api_key, API_SECRET, order_id):
             f"Error fetching order status. Status Code: {r.status_code}. Message: {r.text}")
         return None
 
-
 def main():
     # Command line arguments
     parser = argparse.ArgumentParser(description='Process Bitstamp orders.')
     parser.add_argument('--order_file', type=str, help='Order file (optional if order details are provided)', default=None)
     parser.add_argument('--order_type', type=str,
-                        help='Type of the order e.g. market-buy, market-sell')
+                        help='Type of the order e.g. market-buy, market-sell, limit-stop-buy')
     parser.add_argument('--currency_pair', type=str,
                         help='Currency pair e.g. btcusd')
     parser.add_argument('--amount', type=float, help='Amount to order')
     parser.add_argument('--price', type=float,
-                        help='Price of the order', default=None)
+                        help='Price of the order (for market orders)', default=None)
+    parser.add_argument('--limit_price', type=float,
+                        help='Limit price for limit stop buy orders (maximum price you're willing to pay)', default=None)
+    parser.add_argument('--trigger_price', type=float,
+                        help='Trigger price for limit stop buy orders (price at which the order is activated)', default=None)
     parser.add_argument('-v', '--verbose',
                         action='store_true', help='Verbose output')
     parser.add_argument('--log_dir', type=str,
@@ -147,6 +154,10 @@ def main():
         }
         if args.price:
             order['price'] = args.price
+        if args.limit_price:
+            order['limit_price'] = args.limit_price
+        if args.trigger_price:
+            order['trigger_price'] = args.trigger_price
     else:
         if args.order_file:
             order = read_order_data(args.order_file)
@@ -233,7 +244,6 @@ def main():
             iteration += 1  # Increment the iteration count
     else:
         logging.info("Order ID not found in response. Can't fetch status.")
-
 
 if __name__ == '__main__':
     main()
