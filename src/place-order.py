@@ -54,8 +54,8 @@ def create_payload(order):
         endpoint = f"/api/v2/{'buy' if order_type in ['market-buy', 'instant-buy'] else 'sell'}/market/"
         price_value = str(order.get('price', '28113'))
         payload = {'amount': str(order['amount']), 'price': price_value}
-    elif order_type == 'limit-stop-buy':
-        endpoint = "/api/v2/buy/stop-order/"
+    elif order_type in ['limit-stop-buy', 'limit-stop-sell']:
+        endpoint = f"/api/v2/{'buy' if order_type == 'limit-stop-buy' else 'sell'}/stop-order/"
         payload = {
             'amount': str(order['amount']),
             'limit_price': str(order['limit_price']),
@@ -124,16 +124,16 @@ def main():
     parser = argparse.ArgumentParser(description='Process Bitstamp orders.')
     parser.add_argument('--order_file', type=str, help='Order file (optional if order details are provided)', default=None)
     parser.add_argument('--order_type', type=str,
-                        help='Type of the order e.g. market-buy, market-sell, limit-stop-buy')
+                        help='Type of the order e.g. market-buy, market-sell, limit-stop-buy, limit-stop-sell')
     parser.add_argument('--currency_pair', type=str,
                         help='Currency pair e.g. btcusd')
     parser.add_argument('--amount', type=float, help='Amount to order')
     parser.add_argument('--price', type=float,
                         help='Price of the order (for market orders)', default=None)
     parser.add_argument('--limit_price', type=float,
-                        help='Limit price for limit stop buy orders (maximum price you're willing to pay)', default=None)
+                        help='Limit price for limit stop orders (price at which the order will be executed)', default=None)
     parser.add_argument('--trigger_price', type=float,
-                        help='Trigger price for limit stop buy orders (price at which the order is activated)', default=None)
+                        help='Trigger price for limit stop orders (price at which the order is activated)', default=None)
     parser.add_argument('-v', '--verbose',
                         action='store_true', help='Verbose output')
     parser.add_argument('--log_dir', type=str,
