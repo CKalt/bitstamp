@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# src/tdr.py
+
 import asyncio
 import websockets
 import json
@@ -11,13 +14,54 @@ import requests
 from collections import deque
 import cmd
 import threading
+from datetime import datetime, timedelta
+
+class CandlestickData:
+    def __init__(self):
+        self.open = None
+        self.high = None
+        self.low = None
+        self.close = None
+        self.volume = 0
+        self.trades = 0
 
 class CryptoDataManager:
     def __init__(self, symbols):
         self.data = {symbol: deque(maxlen=3600) for symbol in symbols}  # Store last hour of data
+        self.candlesticks = {symbol: {} for symbol in symbols}  # Store current candlestick data
+        self.observers = []  # List of functions to call when a candlestick is completed
 
     def add_trade(self, symbol, price, timestamp):
-        self.data[symbol].append((timestamp, float(price)))
+        price = float(price)
+        self.data[symbol].append((timestamp, price))
+        
+        # Update candlestick data
+        minute = timestamp - (timestamp % 60)  # Round down to the nearest minute
+        if minute not in self.candlesticks[symbol]:
+            self.candlesticks[symbol][minute] = CandlestickData()
+        
+        candle = self.candlesticks[symbol][minute]
+        if candle.open is None:
+            candle.open = price
+        candle.high = max(candle.high or price, price)
+        candle.low = min(candle.low or price, price)
+        candle.close = price
+        candle.volume += 1  # Assuming 1 unit per trade, adjust if volume data is available
+        candle.trades += 1
+
+        # Check if the candlestick is complete
+        current_time = int(time.time())
+        if current_time >= minute + 60:
+            self._complete_candlestick(symbol, minute)
+
+    def _complete_candlestick(self, symbol, minute):
+        candle = self.candlesticks[symbol].pop(minute, None)
+        if candle:
+            for observer in self.observers:
+                observer(symbol, minute, candle)
+
+    def add_observer(self, callback):
+        self.observers.append(callback)
 
     def get_current_price(self, symbol):
         if self.data[symbol]:
@@ -115,6 +159,7 @@ class CryptoShell(cmd.Cmd):
         super().__init__()
         self.data_manager = data_manager
         self.order_placer = order_placer
+        self.candlestick_output = {}
 
     def do_price(self, arg):
         """Show current price for a symbol: price <symbol>"""
@@ -159,6 +204,23 @@ class CryptoShell(cmd.Cmd):
         result = self.order_placer.place_order("market-sell", symbol, amount)
         print(json.dumps(result, indent=2))
 
+    def do_candles(self, arg):
+        """Toggle 1-minute candlestick output for a symbol: candles <symbol>"""
+        symbol = arg.strip().lower()
+        if symbol in self.candlestick_output:
+            del self.candlestick_output[symbol]
+            print(f"Stopped 1-minute candlestick output for {symbol}")
+        else:
+            self.candlestick_output[symbol] = True
+            print(f"Started 1-minute candlestick output for {symbol}")
+
+    def candlestick_callback(self, symbol, minute, candle):
+        if symbol in self.candlestick_output:
+            timestamp = datetime.fromtimestamp(minute).strftime('%Y-%m-%d %H:%M:%S')
+            print(f"{symbol} - {timestamp}: Open: ${candle.open:.2f}, High: ${candle.high:.2f}, "
+                  f"Low: ${candle.low:.2f}, Close: ${candle.close:.2f}, "
+                  f"Volume: {candle.volume}, Trades: {candle.trades}")
+
     def do_quit(self, arg):
         """Quit the program"""
         print("Quitting...")
@@ -168,6 +230,9 @@ def main():
     symbols = ["btcusd", "ethusd"]  # Add more symbols as needed
     data_manager = CryptoDataManager(symbols)
     order_placer = OrderPlacer()
+
+    shell = CryptoShell(data_manager, order_placer)
+    data_manager.add_observer(shell.candlestick_callback)
 
     # Start WebSocket connections in a separate thread
     def run_websocket():
@@ -181,7 +246,7 @@ def main():
     websocket_thread.start()
 
     # Start the shell
-    CryptoShell(data_manager, order_placer).cmdloop()
+    shell.cmdloop()
 
 if __name__ == '__main__':
     main()
