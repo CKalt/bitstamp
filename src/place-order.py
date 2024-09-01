@@ -55,7 +55,8 @@ def create_payload(order):
         price_value = str(order.get('price', '28113'))
         payload = {'amount': str(order['amount']), 'price': price_value}
     elif order_type in ['limit-stop-buy', 'limit-stop-sell']:
-        endpoint = f"/api/v2/{'buy' if order_type == 'limit-stop-buy' else 'sell'}/stop-order/"
+        action = 'buy' if order_type == 'limit-stop-buy' else 'sell'
+        endpoint = f"/api/v2/{action}/{order['currency_pair']}/stop-order/"
         payload = {
             'amount': str(order['amount']),
             'limit_price': str(order['limit_price']),
@@ -66,6 +67,7 @@ def create_payload(order):
 
     logging.info(f"Constructed Trade Payload: {json.dumps(payload)}")
     return payload, endpoint
+
 
 def create_message(api_key, endpoint, currency_pair, content_type, nonce, timestamp, payload_string):
     return f"BITSTAMP {api_key}POSTwww.bitstamp.net{endpoint}{currency_pair}/{content_type}{nonce}{timestamp}v2{payload_string}"
