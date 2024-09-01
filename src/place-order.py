@@ -60,14 +60,14 @@ def create_payload(order):
     elif order_type == 'market-sell':
         endpoint = f"/api/v2/sell/market/"
         payload = {'amount': str(order['amount'])}
-    elif order_type == 'stop-limit-buy':
+    elif order_type == 'limit-stop-buy' or order_type == 'stop-limit-buy':
         endpoint = f"/api/v2/buy/stop_limit/"
         payload = {
             'amount': str(order['amount']),
             'price': str(order['price']),
             'stop_price': str(order['stop_price'])
         }
-    elif order_type == 'stop-limit-sell':
+    elif order_type == 'limit-stop-sell' or order_type == 'stop-limit-sell':
         endpoint = f"/api/v2/sell/stop_limit/"
         payload = {
             'amount': str(order['amount']),
