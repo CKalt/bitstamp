@@ -16,6 +16,7 @@ import cmd
 import threading
 from datetime import datetime, timedelta
 
+
 class CandlestickData:
     def __init__(self):
         self.open = None
@@ -25,22 +26,26 @@ class CandlestickData:
         self.volume = 0
         self.trades = 0
 
+
 class CryptoDataManager:
     def __init__(self, symbols, verbose=False):
-        self.data = {symbol: deque(maxlen=3600) for symbol in symbols}  # Store last hour of data
-        self.candlesticks = {symbol: {} for symbol in symbols}  # Store current candlestick data
+        self.data = {symbol: deque(maxlen=3600)
+                     for symbol in symbols}  # Store last hour of data
+        # Store current candlestick data
+        self.candlesticks = {symbol: {} for symbol in symbols}
         self.observers = []  # List of functions to call when a candlestick is completed
         self.verbose = verbose
 
     def add_trade(self, symbol, price, timestamp):
         price = float(price)
         self.data[symbol].append((timestamp, price))
-        
+
         # Update candlestick data
-        minute = timestamp - (timestamp % 60)  # Round down to the nearest minute
+        # Round down to the nearest minute
+        minute = timestamp - (timestamp % 60)
         if minute not in self.candlesticks[symbol]:
             self.candlesticks[symbol][minute] = CandlestickData()
-        
+
         candle = self.candlesticks[symbol][minute]
         if candle.open is None:
             candle.open = price
@@ -71,10 +76,12 @@ class CryptoDataManager:
 
     def get_price_range(self, symbol, minutes):
         now = time.time()
-        relevant_data = [price for ts, price in self.data[symbol] if now - ts <= minutes * 60]
+        relevant_data = [price for ts,
+                         price in self.data[symbol] if now - ts <= minutes * 60]
         if relevant_data:
             return min(relevant_data), max(relevant_data)
         return None, None
+
 
 async def subscribe_to_websocket(url: str, symbol: str, data_manager):
     channel = f"live_trades_{symbol}"
@@ -84,7 +91,7 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
             async with websockets.connect(url) as websocket:
                 if data_manager.verbose:
                     print(f"Connected to WebSocket for {symbol}")
-                
+
                 # Subscribing to the channel.
                 await websocket.send(json.dumps({
                     "event": "bts:subscribe",
@@ -105,12 +112,16 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
 
         except websockets.ConnectionClosed:
             if data_manager.verbose:
-                print(f"{symbol}: Connection closed, trying to reconnect in 5 seconds...")
-            await asyncio.sleep(5)  # Wait for 5 seconds before trying to reconnect
+                print(
+                    f"{symbol}: Connection closed, trying to reconnect in 5 seconds...")
+            # Wait for 5 seconds before trying to reconnect
+            await asyncio.sleep(5)
         except Exception as e:
             if data_manager.verbose:
                 print(f"{symbol}: An error occurred: {str(e)}")
-            await asyncio.sleep(5)  # Wait for 5 seconds before trying to reconnect
+            # Wait for 5 seconds before trying to reconnect
+            await asyncio.sleep(5)
+
 
 class OrderPlacer:
     def __init__(self, config_file='.bitstamp'):
@@ -127,16 +138,17 @@ class OrderPlacer:
         timestamp = str(int(round(time.time() * 1000)))
         nonce = str(uuid.uuid4())
         content_type = 'application/x-www-form-urlencoded'
-        
+
         payload = {'amount': str(amount)}
         if price:
             payload['price'] = str(price)
-        
+
         endpoint = f"/api/v2/{'buy' if 'buy' in order_type else 'sell'}/{'market/' if 'market' in order_type else ''}{currency_pair}/"
-        
+
         message = f"BITSTAMP {self.api_key}POSTwww.bitstamp.net{endpoint}{content_type}{nonce}{timestamp}v2{urlencode(payload)}"
-        signature = hmac.new(self.api_secret, msg=message.encode('utf-8'), digestmod=hashlib.sha256).hexdigest()
-        
+        signature = hmac.new(self.api_secret, msg=message.encode(
+            'utf-8'), digestmod=hashlib.sha256).hexdigest()
+
         headers = {
             'X-Auth': f'BITSTAMP {self.api_key}',
             'X-Auth-Signature': signature,
@@ -145,14 +157,15 @@ class OrderPlacer:
             'X-Auth-Version': 'v2',
             'Content-Type': content_type
         }
-        
+
         url = f"https://www.bitstamp.net{endpoint}"
         r = requests.post(url, headers=headers, data=urlencode(payload))
-        
+
         if r.status_code == 200:
             return json.loads(r.content.decode('utf-8'))
         else:
             return f"Error: {r.status_code} - {r.text}"
+
 
 class CryptoShell(cmd.Cmd):
     intro = 'Welcome to the Crypto Shell. Type help or ? to list commands.\n'
@@ -181,12 +194,14 @@ class CryptoShell(cmd.Cmd):
             print("Usage: range <symbol> <minutes>")
             return
         symbol, minutes = args[0].lower(), int(args[1])
-        min_price, max_price = self.data_manager.get_price_range(symbol, minutes)
+        min_price, max_price = self.data_manager.get_price_range(
+            symbol, minutes)
         if min_price and max_price:
             print(f"Price range for {symbol} in last {minutes} minutes:")
             print(f"Min: ${min_price:.2f}, Max: ${max_price:.2f}")
         else:
-            print(f"No data available for {symbol} in the last {minutes} minutes")
+            print(
+                f"No data available for {symbol} in the last {minutes} minutes")
 
     def do_buy(self, arg):
         """Place a market buy order: buy <symbol> <amount>"""
@@ -220,7 +235,8 @@ class CryptoShell(cmd.Cmd):
 
     def candlestick_callback(self, symbol, minute, candle):
         if symbol in self.candlestick_output:
-            timestamp = datetime.fromtimestamp(minute).strftime('%Y-%m-%d %H:%M:%S')
+            timestamp = datetime.fromtimestamp(
+                minute).strftime('%Y-%m-%d %H:%M:%S')
             print(f"{symbol} - {timestamp}: Open: ${candle.open:.2f}, High: ${candle.high:.2f}, "
                   f"Low: ${candle.low:.2f}, Close: ${candle.close:.2f}, "
                   f"Volume: {candle.volume}, Trades: {candle.trades}")
@@ -236,22 +252,27 @@ class CryptoShell(cmd.Cmd):
             self.data_manager.verbose = False
             print("Verbose mode turned off")
         else:
-            print(f"Current verbose setting: {'on' if self.verbose else 'off'}")
+            print(
+                f"Current verbose setting: {'on' if self.verbose else 'off'}")
 
     def do_quit(self, arg):
         """Quit the program"""
         print("Quitting...")
         return True
 
+
 def run_websocket(url, symbols, data_manager):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    tasks = [subscribe_to_websocket(url, symbol, data_manager) for symbol in symbols]
+    tasks = [subscribe_to_websocket(url, symbol, data_manager)
+             for symbol in symbols]
     loop.run_until_complete(asyncio.gather(*tasks))
+
 
 def main():
     parser = argparse.ArgumentParser(description="Crypto trading shell")
-    parser.add_argument('-v', '--verbose', action='store_true', help="Enable verbose output")
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help="Enable verbose output")
     args = parser.parse_args()
 
     symbols = ["btcusd", "ethusd"]  # Add more symbols as needed
@@ -263,7 +284,8 @@ def main():
 
     # Start WebSocket connections in a separate thread
     url = 'wss://ws.bitstamp.net'
-    websocket_thread = threading.Thread(target=run_websocket, args=(url, symbols, data_manager), daemon=True)
+    websocket_thread = threading.Thread(
+        target=run_websocket, args=(url, symbols, data_manager), daemon=True)
     websocket_thread.start()
 
     # Start the shell
