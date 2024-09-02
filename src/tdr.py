@@ -167,7 +167,7 @@ class OrderPlacer:
         with open(file_name, 'r') as f:
             return json.load(f)
 
-    def place_order(self, order_type, currency_pair, amount, price=None):
+    def place_order(self, order_type, currency_pair, amount, price=None, **kwargs):
         timestamp = str(int(round(time.time() * 1000)))
         nonce = str(uuid.uuid4())
         content_type = 'application/x-www-form-urlencoded'
@@ -175,12 +175,19 @@ class OrderPlacer:
         payload = {'amount': str(amount)}
         if price:
             payload['price'] = str(price)
+        
+        # Add additional parameters for limit orders
+        for key, value in kwargs.items():
+            if value is not None:
+                payload[key] = str(value).lower() if isinstance(value, bool) else str(value)
 
-        endpoint = f"/api/v2/{'buy' if 'buy' in order_type else 'sell'}/{'market/' if 'market' in order_type else ''}{currency_pair}/"
+        if 'market' in order_type:
+            endpoint = f"/api/v2/{'buy' if 'buy' in order_type else 'sell'}/market/{currency_pair}/"
+        else:
+            endpoint = f"/api/v2/{'buy' if 'buy' in order_type else 'sell'}/{currency_pair}/"
 
         message = f"BITSTAMP {self.api_key}POSTwww.bitstamp.net{endpoint}{content_type}{nonce}{timestamp}v2{urlencode(payload)}"
-        signature = hmac.new(self.api_secret, msg=message.encode(
-            'utf-8'), digestmod=hashlib.sha256).hexdigest()
+        signature = hmac.new(self.api_secret, msg=message.encode('utf-8'), digestmod=hashlib.sha256).hexdigest()
 
         headers = {
             'X-Auth': f'BITSTAMP {self.api_key}',
@@ -198,6 +205,12 @@ class OrderPlacer:
             return json.loads(r.content.decode('utf-8'))
         else:
             return f"Error: {r.status_code} - {r.text}"
+
+    def place_limit_buy_order(self, currency_pair, amount, price, **kwargs):
+        return self.place_order('buy', currency_pair, amount, price, **kwargs)
+
+    def place_limit_sell_order(self, currency_pair, amount, price, **kwargs):
+        return self.place_order('sell', currency_pair, amount, price, **kwargs)
 
 
 class CryptoShell(cmd.Cmd):
