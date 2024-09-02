@@ -75,39 +75,37 @@ class CryptoDataManager:
             return min(relevant_data), max(relevant_data)
         return None, None
 
-async def subscribe_to_websocket(url, symbol, data_manager):
+async def subscribe_to_websocket(url: str, symbol: str, data_manager):
     channel = f"live_trades_{symbol}"
-    while True:
+
+    while True:  # Keep trying to reconnect
         try:
             async with websockets.connect(url) as websocket:
                 print(f"Connected to WebSocket for {symbol}")
+                
+                # Subscribing to the channel.
                 await websocket.send(json.dumps({
                     "event": "bts:subscribe",
-                    "data": {"channel": channel}
+                    "data": {
+                        "channel": channel
+                    }
                 }))
-                while True:
-                    try:
-                        message = await asyncio.wait_for(websocket.recv(), timeout=30)
-                        data = json.loads(message)
-                        if data['event'] == 'trade':
-                            price = data['data']['price']
-                            timestamp = data['data']['timestamp']
-                            data_manager.add_trade(symbol, price, timestamp)
-                    except asyncio.TimeoutError:
-                        try:
-                            pong = await websocket.ping()
-                            await asyncio.wait_for(pong, timeout=10)
-                            print(f"Ping successful for {symbol}, connection still alive")
-                        except asyncio.TimeoutError:
-                            print(f"Ping timeout for {symbol}, reconnecting...")
-                            break
-                    except websockets.ConnectionClosed:
-                        print(f"WebSocket connection closed for {symbol}, reconnecting...")
-                        break
+
+                # Receiving messages.
+                async for message in websocket:
+                    print(f"{symbol}: {message}")
+                    data = json.loads(message)
+                    if data['event'] == 'trade':
+                        price = data['data']['price']
+                        timestamp = data['data']['timestamp']
+                        data_manager.add_trade(symbol, price, timestamp)
+
+        except websockets.ConnectionClosed:
+            print(f"{symbol}: Connection closed, trying to reconnect in 5 seconds...")
+            time.sleep(5)  # Wait for 5 seconds before trying to reconnect
         except Exception as e:
-            print(f"WebSocket error for {symbol}: {e}")
-        print(f"Attempting to reconnect to WebSocket for {symbol} in 5 seconds...")
-        await asyncio.sleep(5)
+            print(f"{symbol}: An error occurred: {e}")
+            time.sleep(5)  # Wait for 5 seconds before trying to reconnect
 
 class OrderPlacer:
     def __init__(self, config_file='.bitstamp'):
@@ -226,6 +224,12 @@ class CryptoShell(cmd.Cmd):
         print("Quitting...")
         return True
 
+def run_websocket(url, symbols, data_manager):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    tasks = [subscribe_to_websocket(url, symbol, data_manager) for symbol in symbols]
+    loop.run_until_complete(asyncio.gather(*tasks))
+
 def main():
     symbols = ["btcusd", "ethusd"]  # Add more symbols as needed
     data_manager = CryptoDataManager(symbols)
@@ -235,14 +239,8 @@ def main():
     data_manager.add_observer(shell.candlestick_callback)
 
     # Start WebSocket connections in a separate thread
-    def run_websocket():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        url = 'wss://ws.bitstamp.net'
-        tasks = [subscribe_to_websocket(url, symbol, data_manager) for symbol in symbols]
-        loop.run_until_complete(asyncio.gather(*tasks))
-
-    websocket_thread = threading.Thread(target=run_websocket, daemon=True)
+    url = 'wss://ws.bitstamp.net'
+    websocket_thread = threading.Thread(target=run_websocket, args=(url, symbols, data_manager), daemon=True)
     websocket_thread.start()
 
     # Start the shell
