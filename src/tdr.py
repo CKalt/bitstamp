@@ -29,30 +29,30 @@ class CandlestickData:
 
 class CryptoDataManager:
     def __init__(self, symbols, verbose=False):
-        self.data = {symbol: deque(maxlen=3600)
-                     for symbol in symbols}  # Store last hour of data
-        # Store current candlestick data
-        self.candlesticks = {symbol: {} for symbol in symbols}
+        self.data = {symbol: deque(maxlen=3600) for symbol in symbols}  # Store last hour of data
+        self.candlesticks = {symbol: {} for symbol in symbols}  # Store current candlestick data
         self.observers = []  # List of functions to call when a candlestick is completed
         self.verbose = verbose
+        self.last_candle_time = {symbol: None for symbol in symbols}
+        self.last_price = {symbol: None for symbol in symbols}
 
     def add_trade(self, symbol, price, timestamp):
         price = float(price)
         self.data[symbol].append((timestamp, price))
-
+        self.last_price[symbol] = price
+        
         # Update candlestick data
-        # Round down to the nearest minute
-        minute = timestamp - (timestamp % 60)
+        minute = timestamp - (timestamp % 60)  # Round down to the nearest minute
         if minute not in self.candlesticks[symbol]:
             self.candlesticks[symbol][minute] = CandlestickData()
-
+        
         candle = self.candlesticks[symbol][minute]
         if candle.open is None:
             candle.open = price
         candle.high = max(candle.high or price, price)
         candle.low = min(candle.low or price, price)
         candle.close = price
-        candle.volume += 1  # Assuming 1 unit per trade, adjust if volume data is available
+        candle.volume += 1
         candle.trades += 1
 
         # Check if the candlestick is complete
@@ -65,6 +65,23 @@ class CryptoDataManager:
         if candle:
             for observer in self.observers:
                 observer(symbol, minute, candle)
+            self.last_candle_time[symbol] = minute
+
+    def force_update_candlesticks(self):
+        current_time = int(time.time())
+        current_minute = current_time - (current_time % 60)
+        for symbol in self.candlesticks:
+            if self.last_candle_time[symbol] is None or current_minute > self.last_candle_time[symbol] + 60:
+                last_complete_minute = self.last_candle_time[symbol] if self.last_candle_time[symbol] is not None else current_minute - 120
+                for minute in range(last_complete_minute + 60, current_minute, 60):
+                    if minute not in self.candlesticks[symbol]:
+                        # Create a zero-trade candlestick
+                        zero_candle = CandlestickData()
+                        if self.last_price[symbol] is not None:
+                            zero_candle.open = zero_candle.high = zero_candle.low = zero_candle.close = self.last_price[symbol]
+                        self._complete_candlestick(symbol, minute)
+                    else:
+                        self._complete_candlestick(symbol, minute)
 
     def add_observer(self, callback):
         self.observers.append(callback)
@@ -81,6 +98,17 @@ class CryptoDataManager:
         if relevant_data:
             return min(relevant_data), max(relevant_data)
         return None, None
+
+    def force_update_candlesticks(self):
+        current_time = int(time.time())
+        current_minute = current_time - (current_time % 60)
+        for symbol in self.candlesticks:
+            if self.last_candle_time[symbol] is None or current_minute > self.last_candle_time[symbol] + 60:
+                if current_minute - 60 in self.candlesticks[symbol]:
+                    self._complete_candlestick(symbol, current_minute - 60)
+                elif self.candlesticks[symbol]:
+                    last_candle_minute = max(self.candlesticks[symbol].keys())
+                    self._complete_candlestick(symbol, last_candle_minute)
 
 
 async def subscribe_to_websocket(url: str, symbol: str, data_manager):
@@ -268,6 +296,10 @@ def run_websocket(url, symbols, data_manager):
              for symbol in symbols]
     loop.run_until_complete(asyncio.gather(*tasks))
 
+def candlestick_timer(data_manager):
+    while True:
+        time.sleep(60)  # Wait for 60 seconds
+        data_manager.force_update_candlesticks()
 
 def main():
     parser = argparse.ArgumentParser(description="Crypto trading shell")
@@ -287,6 +319,11 @@ def main():
     websocket_thread = threading.Thread(
         target=run_websocket, args=(url, symbols, data_manager), daemon=True)
     websocket_thread.start()
+
+    # Start candlestick timer in a separate thread
+    timer_thread = threading.Thread(
+        target=candlestick_timer, args=(data_manager,), daemon=True)
+    timer_thread.start()
 
     # Start the shell
     shell.cmdloop()
