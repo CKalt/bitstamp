@@ -46,6 +46,9 @@ class CryptoDataManager:
     def add_trade_observer(self, callback):
         self.trade_observers.append(callback)
 
+    def set_verbose(self, verbose):
+        self.verbose = verbose
+
     def add_trade(self, symbol, price, timestamp):
         price = float(price)
         self.data[symbol].append((timestamp, price))
@@ -121,6 +124,7 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
 
     while True:  # Keep trying to reconnect
         try:
+            data_manager.logger.debug(f"Attempting to connect to WebSocket for {symbol}...")
             async with websockets.connect(url) as websocket:
                 data_manager.logger.debug(f"Connected to WebSocket for {symbol}")
 
@@ -342,31 +346,36 @@ class CryptoShell(cmd.Cmd):
             # If no logfile is provided, default to stderr and set DEBUG level
             if not self.verbose:
                 self.logger.setLevel(logging.DEBUG)
-                # Add a DEBUG StreamHandler if not already present
-                if not any([isinstance(h, logging.StreamHandler) and h.level == logging.DEBUG for h in self.logger.handlers]):
+                # Check if a DEBUG StreamHandler is already present to avoid duplicates
+                debug_handlers = [
+                    h for h in self.logger.handlers
+                    if isinstance(h, logging.StreamHandler) and h.level == logging.DEBUG
+                ]
+                if not debug_handlers:
                     debug_stream_handler = logging.StreamHandler(sys.stderr)
                     debug_stream_handler.setLevel(logging.DEBUG)
                     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
                     debug_stream_handler.setFormatter(formatter)
                     self.logger.addHandler(debug_stream_handler)
+                self.data_manager.set_verbose(True)
                 self.verbose = True
                 print("Verbose mode enabled. Logs are being printed to stderr.")
             else:
-                # If verbose is already enabled, perhaps provide feedback
                 print("Verbose mode is already enabled.")
         else:
             log_file = arg
-            # Remove existing file handlers
+            # Remove existing FileHandlers to prevent duplicates
             for handler in self.logger.handlers[:]:
                 if isinstance(handler, logging.FileHandler):
                     self.logger.removeHandler(handler)
-            # Add file handler
+            # Add FileHandler for verbose logs
             try:
                 file_handler = logging.FileHandler(log_file)
                 file_handler.setLevel(logging.DEBUG)
                 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
                 file_handler.setFormatter(formatter)
                 self.logger.addHandler(file_handler)
+                self.data_manager.set_verbose(True)
                 self.verbose = True
                 print(f"Verbose mode enabled. Logs are being written to {log_file}.")
             except Exception as e:
