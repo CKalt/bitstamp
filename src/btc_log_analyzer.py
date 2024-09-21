@@ -283,6 +283,17 @@ def run_trading_system(df):
     macd_trades.to_csv('macd_trades.csv', index=False)
     print("MACD trades saved to 'macd_trades.csv'")
 
+    # Print detailed results for each strategy
+    print("\nDetailed Strategy Results:")
+    print("MA Crossover:")
+    print(best_ma)
+    print("\nRSI:")
+    print(best_rsi)
+    print("\nBollinger Bands:")
+    print(best_bb)
+    print("\nMACD:")
+    print(best_macd)
+
     # Strategy Comparison
     print("\nStrategy Comparison:")
     comparison = pd.DataFrame({
@@ -291,11 +302,22 @@ def run_trading_system(df):
         'Bollinger Bands': best_bb,
         'MACD': best_macd
     }).T
-    print(comparison[['Total_Return', 'Sharpe_Ratio', 'Profit_Factor', 'Total_Trades']])
 
-    # Determine the best overall strategy
-    best_strategy = comparison['Total_Return'].idxmax()
-    print(f"\nBest overall strategy: {best_strategy}")
+    print("\nComparison DataFrame Types:")
+    print(comparison.dtypes)
+
+    print("\nComparison DataFrame Values:")
+    print(comparison)
+
+    # Attempt to find the best strategy
+    try:
+        best_strategy = comparison['Total_Return'].idxmax()
+        print(f"\nBest overall strategy: {best_strategy}")
+    except TypeError as e:
+        print(f"\nError in determining best strategy: {e}")
+        print("Individual 'Total_Return' values:")
+        for strategy, row in comparison.iterrows():
+            print(f"{strategy}: {row['Total_Return']} (type: {type(row['Total_Return'])})")
 
     # Combine results
     all_results = pd.concat([ma_results, rsi_results, bb_results, macd_results])
