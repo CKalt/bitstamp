@@ -1,4 +1,4 @@
-#!env/bin/python
+#!/env/bin/python
 # src/tdr.py
 
 import asyncio
@@ -29,14 +29,19 @@ class CandlestickData:
 
 class CryptoDataManager:
     def __init__(self, symbols, verbose=False):
-        self.data = {symbol: deque(maxlen=3600)
-                     for symbol in symbols}  # Store last hour of data
-        # Store current candlestick data
+        self.data = {symbol: deque(maxlen=3600) for symbol in symbols}  # Store last hour of data
         self.candlesticks = {symbol: {} for symbol in symbols}
-        self.observers = []  # List of functions to call when a candlestick is completed
+        self.candlestick_observers = []  # Observers for candlestick completion
+        self.trade_observers = []        # Observers for each trade
         self.verbose = verbose
         self.last_candle_time = {symbol: None for symbol in symbols}
         self.last_price = {symbol: None for symbol in symbols}
+
+    def add_candlestick_observer(self, callback):
+        self.candlestick_observers.append(callback)
+
+    def add_trade_observer(self, callback):
+        self.trade_observers.append(callback)
 
     def add_trade(self, symbol, price, timestamp):
         price = float(price)
@@ -44,7 +49,6 @@ class CryptoDataManager:
         self.last_price[symbol] = price
 
         # Update candlestick data
-        # Round down to the nearest minute
         minute = timestamp - (timestamp % 60)
         if minute not in self.candlesticks[symbol]:
             self.candlesticks[symbol][minute] = CandlestickData()
@@ -58,6 +62,10 @@ class CryptoDataManager:
         candle.volume += 1
         candle.trades += 1
 
+        # Notify trade observers
+        for observer in self.trade_observers:
+            observer(symbol, price, timestamp)
+
         # Check if the candlestick is complete
         current_time = int(time.time())
         if current_time >= minute + 60:
@@ -66,7 +74,10 @@ class CryptoDataManager:
     def _complete_candlestick(self, symbol, minute):
         candle = self.candlesticks[symbol].pop(minute, None)
         if candle:
-            for observer in self.observers:
+            if self.verbose:
+                readable_time = datetime.fromtimestamp(minute).strftime('%Y-%m-%d %H:%M:%S')
+                print(f"[DataManager] Completing candlestick for {symbol} at {readable_time}")
+            for observer in self.candlestick_observers:
                 observer(symbol, minute, candle)
             self.last_candle_time[symbol] = minute
 
@@ -75,21 +86,19 @@ class CryptoDataManager:
         current_minute = current_time - (current_time % 60)
         for symbol in self.candlesticks:
             if self.last_candle_time[symbol] is None or current_minute > self.last_candle_time[symbol] + 60:
-                last_complete_minute = self.last_candle_time[symbol] if self.last_candle_time[
-                    symbol] is not None else current_minute - 120
+                last_complete_minute = self.last_candle_time[symbol] if self.last_candle_time[symbol] is not None else current_minute - 120
                 for minute in range(last_complete_minute + 60, current_minute, 60):
                     if minute not in self.candlesticks[symbol]:
                         # Create a zero-trade candlestick
                         zero_candle = CandlestickData()
                         if self.last_price[symbol] is not None:
-                            zero_candle.open = zero_candle.high = zero_candle.low = zero_candle.close = self.last_price[
-                                symbol]
+                            zero_candle.open = zero_candle.high = zero_candle.low = zero_candle.close = self.last_price[symbol]
                         self._complete_candlestick(symbol, minute)
                     else:
                         self._complete_candlestick(symbol, minute)
 
     def add_observer(self, callback):
-        self.observers.append(callback)
+        self.candlestick_observers.append(callback)
 
     def get_current_price(self, symbol):
         if self.data[symbol]:
@@ -98,8 +107,7 @@ class CryptoDataManager:
 
     def get_price_range(self, symbol, minutes):
         now = time.time()
-        relevant_data = [price for ts,
-                         price in self.data[symbol] if now - ts <= minutes * 60]
+        relevant_data = [price for ts, price in self.data[symbol] if now - ts <= minutes * 60]
         if relevant_data:
             return min(relevant_data), max(relevant_data)
         return None, None
@@ -115,27 +123,31 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
                     print(f"Connected to WebSocket for {symbol}")
 
                 # Subscribing to the channel.
-                await websocket.send(json.dumps({
+                subscribe_message = {
                     "event": "bts:subscribe",
                     "data": {
                         "channel": channel
                     }
-                }))
+                }
+                await websocket.send(json.dumps(subscribe_message))
+                if data_manager.verbose:
+                    print(f"Subscribed to channel: {channel}")
 
                 # Receiving messages.
                 async for message in websocket:
                     if data_manager.verbose:
                         print(f"{symbol}: {message}")
                     data = json.loads(message)
-                    if data['event'] == 'trade':
+                    if data.get('event') == 'trade':
                         price = data['data']['price']
                         timestamp = int(data['data']['timestamp'])
+                        # Adjust timestamp if necessary (e.g., if in milliseconds)
+                        # timestamp = timestamp // 1000  # Uncomment if timestamp is in milliseconds
                         data_manager.add_trade(symbol, price, timestamp)
 
         except websockets.ConnectionClosed:
             if data_manager.verbose:
-                print(
-                    f"{symbol}: Connection closed, trying to reconnect in 5 seconds...")
+                print(f"{symbol}: Connection closed, trying to reconnect in 5 seconds...")
             # Wait for 5 seconds before trying to reconnect
             await asyncio.sleep(5)
         except Exception as e:
@@ -164,12 +176,11 @@ class OrderPlacer:
         payload = {'amount': str(amount)}
         if price:
             payload['price'] = str(price)
-
+        
         # Add additional parameters for limit orders
         for key, value in kwargs.items():
             if value is not None:
-                payload[key] = str(value).lower() if isinstance(
-                    value, bool) else str(value)
+                payload[key] = str(value).lower() if isinstance(value, bool) else str(value)
 
         if 'market' in order_type:
             endpoint = f"/api/v2/{'buy' if 'buy' in order_type else 'sell'}/market/{currency_pair}/"
@@ -177,8 +188,7 @@ class OrderPlacer:
             endpoint = f"/api/v2/{'buy' if 'buy' in order_type else 'sell'}/{currency_pair}/"
 
         message = f"BITSTAMP {self.api_key}POSTwww.bitstamp.net{endpoint}{content_type}{nonce}{timestamp}v2{urlencode(payload)}"
-        signature = hmac.new(self.api_secret, msg=message.encode(
-            'utf-8'), digestmod=hashlib.sha256).hexdigest()
+        signature = hmac.new(self.api_secret, msg=message.encode('utf-8'), digestmod=hashlib.sha256).hexdigest()
 
         headers = {
             'X-Auth': f'BITSTAMP {self.api_key}',
@@ -213,6 +223,7 @@ class CryptoShell(cmd.Cmd):
         self.data_manager = data_manager
         self.order_placer = order_placer
         self.candlestick_output = {}
+        self.ticker_output = {}
         self.verbose = verbose
         self.examples = {
             'price': 'price btcusd',
@@ -220,11 +231,16 @@ class CryptoShell(cmd.Cmd):
             'buy': 'buy btcusd 0.001',
             'sell': 'sell btcusd 0.001',
             'candles': 'candles btcusd',
+            'ticker': 'ticker btcusd',
             'verbose': 'verbose on',
             'example': 'example price',
             'limit_buy': 'limit_buy btcusd 0.001 50000 daily_order=true',
             'limit_sell': 'limit_sell btcusd 0.001 60000 ioc_order=true'
         }
+
+        # Register callbacks
+        self.data_manager.add_candlestick_observer(self.candlestick_callback)
+        self.data_manager.add_trade_observer(self.trade_callback)
 
     def do_example(self, arg):
         """Show an example of how to use a command: example <command>"""
@@ -253,14 +269,12 @@ class CryptoShell(cmd.Cmd):
             print("Usage: range <symbol> <minutes>")
             return
         symbol, minutes = args[0].lower(), int(args[1])
-        min_price, max_price = self.data_manager.get_price_range(
-            symbol, minutes)
-        if min_price and max_price:
+        min_price, max_price = self.data_manager.get_price_range(symbol, minutes)
+        if min_price is not None and max_price is not None:
             print(f"Price range for {symbol} in last {minutes} minutes:")
             print(f"Min: ${min_price:.2f}, Max: ${max_price:.2f}")
         else:
-            print(
-                f"No data available for {symbol} in the last {minutes} minutes")
+            print(f"No data available for {symbol} in the last {minutes} minutes")
 
     def do_buy(self, arg):
         """Place a market buy order: buy <symbol> <amount>"""
@@ -285,6 +299,9 @@ class CryptoShell(cmd.Cmd):
     def do_candles(self, arg):
         """Toggle 1-minute candlestick output for a symbol: candles <symbol>"""
         symbol = arg.strip().lower()
+        if not symbol:
+            print("Usage: candles <symbol>")
+            return
         if symbol in self.candlestick_output:
             del self.candlestick_output[symbol]
             print(f"Stopped 1-minute candlestick output for {symbol}")
@@ -292,27 +309,44 @@ class CryptoShell(cmd.Cmd):
             self.candlestick_output[symbol] = True
             print(f"Started 1-minute candlestick output for {symbol}")
 
+    def do_ticker(self, arg):
+        """Toggle real-time trade output for a symbol: ticker <symbol>"""
+        symbol = arg.strip().lower()
+        if not symbol:
+            print("Usage: ticker <symbol>")
+            return
+        if symbol in self.ticker_output:
+            del self.ticker_output[symbol]
+            print(f"Stopped real-time trade output for {symbol}")
+        else:
+            self.ticker_output[symbol] = True
+            print(f"Started real-time trade output for {symbol}")
+
     def candlestick_callback(self, symbol, minute, candle):
         if symbol in self.candlestick_output:
-            timestamp = datetime.fromtimestamp(
-                minute).strftime('%Y-%m-%d %H:%M:%S')
+            timestamp = datetime.fromtimestamp(minute).strftime('%Y-%m-%d %H:%M:%S')
             print(f"{symbol} - {timestamp}: Open: ${candle.open:.2f}, High: ${candle.high:.2f}, "
                   f"Low: ${candle.low:.2f}, Close: ${candle.close:.2f}, "
                   f"Volume: {candle.volume}, Trades: {candle.trades}")
 
+    def trade_callback(self, symbol, price, timestamp):
+        if symbol in self.ticker_output:
+            time_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+            print(f"{symbol} - {time_str}: Price: ${price:.2f}")
+
     def do_verbose(self, arg):
         """Toggle verbose mode: verbose [on|off]"""
-        if arg.lower() in ('on', 'true', '1'):
+        arg = arg.strip().lower()
+        if arg in ('on', 'true', '1'):
             self.verbose = True
             self.data_manager.verbose = True
             print("Verbose mode turned on")
-        elif arg.lower() in ('off', 'false', '0'):
+        elif arg in ('off', 'false', '0'):
             self.verbose = False
             self.data_manager.verbose = False
             print("Verbose mode turned off")
         else:
-            print(
-                f"Current verbose setting: {'on' if self.verbose else 'off'}")
+            print(f"Current verbose setting: {'on' if self.verbose else 'off'}")
 
     def do_limit_buy(self, arg):
         """Place a limit buy order: limit_buy <symbol> <amount> <price> [options]"""
@@ -322,8 +356,7 @@ class CryptoShell(cmd.Cmd):
             return
         symbol, amount, price = args[0].lower(), float(args[1]), float(args[2])
         options = self.parse_order_options(args[3:])
-        result = self.order_placer.place_limit_buy_order(
-            symbol, amount, price, **options)
+        result = self.order_placer.place_limit_buy_order(symbol, amount, price, **options)
         print(json.dumps(result, indent=2))
 
     def do_limit_sell(self, arg):
@@ -334,23 +367,28 @@ class CryptoShell(cmd.Cmd):
             return
         symbol, amount, price = args[0].lower(), float(args[1]), float(args[2])
         options = self.parse_order_options(args[3:])
-        result = self.order_placer.place_limit_sell_order(
-            symbol, amount, price, **options)
+        result = self.order_placer.place_limit_sell_order(symbol, amount, price, **options)
         print(json.dumps(result, indent=2))
 
     def parse_order_options(self, args):
         options = {}
         for arg in args:
             if '=' in arg:
-                key, value = arg.split('=')
+                key, value = arg.split('=', 1)
                 if key in ['daily_order', 'ioc_order', 'fok_order', 'moc_order', 'gtd_order']:
                     options[key] = value.lower() == 'true'
                 elif key == 'expire_time':
-                    options[key] = int(value)
+                    try:
+                        options[key] = int(value)
+                    except ValueError:
+                        print(f"Invalid value for {key}: {value}. It should be an integer.")
                 elif key == 'client_order_id':
                     options[key] = value
                 elif key == 'limit_price':
-                    options[key] = float(value)
+                    try:
+                        options[key] = float(value)
+                    except ValueError:
+                        print(f"Invalid value for {key}: {value}. It should be a float.")
         return options
 
     def do_quit(self, arg):
@@ -362,14 +400,15 @@ class CryptoShell(cmd.Cmd):
 def run_websocket(url, symbols, data_manager):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    tasks = [subscribe_to_websocket(url, symbol, data_manager)
-             for symbol in symbols]
+    tasks = [subscribe_to_websocket(url, symbol, data_manager) for symbol in symbols]
     loop.run_until_complete(asyncio.gather(*tasks))
 
 
 def candlestick_timer(data_manager):
     while True:
         time.sleep(60)  # Wait for 60 seconds
+        if data_manager.verbose:
+            print("[Timer] Triggering force_update_candlesticks()")
         data_manager.force_update_candlesticks()
 
 
@@ -384,7 +423,6 @@ def main():
     order_placer = OrderPlacer()
 
     shell = CryptoShell(data_manager, order_placer, verbose=args.verbose)
-    data_manager.add_observer(shell.candlestick_callback)
 
     # Start WebSocket connections in a separate thread
     url = 'wss://ws.bitstamp.net'
@@ -398,7 +436,10 @@ def main():
     timer_thread.start()
 
     # Start the shell
-    shell.cmdloop()
+    try:
+        shell.cmdloop()
+    except KeyboardInterrupt:
+        print("\nInterrupted. Exiting...")
 
 
 if __name__ == '__main__':
