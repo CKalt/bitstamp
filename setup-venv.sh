@@ -53,3 +53,4 @@ echo_info "Installed Python packages:"
 pip list
 
 echo_success "Virtual environment setup complete!"
+

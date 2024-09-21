@@ -231,7 +231,6 @@ class CryptoShell(cmd.Cmd):
             'sell': 'sell btcusd 0.001',
             'candles': 'candles btcusd',
             'ticker': 'ticker btcusd',
-            'verbose': 'verbose on',
             'example': 'example price',
             'limit_buy': 'limit_buy btcusd 0.001 50000 daily_order=true',
             'limit_sell': 'limit_sell btcusd 0.001 60000 ioc_order=true'
@@ -337,17 +336,30 @@ class CryptoShell(cmd.Cmd):
             print(f"{symbol} - {time_str}: Price: ${price:.2f}")
 
     def do_verbose(self, arg):
-        """Toggle verbose mode and optionally specify a log file: verbose [logfile]"""
+        """Enable verbose mode and optionally specify a log file: verbose [logfile]"""
         arg = arg.strip()
         if not arg:
-            # If no logfile is provided, default to stderr
-            self.logger.setLevel(logging.DEBUG)
-            print("Verbose mode enabled. Logs are being printed to stderr.")
+            # If no logfile is provided, default to stderr and set DEBUG level
+            if not self.verbose:
+                self.logger.setLevel(logging.DEBUG)
+                # Add a DEBUG StreamHandler if not already present
+                if not any([isinstance(h, logging.StreamHandler) and h.level == logging.DEBUG for h in self.logger.handlers]):
+                    debug_stream_handler = logging.StreamHandler(sys.stderr)
+                    debug_stream_handler.setLevel(logging.DEBUG)
+                    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+                    debug_stream_handler.setFormatter(formatter)
+                    self.logger.addHandler(debug_stream_handler)
+                self.verbose = True
+                print("Verbose mode enabled. Logs are being printed to stderr.")
+            else:
+                # If verbose is already enabled, perhaps provide feedback
+                print("Verbose mode is already enabled.")
         else:
             log_file = arg
-            # Remove existing handlers
+            # Remove existing file handlers
             for handler in self.logger.handlers[:]:
-                self.logger.removeHandler(handler)
+                if isinstance(handler, logging.FileHandler):
+                    self.logger.removeHandler(handler)
             # Add file handler
             try:
                 file_handler = logging.FileHandler(log_file)
@@ -355,6 +367,7 @@ class CryptoShell(cmd.Cmd):
                 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
                 file_handler.setFormatter(formatter)
                 self.logger.addHandler(file_handler)
+                self.verbose = True
                 print(f"Verbose mode enabled. Logs are being written to {log_file}.")
             except Exception as e:
                 print(f"Failed to open log file {log_file}: {e}")
@@ -432,6 +445,12 @@ def setup_logging(verbose, log_file=None):
     logger.setLevel(logging.DEBUG if verbose else logging.WARNING)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
+    # Always add a StreamHandler for WARNING and above
+    stream_handler = logging.StreamHandler(sys.stderr)
+    stream_handler.setLevel(logging.WARNING)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+
     if log_file:
         # File handler for verbose logs
         try:
@@ -444,10 +463,10 @@ def setup_logging(verbose, log_file=None):
             sys.exit(1)
     elif verbose:
         # Stream handler (stderr) for verbose logs
-        stream_handler = logging.StreamHandler()
-        stream_handler.setLevel(logging.DEBUG)
-        stream_handler.setFormatter(formatter)
-        logger.addHandler(stream_handler)
+        debug_stream_handler = logging.StreamHandler(sys.stderr)
+        debug_stream_handler.setLevel(logging.DEBUG)
+        debug_stream_handler.setFormatter(formatter)
+        logger.addHandler(debug_stream_handler)
 
     return logger
 
