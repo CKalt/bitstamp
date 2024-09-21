@@ -1,9 +1,9 @@
 import json
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 import os
-import numpy as np
 
 def parse_log_file(file_path):
     data = []
@@ -77,14 +77,48 @@ def generate_rsi_signals(df, overbought=70, oversold=30):
     df.loc[df['RSI'] > overbought, 'RSI_Signal'] = -1
     return df
 
-def backtest(df, strategy, initial_balance=10000, position_size=0.1):
+def calculate_bollinger_bands(df, window=20, num_std=2):
+    df['BB_MA'] = df['price'].rolling(window=window).mean()
+    df['BB_STD'] = df['price'].rolling(window=window).std()
+    df['BB_Upper'] = df['BB_MA'] + (df['BB_STD'] * num_std)
+    df['BB_Lower'] = df['BB_MA'] - (df['BB_STD'] * num_std)
+    return df
+
+def generate_bollinger_band_signals(df):
+    df['BB_Signal'] = 0
+    df.loc[df['price'] < df['BB_Lower'], 'BB_Signal'] = 1  # Buy signal
+    df.loc[df['price'] > df['BB_Upper'], 'BB_Signal'] = -1  # Sell signal
+    return df
+
+def calculate_macd(df, fast=12, slow=26, signal=9):
+    df['MACD_Fast'] = df['price'].ewm(span=fast, adjust=False).mean()
+    df['MACD_Slow'] = df['price'].ewm(span=slow, adjust=False).mean()
+    df['MACD'] = df['MACD_Fast'] - df['MACD_Slow']
+    df['MACD_Signal'] = df['MACD'].ewm(span=signal, adjust=False).mean()
+    return df
+
+def generate_macd_signals(df):
+    df['MACD_Signal'] = 0
+    df.loc[df['MACD'] > df['MACD_Signal'], 'MACD_Signal'] = 1  # Buy signal
+    df.loc[df['MACD'] < df['MACD_Signal'], 'MACD_Signal'] = -1  # Sell signal
+    return df
+
+def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction_cost=0.001, max_trades_per_day=10):
     df['Position'] = df[f'{strategy}_Signal'].shift(1)
     df['Returns'] = df['price'].pct_change()
     df['Strategy_Returns'] = df['Position'] * df['Returns']
+    
+    # Apply transaction costs and limit trades per day
+    df['Trade'] = df['Position'].diff().abs()
+    df['Cumulative_Trades'] = df['Trade'].groupby(df.index.date).cumsum()
+    df.loc[df['Cumulative_Trades'] > max_trades_per_day, 'Trade'] = 0
+    df['Transaction_Costs'] = df['Trade'] * transaction_cost
+    df['Strategy_Returns'] = df['Strategy_Returns'] - df['Transaction_Costs']
+    
     df['Cumulative_Returns'] = (1 + df['Strategy_Returns']).cumprod()
     df['Balance'] = initial_balance * df['Cumulative_Returns']
     
-    total_trades = np.sum(np.abs(df['Position'].diff()))
+    total_trades = np.sum(df['Trade'])
     profit_factor = np.sum(df['Strategy_Returns'][df['Strategy_Returns'] > 0]) / abs(np.sum(df['Strategy_Returns'][df['Strategy_Returns'] < 0]))
     sharpe_ratio = np.sqrt(252) * df['Strategy_Returns'].mean() / df['Strategy_Returns'].std()
     
@@ -132,6 +166,25 @@ def optimize_rsi_parameters(df, window_range, overbought_range, oversold_range):
                 })
     return pd.DataFrame(results)
 
+def optimize_hft_parameters(df, strategy, **kwargs):
+    results = []
+    for params in kwargs['param_grid']:
+        df_test = df.copy()
+        if strategy == 'BB':
+            df_test = calculate_bollinger_bands(df_test, window=params['window'], num_std=params['num_std'])
+            df_test = generate_bollinger_band_signals(df_test)
+        elif strategy == 'MACD':
+            df_test = calculate_macd(df_test, fast=params['fast'], slow=params['slow'], signal=params['signal'])
+            df_test = generate_macd_signals(df_test)
+        
+        metrics = backtest(df_test, strategy)
+        results.append({
+            'Strategy': strategy,
+            **params,
+            **metrics
+        })
+    return pd.DataFrame(results)
+
 def generate_trade_list(df, strategy):
     trades = []
     position = 0
@@ -160,14 +213,20 @@ def generate_trade_list(df, strategy):
     return pd.DataFrame(trades)
 
 def run_trading_system(df):
-    # Resample data to hourly timeframe
+    # Resample data to different timeframes
     df_hourly = df.resample('1H', on='datetime').agg({
         'price': 'last',
         'amount': 'sum',
         'volume': 'sum'
     }).dropna()
+    
+    df_15min = df.resample('15T', on='datetime').agg({
+        'price': 'last',
+        'amount': 'sum',
+        'volume': 'sum'
+    }).dropna()
 
-    # MA Crossover Strategy
+    # Original strategies
     print("Running MA Crossover Strategy...")
     ma_results = optimize_ma_parameters(df_hourly, range(4, 25, 2), range(26, 51, 2))
     best_ma = ma_results.loc[ma_results['Total_Return'].idxmax()]
@@ -181,7 +240,6 @@ def run_trading_system(df):
     ma_trades.to_csv('ma_trades.csv', index=False)
     print("MA Crossover trades saved to 'ma_trades.csv'")
 
-    # RSI Strategy
     print("\nRunning RSI Strategy...")
     rsi_results = optimize_rsi_parameters(df_hourly, range(10, 21, 2), range(65, 81, 5), range(20, 36, 5))
     best_rsi = rsi_results.loc[rsi_results['Total_Return'].idxmax()]
@@ -195,20 +253,52 @@ def run_trading_system(df):
     rsi_trades.to_csv('rsi_trades.csv', index=False)
     print("RSI trades saved to 'rsi_trades.csv'")
 
-    # Explicit Strategy Comparison
+    # Higher Frequency Strategies
+    print("\nRunning Bollinger Bands Strategy...")
+    bb_param_grid = [{'window': w, 'num_std': s} for w in range(10, 31, 5) for s in [1.5, 2, 2.5]]
+    bb_results = optimize_hft_parameters(df_15min, 'BB', param_grid=bb_param_grid)
+    best_bb = bb_results.loc[bb_results['Total_Return'].idxmax()]
+    print("\nBest Bollinger Bands parameters:")
+    print(best_bb)
+
+    # Generate trade list for best Bollinger Bands strategy
+    best_bb_df = calculate_bollinger_bands(df_15min.copy(), window=best_bb['window'], num_std=best_bb['num_std'])
+    best_bb_df = generate_bollinger_band_signals(best_bb_df)
+    bb_trades = generate_trade_list(best_bb_df, 'BB')
+    bb_trades.to_csv('bb_trades.csv', index=False)
+    print("Bollinger Bands trades saved to 'bb_trades.csv'")
+
+    print("\nRunning MACD Strategy...")
+    macd_param_grid = [{'fast': f, 'slow': s, 'signal': sig} 
+                       for f in [6, 12, 18] for s in [20, 26, 32] for sig in [7, 9, 11]]
+    macd_results = optimize_hft_parameters(df_15min, 'MACD', param_grid=macd_param_grid)
+    best_macd = macd_results.loc[macd_results['Total_Return'].idxmax()]
+    print("\nBest MACD parameters:")
+    print(best_macd)
+
+    # Generate trade list for best MACD strategy
+    best_macd_df = calculate_macd(df_15min.copy(), fast=best_macd['fast'], slow=best_macd['slow'], signal=best_macd['signal'])
+    best_macd_df = generate_macd_signals(best_macd_df)
+    macd_trades = generate_trade_list(best_macd_df, 'MACD')
+    macd_trades.to_csv('macd_trades.csv', index=False)
+    print("MACD trades saved to 'macd_trades.csv'")
+
+    # Strategy Comparison
     print("\nStrategy Comparison:")
     comparison = pd.DataFrame({
         'MA Crossover': best_ma,
-        'RSI': best_rsi
+        'RSI': best_rsi,
+        'Bollinger Bands': best_bb,
+        'MACD': best_macd
     }).T
     print(comparison[['Total_Return', 'Sharpe_Ratio', 'Profit_Factor', 'Total_Trades']])
 
     # Determine the best overall strategy
-    best_strategy = 'MA Crossover' if best_ma['Total_Return'] > best_rsi['Total_Return'] else 'RSI'
+    best_strategy = comparison['Total_Return'].idxmax()
     print(f"\nBest overall strategy: {best_strategy}")
 
     # Combine results
-    all_results = pd.concat([ma_results, rsi_results])
+    all_results = pd.concat([ma_results, rsi_results, bb_results, macd_results])
     all_results.to_csv('optimization_results.csv', index=False)
     print("\nAll optimization results saved to 'optimization_results.csv'")
 
