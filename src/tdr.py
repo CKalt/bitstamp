@@ -104,17 +104,6 @@ class CryptoDataManager:
             return min(relevant_data), max(relevant_data)
         return None, None
 
-    def force_update_candlesticks(self):
-        current_time = int(time.time())
-        current_minute = current_time - (current_time % 60)
-        for symbol in self.candlesticks:
-            if self.last_candle_time[symbol] is None or current_minute > self.last_candle_time[symbol] + 60:
-                if current_minute - 60 in self.candlesticks[symbol]:
-                    self._complete_candlestick(symbol, current_minute - 60)
-                elif self.candlesticks[symbol]:
-                    last_candle_minute = max(self.candlesticks[symbol].keys())
-                    self._complete_candlestick(symbol, last_candle_minute)
-
 
 async def subscribe_to_websocket(url: str, symbol: str, data_manager):
     channel = f"live_trades_{symbol}"
@@ -175,11 +164,12 @@ class OrderPlacer:
         payload = {'amount': str(amount)}
         if price:
             payload['price'] = str(price)
-        
+
         # Add additional parameters for limit orders
         for key, value in kwargs.items():
             if value is not None:
-                payload[key] = str(value).lower() if isinstance(value, bool) else str(value)
+                payload[key] = str(value).lower() if isinstance(
+                    value, bool) else str(value)
 
         if 'market' in order_type:
             endpoint = f"/api/v2/{'buy' if 'buy' in order_type else 'sell'}/market/{currency_pair}/"
@@ -187,7 +177,8 @@ class OrderPlacer:
             endpoint = f"/api/v2/{'buy' if 'buy' in order_type else 'sell'}/{currency_pair}/"
 
         message = f"BITSTAMP {self.api_key}POSTwww.bitstamp.net{endpoint}{content_type}{nonce}{timestamp}v2{urlencode(payload)}"
-        signature = hmac.new(self.api_secret, msg=message.encode('utf-8'), digestmod=hashlib.sha256).hexdigest()
+        signature = hmac.new(self.api_secret, msg=message.encode(
+            'utf-8'), digestmod=hashlib.sha256).hexdigest()
 
         headers = {
             'X-Auth': f'BITSTAMP {self.api_key}',
