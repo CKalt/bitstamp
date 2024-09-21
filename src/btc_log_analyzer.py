@@ -52,7 +52,6 @@ def analyze_data(df):
     plt.savefig('btc_hourly_volume.png')
     plt.close()
 
-# Trading System Functions
 def add_moving_averages(df, short_window, long_window):
     df['Short_MA'] = df['price'].rolling(window=short_window).mean()
     df['Long_MA'] = df['price'].rolling(window=long_window).mean()
@@ -133,6 +132,33 @@ def optimize_rsi_parameters(df, window_range, overbought_range, oversold_range):
                 })
     return pd.DataFrame(results)
 
+def generate_trade_list(df, strategy):
+    trades = []
+    position = 0
+    entry_price = 0
+    entry_time = None
+    
+    for index, row in df.iterrows():
+        signal = row[f'{strategy}_Signal']
+        
+        if signal == 1 and position == 0:  # Enter long position
+            position = 1
+            entry_price = row['price']
+            entry_time = index
+        elif signal == -1 and position == 1:  # Exit long position
+            exit_price = row['price']
+            profit = (exit_price - entry_price) / entry_price
+            trades.append({
+                'Entry Time': entry_time,
+                'Exit Time': index,
+                'Entry Price': entry_price,
+                'Exit Price': exit_price,
+                'Profit (%)': profit * 100
+            })
+            position = 0
+    
+    return pd.DataFrame(trades)
+
 def run_trading_system(df):
     # Resample data to hourly timeframe
     df_hourly = df.resample('1H', on='datetime').agg({
@@ -148,12 +174,26 @@ def run_trading_system(df):
     print("\nBest MA Crossover parameters:")
     print(best_ma)
 
+    # Generate trade list for best MA strategy
+    best_ma_df = add_moving_averages(df_hourly.copy(), best_ma['Short_Window'], best_ma['Long_Window'])
+    best_ma_df = generate_ma_signals(best_ma_df)
+    ma_trades = generate_trade_list(best_ma_df, 'MA')
+    ma_trades.to_csv('ma_trades.csv', index=False)
+    print("MA Crossover trades saved to 'ma_trades.csv'")
+
     # RSI Strategy
     print("\nRunning RSI Strategy...")
     rsi_results = optimize_rsi_parameters(df_hourly, range(10, 21, 2), range(65, 81, 5), range(20, 36, 5))
     best_rsi = rsi_results.loc[rsi_results['Total_Return'].idxmax()]
     print("\nBest RSI parameters:")
     print(best_rsi)
+
+    # Generate trade list for best RSI strategy
+    best_rsi_df = calculate_rsi(df_hourly.copy(), best_rsi['RSI_Window'])
+    best_rsi_df = generate_rsi_signals(best_rsi_df, best_rsi['Overbought'], best_rsi['Oversold'])
+    rsi_trades = generate_trade_list(best_rsi_df, 'RSI')
+    rsi_trades.to_csv('rsi_trades.csv', index=False)
+    print("RSI trades saved to 'rsi_trades.csv'")
 
     # Explicit Strategy Comparison
     print("\nStrategy Comparison:")
@@ -188,8 +228,6 @@ def main():
     print("Running trading system...")
     optimization_results, strategy_comparison = run_trading_system(df)
     print("Trading system analysis complete.")
-    
-    # You can add more analysis or visualization of the results here if needed
 
 if __name__ == "__main__":
     main()
