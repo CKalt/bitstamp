@@ -78,7 +78,8 @@ class CryptoDataManager:
         candle = self.candlesticks[symbol].pop(minute, None)
         if candle:
             readable_time = datetime.fromtimestamp(minute).strftime('%Y-%m-%d %H:%M:%S')
-            self.logger.debug(f"Completing candlestick for {symbol} at {readable_time}")
+            if self.verbose:
+                self.logger.debug(f"Completing candlestick for {symbol} at {readable_time}")
             for observer in self.candlestick_observers:
                 observer(symbol, minute, candle)
             self.last_candle_time[symbol] = minute
@@ -348,12 +349,15 @@ class CryptoShell(cmd.Cmd):
             for handler in self.logger.handlers[:]:
                 self.logger.removeHandler(handler)
             # Add file handler
-            file_handler = logging.FileHandler(log_file)
-            file_handler.setLevel(logging.DEBUG)
-            formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-            file_handler.setFormatter(formatter)
-            self.logger.addHandler(file_handler)
-            print(f"Verbose mode enabled. Logs are being written to {log_file}.")
+            try:
+                file_handler = logging.FileHandler(log_file)
+                file_handler.setLevel(logging.DEBUG)
+                formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+                file_handler.setFormatter(formatter)
+                self.logger.addHandler(file_handler)
+                print(f"Verbose mode enabled. Logs are being written to {log_file}.")
+            except Exception as e:
+                print(f"Failed to open log file {log_file}: {e}")
 
     def do_limit_buy(self, arg):
         """Place a limit buy order: limit_buy <symbol> <amount> <price> [options]"""
@@ -408,7 +412,12 @@ def run_websocket(url, symbols, data_manager):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     tasks = [subscribe_to_websocket(url, symbol, data_manager) for symbol in symbols]
-    loop.run_until_complete(asyncio.gather(*tasks))
+    try:
+        loop.run_until_complete(asyncio.gather(*tasks))
+    except Exception as e:
+        data_manager.logger.error(f"WebSocket thread encountered an error: {e}")
+    finally:
+        loop.close()
 
 
 def candlestick_timer(data_manager):
@@ -425,11 +434,15 @@ def setup_logging(verbose, log_file=None):
 
     if log_file:
         # File handler for verbose logs
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-    else:
+        try:
+            file_handler = logging.FileHandler(log_file)
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+        except Exception as e:
+            print(f"Failed to open log file {log_file}: {e}")
+            sys.exit(1)
+    elif verbose:
         # Stream handler (stderr) for verbose logs
         stream_handler = logging.StreamHandler()
         stream_handler.setLevel(logging.DEBUG)
@@ -449,18 +462,21 @@ def main():
     if args.verbose is True:
         # Verbose enabled without specifying a log file; log to stderr
         logger = setup_logging(verbose=True)
+        verbose_flag = True
     elif isinstance(args.verbose, str):
         # Verbose enabled with a log file; log to the specified file
         logger = setup_logging(verbose=True, log_file=args.verbose)
+        verbose_flag = True
     else:
         # Verbose disabled
         logger = setup_logging(verbose=False)
+        verbose_flag = False
 
     symbols = ["btcusd", "ethusd"]  # Add more symbols as needed
-    data_manager = CryptoDataManager(symbols, logger=logger, verbose=args.verbose)
+    data_manager = CryptoDataManager(symbols, logger=logger, verbose=verbose_flag)
     order_placer = OrderPlacer()
 
-    shell = CryptoShell(data_manager, order_placer, logger=logger, verbose=args.verbose)
+    shell = CryptoShell(data_manager, order_placer, logger=logger, verbose=verbose_flag)
 
     # Start WebSocket connections in a separate thread
     url = 'wss://ws.bitstamp.net'
