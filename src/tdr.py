@@ -15,6 +15,8 @@ from collections import deque
 import cmd
 import threading
 from datetime import datetime, timedelta
+import logging
+import sys
 
 
 class CandlestickData:
@@ -28,11 +30,12 @@ class CandlestickData:
 
 
 class CryptoDataManager:
-    def __init__(self, symbols, verbose=False):
+    def __init__(self, symbols, logger, verbose=False):
         self.data = {symbol: deque(maxlen=3600) for symbol in symbols}  # Store last hour of data
         self.candlesticks = {symbol: {} for symbol in symbols}
         self.candlestick_observers = []  # Observers for candlestick completion
         self.trade_observers = []        # Observers for each trade
+        self.logger = logger
         self.verbose = verbose
         self.last_candle_time = {symbol: None for symbol in symbols}
         self.last_price = {symbol: None for symbol in symbols}
@@ -74,9 +77,8 @@ class CryptoDataManager:
     def _complete_candlestick(self, symbol, minute):
         candle = self.candlesticks[symbol].pop(minute, None)
         if candle:
-            if self.verbose:
-                readable_time = datetime.fromtimestamp(minute).strftime('%Y-%m-%d %H:%M:%S')
-                print(f"[DataManager] Completing candlestick for {symbol} at {readable_time}")
+            readable_time = datetime.fromtimestamp(minute).strftime('%Y-%m-%d %H:%M:%S')
+            self.logger.debug(f"Completing candlestick for {symbol} at {readable_time}")
             for observer in self.candlestick_observers:
                 observer(symbol, minute, candle)
             self.last_candle_time[symbol] = minute
@@ -119,8 +121,7 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
     while True:  # Keep trying to reconnect
         try:
             async with websockets.connect(url) as websocket:
-                if data_manager.verbose:
-                    print(f"Connected to WebSocket for {symbol}")
+                data_manager.logger.debug(f"Connected to WebSocket for {symbol}")
 
                 # Subscribing to the channel.
                 subscribe_message = {
@@ -130,13 +131,11 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
                     }
                 }
                 await websocket.send(json.dumps(subscribe_message))
-                if data_manager.verbose:
-                    print(f"Subscribed to channel: {channel}")
+                data_manager.logger.debug(f"Subscribed to channel: {channel}")
 
                 # Receiving messages.
                 async for message in websocket:
-                    if data_manager.verbose:
-                        print(f"{symbol}: {message}")
+                    data_manager.logger.debug(f"{symbol}: {message}")
                     data = json.loads(message)
                     if data.get('event') == 'trade':
                         price = data['data']['price']
@@ -146,13 +145,11 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
                         data_manager.add_trade(symbol, price, timestamp)
 
         except websockets.ConnectionClosed:
-            if data_manager.verbose:
-                print(f"{symbol}: Connection closed, trying to reconnect in 5 seconds...")
+            data_manager.logger.error(f"{symbol}: Connection closed, trying to reconnect in 5 seconds...")
             # Wait for 5 seconds before trying to reconnect
             await asyncio.sleep(5)
         except Exception as e:
-            if data_manager.verbose:
-                print(f"{symbol}: An error occurred: {str(e)}")
+            data_manager.logger.error(f"{symbol}: An error occurred: {str(e)}")
             # Wait for 5 seconds before trying to reconnect
             await asyncio.sleep(5)
 
@@ -218,10 +215,11 @@ class CryptoShell(cmd.Cmd):
     intro = 'Welcome to the Crypto Shell. Type help or ? to list commands.\n'
     prompt = '(crypto) '
 
-    def __init__(self, data_manager, order_placer, verbose=False):
+    def __init__(self, data_manager, order_placer, logger, verbose=False):
         super().__init__()
         self.data_manager = data_manager
         self.order_placer = order_placer
+        self.logger = logger
         self.candlestick_output = {}
         self.ticker_output = {}
         self.verbose = verbose
@@ -256,6 +254,9 @@ class CryptoShell(cmd.Cmd):
     def do_price(self, arg):
         """Show current price for a symbol: price <symbol>"""
         symbol = arg.strip().lower()
+        if not symbol:
+            print("Usage: price <symbol>")
+            return
         price = self.data_manager.get_current_price(symbol)
         if price:
             print(f"Current price of {symbol}: ${price:.2f}")
@@ -335,18 +336,24 @@ class CryptoShell(cmd.Cmd):
             print(f"{symbol} - {time_str}: Price: ${price:.2f}")
 
     def do_verbose(self, arg):
-        """Toggle verbose mode: verbose [on|off]"""
-        arg = arg.strip().lower()
-        if arg in ('on', 'true', '1'):
-            self.verbose = True
-            self.data_manager.verbose = True
-            print("Verbose mode turned on")
-        elif arg in ('off', 'false', '0'):
-            self.verbose = False
-            self.data_manager.verbose = False
-            print("Verbose mode turned off")
+        """Toggle verbose mode and optionally specify a log file: verbose [logfile]"""
+        arg = arg.strip()
+        if not arg:
+            # If no logfile is provided, default to stderr
+            self.logger.setLevel(logging.DEBUG)
+            print("Verbose mode enabled. Logs are being printed to stderr.")
         else:
-            print(f"Current verbose setting: {'on' if self.verbose else 'off'}")
+            log_file = arg
+            # Remove existing handlers
+            for handler in self.logger.handlers[:]:
+                self.logger.removeHandler(handler)
+            # Add file handler
+            file_handler = logging.FileHandler(log_file)
+            file_handler.setLevel(logging.DEBUG)
+            formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+            file_handler.setFormatter(formatter)
+            self.logger.addHandler(file_handler)
+            print(f"Verbose mode enabled. Logs are being written to {log_file}.")
 
     def do_limit_buy(self, arg):
         """Place a limit buy order: limit_buy <symbol> <amount> <price> [options]"""
@@ -407,22 +414,53 @@ def run_websocket(url, symbols, data_manager):
 def candlestick_timer(data_manager):
     while True:
         time.sleep(60)  # Wait for 60 seconds
-        if data_manager.verbose:
-            print("[Timer] Triggering force_update_candlesticks()")
+        data_manager.logger.debug("[Timer] Triggering force_update_candlesticks()")
         data_manager.force_update_candlesticks()
+
+
+def setup_logging(verbose, log_file=None):
+    logger = logging.getLogger("CryptoShellLogger")
+    logger.setLevel(logging.DEBUG if verbose else logging.WARNING)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+    if log_file:
+        # File handler for verbose logs
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    else:
+        # Stream handler (stderr) for verbose logs
+        stream_handler = logging.StreamHandler()
+        stream_handler.setLevel(logging.DEBUG)
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
+
+    return logger
 
 
 def main():
     parser = argparse.ArgumentParser(description="Crypto trading shell")
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help="Enable verbose output")
+    parser.add_argument('-v', '--verbose', nargs='?', const=True, default=False,
+                        help="Enable verbose output and optionally specify a log file (e.g., --verbose logfile.log)")
     args = parser.parse_args()
 
+    # Setup logging based on verbose argument
+    if args.verbose is True:
+        # Verbose enabled without specifying a log file; log to stderr
+        logger = setup_logging(verbose=True)
+    elif isinstance(args.verbose, str):
+        # Verbose enabled with a log file; log to the specified file
+        logger = setup_logging(verbose=True, log_file=args.verbose)
+    else:
+        # Verbose disabled
+        logger = setup_logging(verbose=False)
+
     symbols = ["btcusd", "ethusd"]  # Add more symbols as needed
-    data_manager = CryptoDataManager(symbols, verbose=args.verbose)
+    data_manager = CryptoDataManager(symbols, logger=logger, verbose=args.verbose)
     order_placer = OrderPlacer()
 
-    shell = CryptoShell(data_manager, order_placer, verbose=args.verbose)
+    shell = CryptoShell(data_manager, order_placer, logger=logger, verbose=args.verbose)
 
     # Start WebSocket connections in a separate thread
     url = 'wss://ws.bitstamp.net'
