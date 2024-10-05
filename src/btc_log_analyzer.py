@@ -282,20 +282,24 @@ def generate_high_frequency_ma_signals(df, min_holding_period=30, cooldown_perio
     # Create a copy of the DataFrame to avoid SettingWithCopyWarning
     df = df.copy()
 
-    df['HF_MA_Signal'] = 0
-    df.loc[df['Short_MA'] > df['Long_MA'], 'HF_MA_Signal'] = 1
-    df.loc[df['Short_MA'] < df['Long_MA'], 'HF_MA_Signal'] = -1
+    # Generate initial signals
+    df['HF_MA_Signal'] = np.where(df['Short_MA'] > df['Long_MA'], 1, np.where(
+        df['Short_MA'] < df['Long_MA'], -1, 0))
 
     # Implement minimum holding period
-    df['HF_MA_Signal'] = df['HF_MA_Signal'].where(
-        df['HF_MA_Signal'].diff().abs().rolling(window=min_holding_period).sum() != 0, 0)
+    df['Signal_Change'] = df['HF_MA_Signal'].diff().abs()
+    df['Holding_Period'] = df['Signal_Change'].rolling(
+        window=min_holding_period, min_periods=1).sum()
+    df.loc[df['Holding_Period'] < 1, 'HF_MA_Signal'] = 0
 
     # Implement cooldown period
-    df['Last_Trade_Time'] = df.index[df['HF_MA_Signal'] != 0]
-    df['Last_Trade_Time'] = df['Last_Trade_Time'].ffill()
-    df['Time_Since_Last_Trade'] = (
-        df.index - df['Last_Trade_Time']).dt.total_seconds() / 60
-    df.loc[df['Time_Since_Last_Trade'] < cooldown_period, 'HF_MA_Signal'] = 0
+    last_trade_time = None
+    for i, (index, row) in enumerate(df.iterrows()):
+        if row['HF_MA_Signal'] != 0:
+            if last_trade_time is not None and (index - last_trade_time).total_seconds() / 60 < cooldown_period:
+                df.at[index, 'HF_MA_Signal'] = 0
+            else:
+                last_trade_time = index
 
     # Implement minimum price change
     df['Price_Change'] = df['price'].pct_change().abs()
@@ -311,8 +315,10 @@ def optimize_high_frequency_ma_parameters(df, short_range, long_range):
         for long_window in long_range:
             if short_window >= long_window:
                 continue
-            df_test = add_high_frequency_moving_averages(df.copy(), short_window, long_window)
-            df_test['HF_MA_Signal'] = generate_high_frequency_ma_signals(df_test, min_holding_period=30, cooldown_period=15, min_price_change_percent=0.1)['HF_MA_Signal']
+            df_test = add_high_frequency_moving_averages(
+                df.copy(), short_window, long_window)
+            df_test['HF_MA_Signal'] = generate_high_frequency_ma_signals(
+                df_test, min_holding_period=30, cooldown_period=15, min_price_change_percent=0.1)['HF_MA_Signal']
             metrics = backtest(df_test, 'HF_MA', max_trades_per_day=20)
             results.append({
                 'Strategy': 'High_Frequency_MA',
@@ -321,6 +327,7 @@ def optimize_high_frequency_ma_parameters(df, short_range, long_range):
                 **metrics
             })
     return pd.DataFrame(results)
+
 
 def run_trading_system(df):
     df = ensure_datetime_index(df)
@@ -331,16 +338,16 @@ def run_trading_system(df):
         'amount': 'sum',
         'volume': 'sum'
     }).dropna()
-    df_hourly['timestamp'] = df_hourly.index.astype(
-        int) // 10**9  # Convert to Unix timestamp
+    df_hourly['timestamp'] = df_hourly.index.view(
+        'int64') // 10**9  # Convert to Unix timestamp
 
     df_15min = df.resample('15T').agg({
         'price': 'last',
         'amount': 'sum',
         'volume': 'sum'
     }).dropna()
-    df_15min['timestamp'] = df_15min.index.astype(
-        int) // 10**9  # Convert to Unix timestamp
+    df_15min['timestamp'] = df_15min.index.view(
+        'int64') // 10**9  # Convert to Unix timestamp
 
     # Original strategies
     print("Running MA Crossover Strategy...")
