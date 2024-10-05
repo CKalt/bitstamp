@@ -2,10 +2,11 @@ import json
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
+import argparse
 
-def parse_log_file(file_path):
+def parse_log_file(file_path, start_date=None):
     data = []
     total_lines = sum(1 for _ in open(file_path, 'r'))
     print(f"Total lines in log file: {total_lines}")
@@ -17,8 +18,11 @@ def parse_log_file(file_path):
                 json_data = json.loads(line)
                 if json_data['event'] == 'trade':
                     trade_data = json_data['data']
+                    timestamp = int(trade_data['timestamp'])
+                    if start_date and datetime.fromtimestamp(timestamp) < start_date:
+                        continue
                     data.append({
-                        'timestamp': int(trade_data['timestamp']),
+                        'timestamp': timestamp,
                         'price': float(trade_data['price']),
                         'amount': float(trade_data['amount']),
                         'type': int(trade_data['type'])
@@ -27,7 +31,6 @@ def parse_log_file(file_path):
                 continue
     print("Finished processing log file. Creating DataFrame...")
     return pd.DataFrame(data)
-
 def analyze_data(df):
     print("Converting timestamp to datetime...")
     df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
@@ -348,11 +351,24 @@ def run_trading_system(df):
     return all_results, comparison
 
 def main():
+    parser = argparse.ArgumentParser(description='Analyze Bitcoin trade log data.')
+    parser.add_argument('--start-window-days-back', type=int, default=0,
+                        help='Number of days to subtract from the current date as the start window')
+    args = parser.parse_args()
+
     file_path = 'btcusd.log'
     file_size = os.path.getsize(file_path) / (1024 * 1024) # Size in MB
     print(f"Log file size: {file_size:.2f} MB")
+    
+    if args.start_window_days_back > 0:
+        start_date = datetime.now() - timedelta(days=args.start_window_days_back)
+        print(f"Analyzing data from {start_date} onwards")
+    else:
+        start_date = None
+        print("Analyzing all data in the log file")
+
     print("Starting to parse log file...")
-    df = parse_log_file(file_path)
+    df = parse_log_file(file_path, start_date)
     print(f"Parsed {len(df)} trade events.")
     print("Starting data analysis...")
     analyze_data(df)
