@@ -7,13 +7,14 @@ import os
 import argparse
 
 
-def parse_log_file(file_path, start_date=None):
+def parse_log_file(file_path, start_date=None, end_date=None):
     data = []
     total_lines = sum(1 for _ in open(file_path, 'r'))
     print(f"Total lines in log file: {total_lines}")
     last_date = None
     skipped_count = 0
     processed_count = 0
+    end_reached = False
 
     with open(file_path, 'r') as file:
         for i, line in enumerate(file, 1):
@@ -29,6 +30,10 @@ def parse_log_file(file_path, start_date=None):
                     timestamp = int(trade_data['timestamp'])
                     trade_date = datetime.fromtimestamp(timestamp)
                     last_date = trade_date.strftime('%Y-%m-%d %H:%M:%S')
+
+                    if end_date and trade_date > end_date:
+                        end_reached = True
+                        break
 
                     if start_date and trade_date < start_date:
                         skipped_count += 1
@@ -47,9 +52,10 @@ def parse_log_file(file_path, start_date=None):
     print(f"Finished processing log file. Last date processed: {last_date}")
     print(f"Total entries skipped: {skipped_count}")
     print(f"Total entries processed: {processed_count}")
+    if end_reached:
+        print(f"Reached end date: {end_date}")
     print("Creating DataFrame...")
     return pd.DataFrame(data)
-
 
 def analyze_data(df):
     print("Converting timestamp to datetime...")
@@ -401,26 +407,41 @@ def run_trading_system(df):
 
     return all_results, comparison
 
+
 def main():
     parser = argparse.ArgumentParser(
         description='Analyze Bitcoin trade log data.')
     parser.add_argument('--start-window-days-back', type=int, default=0,
                         help='Number of days to subtract from the current date as the start window')
+    parser.add_argument('--end-window-days-back', type=int, default=0,
+                        help='Number of days to subtract from the current date as the end window')
     args = parser.parse_args()
 
     file_path = 'btcusd.log'
     file_size = os.path.getsize(file_path) / (1024 * 1024)  # Size in MB
     print(f"Log file size: {file_size:.2f} MB")
 
+    current_date = datetime.now()
+
     if args.start_window_days_back > 0:
-        start_date = datetime.now() - timedelta(days=args.start_window_days_back)
+        start_date = current_date - timedelta(days=args.start_window_days_back)
         print(f"Analyzing data from {start_date} onwards")
     else:
         start_date = None
-        print("Analyzing all data in the log file")
+        print("No start date specified")
+
+    if args.end_window_days_back > 0:
+        end_date = current_date - timedelta(days=args.end_window_days_back)
+        print(f"Analyzing data up to {end_date}")
+    else:
+        end_date = None
+        print("No end date specified")
+
+    if start_date and end_date and start_date >= end_date:
+        raise ValueError("Start date must be earlier than end date")
 
     print("Starting to parse log file...")
-    df = parse_log_file(file_path, start_date)
+    df = parse_log_file(file_path, start_date, end_date)
     print(f"Parsed {len(df)} trade events.")
     print("Starting data analysis...")
     analyze_data(df)
