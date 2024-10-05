@@ -294,6 +294,17 @@ def run_trading_system(df):
     print("\nMACD:")
     print(best_macd)
 
+# Print detailed results for each strategy
+    print("\nDetailed Strategy Results:")
+    print("MA Crossover:")
+    print(best_ma)
+    print("\nRSI:")
+    print(best_rsi)
+    print("\nBollinger Bands:")
+    print(best_bb)
+    print("\nMACD:")
+    print(best_macd)
+
     # Strategy Comparison
     print("\nStrategy Comparison:")
     comparison = pd.DataFrame({
@@ -302,6 +313,14 @@ def run_trading_system(df):
         'Bollinger Bands': best_bb,
         'MACD': best_macd
     }).T
+
+    # Ensure 'Total_Return' is in the DataFrame
+    for strategy in ['MA Crossover', 'RSI', 'Bollinger Bands', 'MACD']:
+        if 'Total_Return' not in comparison.loc[strategy]:
+            comparison.loc[strategy, 'Total_Return'] = comparison.loc[strategy, 'Final_Balance'] / 10000 - 1
+
+    # Convert 'Total_Return' to numeric, replacing any non-numeric values with NaN
+    comparison['Total_Return'] = pd.to_numeric(comparison['Total_Return'], errors='coerce')
 
     print("\nComparison DataFrame Types:")
     print(comparison.dtypes)
@@ -313,11 +332,13 @@ def run_trading_system(df):
     try:
         best_strategy = comparison['Total_Return'].idxmax()
         print(f"\nBest overall strategy: {best_strategy}")
-    except TypeError as e:
+        print(f"Best strategy Total Return: {comparison.loc[best_strategy, 'Total_Return']:.2f}%")
+    except Exception as e:
         print(f"\nError in determining best strategy: {e}")
         print("Individual 'Total_Return' values:")
-        for strategy, row in comparison.iterrows():
-            print(f"{strategy}: {row['Total_Return']} (type: {type(row['Total_Return'])})")
+        for strategy in comparison.index:
+            total_return = comparison.loc[strategy, 'Total_Return']
+            print(f"{strategy}: {total_return} (type: {type(total_return)})")
 
     # Combine results
     all_results = pd.concat([ma_results, rsi_results, bb_results, macd_results])
