@@ -79,7 +79,15 @@ def analyze_data(df):
     plt.savefig('btc_hourly_volume.png')
     plt.close()
 
+def ensure_datetime_index(df):
+    if 'datetime' not in df.columns:
+        df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.set_index('datetime', inplace=True)
+    return df
+
 def add_moving_averages(df, short_window, long_window):
+    df = ensure_datetime_index(df)
     df['Short_MA'] = df['price'].rolling(window=short_window).mean()
     df['Long_MA'] = df['price'].rolling(window=long_window).mean()
     return df
@@ -91,6 +99,7 @@ def generate_ma_signals(df):
     return df
 
 def calculate_rsi(df, window=14):
+    df = ensure_datetime_index(df)
     delta = df['price'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
@@ -105,6 +114,7 @@ def generate_rsi_signals(df, overbought=70, oversold=30):
     return df
 
 def calculate_bollinger_bands(df, window=20, num_std=2):
+    df = ensure_datetime_index(df)
     df['BB_MA'] = df['price'].rolling(window=window).mean()
     df['BB_STD'] = df['price'].rolling(window=window).std()
     df['BB_Upper'] = df['BB_MA'] + (df['BB_STD'] * num_std)
@@ -118,6 +128,7 @@ def generate_bollinger_band_signals(df):
     return df
 
 def calculate_macd(df, fast=12, slow=26, signal=9):
+    df = ensure_datetime_index(df)
     df['MACD_Fast'] = df['price'].ewm(span=fast, adjust=False).mean()
     df['MACD_Slow'] = df['price'].ewm(span=slow, adjust=False).mean()
     df['MACD'] = df['MACD_Fast'] - df['MACD_Slow']
@@ -131,11 +142,11 @@ def generate_macd_signals(df):
     return df
 
 def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction_cost=0.001, max_trades_per_day=10):
+    df = ensure_datetime_index(df)
     df['Position'] = df[f'{strategy}_Signal'].shift(1)
     df['Returns'] = df['price'].pct_change()
     df['Strategy_Returns'] = df['Position'] * df['Returns']
 
-    # Apply transaction costs and limit trades per day
     df['Trade'] = df['Position'].diff().abs()
     df['Cumulative_Trades'] = df['Trade'].groupby(df.index.date).cumsum()
     df.loc[df['Cumulative_Trades'] > max_trades_per_day, 'Trade'] = 0
@@ -239,15 +250,44 @@ def generate_trade_list(df, strategy):
 
     return pd.DataFrame(trades)
 
+def add_high_frequency_moving_averages(df, short_window, long_window):
+    df = ensure_datetime_index(df)
+    df['Short_MA'] = df['price'].ewm(span=short_window, adjust=False).mean()
+    df['Long_MA'] = df['price'].ewm(span=long_window, adjust=False).mean()
+    return df
+
+def generate_high_frequency_ma_signals(df, min_holding_period=30, cooldown_period=15, min_price_change_percent=0.1):
+    # Create a copy of the DataFrame to avoid SettingWithCopyWarning
+    df = df.copy()
+    
+    df['HF_MA_Signal'] = 0
+    df.loc[df['Short_MA'] > df['Long_MA'], 'HF_MA_Signal'] = 1
+    df.loc[df['Short_MA'] < df['Long_MA'], 'HF_MA_Signal'] = -1
+    
+    # Implement minimum holding period
+    df['HF_MA_Signal'] = df['HF_MA_Signal'].where(df['HF_MA_Signal'].diff().abs().rolling(window=min_holding_period).sum() != 0, 0)
+    
+    # Implement cooldown period
+    df['Last_Trade'] = df['HF_MA_Signal'].replace(0, np.nan).ffill()
+    df['Time_Since_Last_Trade'] = (df.index - df.index[df['Last_Trade'].notnull()].to_series().groupby(df['Last_Trade']).first()).dt.total_seconds() / 60
+    df.loc[df['Time_Since_Last_Trade'] < cooldown_period, 'HF_MA_Signal'] = 0
+    
+    # Implement minimum price change
+    df['Price_Change'] = df['price'].pct_change().abs()
+    df.loc[df['Price_Change'] < min_price_change_percent / 100, 'HF_MA_Signal'] = 0
+    
+    return df[['HF_MA_Signal']]  # Return only the signal column to save memory
+
 def optimize_high_frequency_ma_parameters(df, short_range, long_range):
+    df = ensure_datetime_index(df)
     results = []
     for short_window in short_range:
         for long_window in long_range:
             if short_window >= long_window:
                 continue
             df_test = add_high_frequency_moving_averages(df.copy(), short_window, long_window)
-            df_test = generate_high_frequency_ma_signals(df_test)
-            metrics = backtest(df_test, 'HF_MA', max_trades_per_day=4)  # Allow up to 4 trades per day
+            df_test['HF_MA_Signal'] = generate_high_frequency_ma_signals(df_test, min_holding_period=30, cooldown_period=15, min_price_change_percent=0.1)['HF_MA_Signal']
+            metrics = backtest(df_test, 'HF_MA', max_trades_per_day=20)
             results.append({
                 'Strategy': 'High_Frequency_MA',
                 'Short_Window': short_window,
@@ -256,35 +296,23 @@ def optimize_high_frequency_ma_parameters(df, short_range, long_range):
             })
     return pd.DataFrame(results)
 
-def add_high_frequency_moving_averages(df, short_window, long_window):
-    df['Short_MA'] = df['price'].ewm(span=short_window, adjust=False).mean()  # Use EMA instead of SMA
-    df['Long_MA'] = df['price'].ewm(span=long_window, adjust=False).mean()
-    return df
-
-def generate_high_frequency_ma_signals(df):
-    df['HF_MA_Signal'] = 0
-    df.loc[df['Short_MA'] > df['Long_MA'], 'HF_MA_Signal'] = 1
-    df.loc[df['Short_MA'] < df['Long_MA'], 'HF_MA_Signal'] = -1
-    
-    # Add a minimum holding period
-    min_holding_period = 15  # minimum number of data points to hold a position
-    df['HF_MA_Signal'] = df['HF_MA_Signal'].where(df['HF_MA_Signal'].diff().abs().rolling(window=min_holding_period).sum() != 0, 0)
-    
-    return df
-
 def run_trading_system(df):
+    df = ensure_datetime_index(df)
+    
     # Resample data to different timeframes
-    df_hourly = df.resample('1H', on='datetime').agg({
+    df_hourly = df.resample('1H').agg({
         'price': 'last',
         'amount': 'sum',
         'volume': 'sum'
     }).dropna()
+    df_hourly['timestamp'] = df_hourly.index.astype(int) // 10**9  # Convert to Unix timestamp
 
-    df_15min = df.resample('15T', on='datetime').agg({
+    df_15min = df.resample('15T').agg({
         'price': 'last',
         'amount': 'sum',
         'volume': 'sum'
     }).dropna()
+    df_15min['timestamp'] = df_15min.index.astype(int) // 10**9  # Convert to Unix timestamp
 
     # Original strategies
     print("Running MA Crossover Strategy...")
@@ -344,7 +372,7 @@ def run_trading_system(df):
 
     # High-Frequency MA Strategy
     print("\nRunning High-Frequency MA Crossover Strategy...")
-    hf_ma_results = optimize_high_frequency_ma_parameters(df, range(2, 11), range(5, 21))
+    hf_ma_results = optimize_high_frequency_ma_parameters(df, range(5, 21, 3), range(15, 61, 5))
     best_hf_ma = hf_ma_results.loc[hf_ma_results['Total_Return'].idxmax()]
     print("\nBest High-Frequency MA Crossover parameters:")
     print(best_hf_ma)
@@ -381,17 +409,17 @@ def run_trading_system(df):
 
     print(comparison)
 
-    # Attempt to find the best strategy
-    try:
-        best_strategy = comparison['Total_Return'].idxmax()
-        print(f"\nBest overall strategy: {best_strategy}")
-        print(f"Best strategy Total Return: {comparison.loc[best_strategy, 'Total_Return']:.2f}%")
-    except Exception as e:
-        print(f"\nError in determining best strategy: {e}")
-        print("Individual 'Total_Return' values:")
-        for strategy in comparison.index:
-            total_return = comparison.loc[strategy, 'Total_Return']
-            print(f"{strategy}: {total_return} (type: {type(total_return)})")
+    # Extract only the Total_Return values for comparison
+    total_returns = comparison['Total_Return'].astype(float)
+
+    # Find the best strategy
+    best_strategy = total_returns.idxmax()
+    print(f"\nBest overall strategy: {best_strategy}")
+    print(f"Best strategy Total Return: {total_returns[best_strategy]:.2f}%")
+
+    print("\nAll strategy returns:")
+    for strategy, total_return in total_returns.items():
+        print(f"{strategy}: {total_return:.2f}%")
 
     # Combine results
     all_results = pd.concat([ma_results, rsi_results, bb_results, macd_results, hf_ma_results])
