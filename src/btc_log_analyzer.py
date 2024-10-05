@@ -282,9 +282,10 @@ def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_itera
     start_time = time.time()
 
     print(f"Starting High-Frequency MA optimization. Max iterations: {max_iterations}, Max time: {max_time_minutes} minutes")
+    print("Progress: 0%")
 
     total_combinations = len(short_range) * len(long_range)
-    progress_bar = tqdm(total=min(total_combinations, max_iterations), desc="HFMA Optimization")
+    last_update_time = start_time
 
     for short_window in short_range:
         for long_window in long_range:
@@ -295,8 +296,13 @@ def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_itera
             current_time = time.time()
             elapsed_time = current_time - start_time
 
+            # Time-based progress update (every 10 seconds)
+            if current_time - last_update_time > 10:
+                progress = iterations / min(total_combinations, max_iterations) * 100
+                print(f"Progress: {progress:.2f}% | Best Return: {best_return:.2f}% | Time elapsed: {timedelta(seconds=int(elapsed_time))}")
+                last_update_time = current_time
+
             if iterations > max_iterations or elapsed_time > (max_time_minutes * 60):
-                progress_bar.close()
                 print(f"Stopping optimization. Iterations: {iterations}, Time elapsed: {timedelta(seconds=int(elapsed_time))}")
                 break
 
@@ -313,108 +319,107 @@ def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_itera
 
             if metrics['Total_Return'] > best_return:
                 best_return = metrics['Total_Return']
-                progress_bar.set_postfix({"Best Return": f"{best_return:.2f}%"})
-            else:
-                if len(results) > 5 and all(result['Total_Return'] <= best_return for result in results[-5:]):
-                    progress_bar.close()
-                    print("No improvement in last 5 iterations. Stopping optimization.")
-                    break
-
-            progress_bar.update(1)
+                print(f"New best return: {best_return:.2f}%")
+            
+            # Early stopping if no improvement in last 5 iterations
+            if len(results) > 5 and all(result['Total_Return'] <= best_return for result in results[-5:]):
+                print("No improvement in last 5 iterations. Stopping optimization.")
+                break
 
         if iterations > max_iterations or elapsed_time > (max_time_minutes * 60):
             break
 
-    progress_bar.close()
     total_time = time.time() - start_time
     print(f"High-Frequency MA optimization completed. Total iterations: {iterations}, Total time: {timedelta(seconds=int(total_time))}")
 
     return pd.DataFrame(results)
 
 def run_trading_system(df):
+    print("Starting run_trading_system function...")
     df = ensure_datetime_index(df)
+    print(f"DataFrame shape after ensuring datetime index: {df.shape}")
 
-    # Resample data to different timeframes
+    print("Resampling data to hourly timeframe...")
     df_hourly = df.resample('1H').agg({
         'price': 'last',
         'amount': 'sum',
         'volume': 'sum'
     }).dropna()
-    df_hourly['timestamp'] = df_hourly.index.view('int64') // 10**9  # Convert to Unix timestamp
+    df_hourly['timestamp'] = df_hourly.index.view('int64') // 10**9
+    print(f"Hourly DataFrame shape: {df_hourly.shape}")
 
+    print("Resampling data to 15-minute timeframe...")
     df_15min = df.resample('15T').agg({
         'price': 'last',
         'amount': 'sum',
         'volume': 'sum'
     }).dropna()
-    df_15min['timestamp'] = df_15min.index.view('int64') // 10**9  # Convert to Unix timestamp
+    df_15min['timestamp'] = df_15min.index.view('int64') // 10**9
+    print(f"15-minute DataFrame shape: {df_15min.shape}")
 
-    # Original strategies
     print("Running MA Crossover Strategy...")
     ma_results = optimize_ma_parameters(df_hourly, range(4, 25, 2), range(26, 51, 2))
     best_ma = ma_results.loc[ma_results['Total_Return'].idxmax()]
-    print("\nBest MA Crossover parameters:")
+    print("Best MA Crossover parameters:")
     print(best_ma)
 
-    # Generate trade list for best MA strategy
+    print("Generating trade list for best MA strategy...")
     best_ma_df = add_moving_averages(df_hourly.copy(), best_ma['Short_Window'], best_ma['Long_Window'])
     best_ma_df = generate_ma_signals(best_ma_df)
     ma_trades = generate_trade_list(best_ma_df, 'MA')
     ma_trades.to_csv('ma_trades.csv', index=False)
     print("MA Crossover trades saved to 'ma_trades.csv'")
 
-    print("\nRunning RSI Strategy...")
+    print("Running RSI Strategy...")
     rsi_results = optimize_rsi_parameters(df_hourly, range(10, 21, 2), range(65, 81, 5), range(20, 36, 5))
     best_rsi = rsi_results.loc[rsi_results['Total_Return'].idxmax()]
-    print("\nBest RSI parameters:")
+    print("Best RSI parameters:")
     print(best_rsi)
 
-    # Generate trade list for best RSI strategy
+    print("Generating trade list for best RSI strategy...")
     best_rsi_df = calculate_rsi(df_hourly.copy(), best_rsi['RSI_Window'])
     best_rsi_df = generate_rsi_signals(best_rsi_df, best_rsi['Overbought'], best_rsi['Oversold'])
     rsi_trades = generate_trade_list(best_rsi_df, 'RSI')
     rsi_trades.to_csv('rsi_trades.csv', index=False)
     print("RSI trades saved to 'rsi_trades.csv'")
 
-    # Higher Frequency Strategies
-    print("\nRunning Bollinger Bands Strategy...")
+    print("Running Bollinger Bands Strategy...")
     bb_param_grid = [{'window': w, 'num_std': s} for w in range(10, 31, 5) for s in [1.5, 2, 2.5]]
     bb_results = optimize_hft_parameters(df_15min, 'BB', param_grid=bb_param_grid)
     best_bb = bb_results.loc[bb_results['Total_Return'].idxmax()]
-    print("\nBest Bollinger Bands parameters:")
+    print("Best Bollinger Bands parameters:")
     print(best_bb)
 
-    # Generate trade list for best Bollinger Bands strategy
+    print("Generating trade list for best Bollinger Bands strategy...")
     best_bb_df = calculate_bollinger_bands(df_15min.copy(), window=best_bb['window'], num_std=best_bb['num_std'])
     best_bb_df = generate_bollinger_band_signals(best_bb_df)
     bb_trades = generate_trade_list(best_bb_df, 'BB')
     bb_trades.to_csv('bb_trades.csv', index=False)
     print("Bollinger Bands trades saved to 'bb_trades.csv'")
 
-    print("\nRunning MACD Strategy...")
+    print("Running MACD Strategy...")
     macd_param_grid = [{'fast': f, 'slow': s, 'signal': sig} for f in [6, 12, 18] for s in [20, 26, 32] for sig in [7, 9, 11]]
     macd_results = optimize_hft_parameters(df_15min, 'MACD', param_grid=macd_param_grid)
     best_macd = macd_results.loc[macd_results['Total_Return'].idxmax()]
-    print("\nBest MACD parameters:")
+    print("Best MACD parameters:")
     print(best_macd)
 
-    # Generate trade list for best MACD strategy
+    print("Generating trade list for best MACD strategy...")
     best_macd_df = calculate_macd(df_15min.copy(), fast=best_macd['fast'], slow=best_macd['slow'], signal=best_macd['signal'])
     best_macd_df = generate_macd_signals(best_macd_df)
     macd_trades = generate_trade_list(best_macd_df, 'MACD')
     macd_trades.to_csv('macd_trades.csv', index=False)
     print("MACD trades saved to 'macd_trades.csv'")
 
-    # High-Frequency MA Strategy
-    print("\nRunning High-Frequency MA Crossover Strategy...")
-    hf_ma_results = optimize_high_frequency_ma_parameters(df, range(2, 11, 2), range(5, 31, 5), max_iterations=30, max_time_minutes=15)
+    print("Starting High-Frequency MA Crossover Strategy optimization. This may take several minutes...")
+    hf_ma_results = optimize_high_frequency_ma_parameters(df, range(2, 7, 1), range(5, 16, 2), max_iterations=20, max_time_minutes=10)
     
     if not hf_ma_results.empty:
         best_hf_ma = hf_ma_results.loc[hf_ma_results['Total_Return'].idxmax()]
-        print("\nBest High-Frequency MA Crossover parameters:")
+        print("Best High-Frequency MA Crossover parameters:")
         print(best_hf_ma)
 
-        # Generate trade list for best High-Frequency MA strategy
+        print("Generating trade list for best High-Frequency MA strategy...")
         best_hf_ma_df = add_high_frequency_moving_averages(df.copy(), best_hf_ma['Short_Window'], best_hf_ma['Long_Window'])
         best_hf_ma_df = generate_high_frequency_ma_signals(best_hf_ma_df)
         hf_ma_trades = generate_trade_list(best_hf_ma_df, 'HF_MA')
@@ -424,6 +429,7 @@ def run_trading_system(df):
         print("High-Frequency MA optimization did not produce any results.")
         best_hf_ma = pd.Series()
 
+    print("Preparing detailed strategy results...")
     # Print detailed results for each strategy
     print("\nDetailed Strategy Results:")
     print("MA Crossover:")
@@ -505,6 +511,9 @@ def main():
     print("Starting to parse log file...")
     df = parse_log_file(file_path, start_date, end_date)
     print(f"Parsed {len(df)} trade events.")
+    print(f"DataFrame shape after parsing: {df.shape}")
+    print(f"DataFrame memory usage: {df.memory_usage().sum() / 1024 / 1024:.2f} MB")
+    
     print("Starting data analysis...")
     analyze_data(df)
     print("Analysis complete. Check the current directory for generated PNG files.")
