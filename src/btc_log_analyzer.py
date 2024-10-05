@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 import os
 import argparse
 
-
 def parse_log_file(file_path, start_date=None, end_date=None):
     data = []
     total_lines = sum(1 for _ in open(file_path, 'r'))
@@ -15,14 +14,13 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     skipped_count = 0
     processed_count = 0
     end_reached = False
-
+    
     with open(file_path, 'r') as file:
         for i, line in enumerate(file, 1):
             if i % 10000 == 0:
                 status = "Skipping" if skipped_count > processed_count else "Processing"
-                print(
-                    f"Line {i}/{total_lines} ({i/total_lines*100:.2f}%) - {status} - Last date: {last_date}")
-
+                print(f"Line {i}/{total_lines} ({i/total_lines*100:.2f}%) - {status} - Last date: {last_date}")
+            
             try:
                 json_data = json.loads(line)
                 if json_data['event'] == 'trade':
@@ -30,15 +28,15 @@ def parse_log_file(file_path, start_date=None, end_date=None):
                     timestamp = int(trade_data['timestamp'])
                     trade_date = datetime.fromtimestamp(timestamp)
                     last_date = trade_date.strftime('%Y-%m-%d %H:%M:%S')
-
+                    
                     if end_date and trade_date > end_date:
                         end_reached = True
                         break
-
+                    
                     if start_date and trade_date < start_date:
                         skipped_count += 1
                         continue
-
+                    
                     processed_count += 1
                     data.append({
                         'timestamp': timestamp,
@@ -48,7 +46,7 @@ def parse_log_file(file_path, start_date=None, end_date=None):
                     })
             except json.JSONDecodeError:
                 continue
-
+    
     print(f"Finished processing log file. Last date processed: {last_date}")
     print(f"Total entries skipped: {skipped_count}")
     print(f"Total entries processed: {processed_count}")
@@ -81,19 +79,16 @@ def analyze_data(df):
     plt.savefig('btc_hourly_volume.png')
     plt.close()
 
-
 def add_moving_averages(df, short_window, long_window):
     df['Short_MA'] = df['price'].rolling(window=short_window).mean()
     df['Long_MA'] = df['price'].rolling(window=long_window).mean()
     return df
-
 
 def generate_ma_signals(df):
     df['MA_Signal'] = 0
     df.loc[df['Short_MA'] > df['Long_MA'], 'MA_Signal'] = 1
     df.loc[df['Short_MA'] < df['Long_MA'], 'MA_Signal'] = -1
     return df
-
 
 def calculate_rsi(df, window=14):
     delta = df['price'].diff()
@@ -103,13 +98,11 @@ def calculate_rsi(df, window=14):
     df['RSI'] = 100 - (100 / (1 + rs))
     return df
 
-
 def generate_rsi_signals(df, overbought=70, oversold=30):
     df['RSI_Signal'] = 0
     df.loc[df['RSI'] < oversold, 'RSI_Signal'] = 1
     df.loc[df['RSI'] > overbought, 'RSI_Signal'] = -1
     return df
-
 
 def calculate_bollinger_bands(df, window=20, num_std=2):
     df['BB_MA'] = df['price'].rolling(window=window).mean()
@@ -118,13 +111,11 @@ def calculate_bollinger_bands(df, window=20, num_std=2):
     df['BB_Lower'] = df['BB_MA'] - (df['BB_STD'] * num_std)
     return df
 
-
 def generate_bollinger_band_signals(df):
     df['BB_Signal'] = 0
     df.loc[df['price'] < df['BB_Lower'], 'BB_Signal'] = 1  # Buy signal
     df.loc[df['price'] > df['BB_Upper'], 'BB_Signal'] = -1  # Sell signal
     return df
-
 
 def calculate_macd(df, fast=12, slow=26, signal=9):
     df['MACD_Fast'] = df['price'].ewm(span=fast, adjust=False).mean()
@@ -133,13 +124,11 @@ def calculate_macd(df, fast=12, slow=26, signal=9):
     df['MACD_Signal'] = df['MACD'].ewm(span=signal, adjust=False).mean()
     return df
 
-
 def generate_macd_signals(df):
     df['MACD_Signal'] = 0
     df.loc[df['MACD'] > df['MACD_Signal'], 'MACD_Signal'] = 1  # Buy signal
     df.loc[df['MACD'] < df['MACD_Signal'], 'MACD_Signal'] = -1  # Sell signal
     return df
-
 
 def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction_cost=0.001, max_trades_per_day=10):
     df['Position'] = df[f'{strategy}_Signal'].shift(1)
@@ -159,8 +148,7 @@ def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction
     total_trades = np.sum(df['Trade'])
     profit_factor = np.sum(df['Strategy_Returns'][df['Strategy_Returns'] > 0]) / \
         abs(np.sum(df['Strategy_Returns'][df['Strategy_Returns'] < 0]))
-    sharpe_ratio = np.sqrt(
-        252) * df['Strategy_Returns'].mean() / df['Strategy_Returns'].std()
+    sharpe_ratio = np.sqrt(252) * df['Strategy_Returns'].mean() / df['Strategy_Returns'].std()
 
     return {
         'Final_Balance': df['Balance'].iloc[-1],
@@ -169,7 +157,6 @@ def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction
         'Profit_Factor': profit_factor,
         'Sharpe_Ratio': sharpe_ratio
     }
-
 
 def optimize_ma_parameters(df, short_range, long_range):
     results = []
@@ -187,7 +174,6 @@ def optimize_ma_parameters(df, short_range, long_range):
                 **metrics
             })
     return pd.DataFrame(results)
-
 
 def optimize_rsi_parameters(df, window_range, overbought_range, oversold_range):
     results = []
@@ -208,20 +194,16 @@ def optimize_rsi_parameters(df, window_range, overbought_range, oversold_range):
                 })
     return pd.DataFrame(results)
 
-
 def optimize_hft_parameters(df, strategy, **kwargs):
     results = []
     for params in kwargs['param_grid']:
         df_test = df.copy()
         if strategy == 'BB':
-            df_test = calculate_bollinger_bands(
-                df_test, window=params['window'], num_std=params['num_std'])
+            df_test = calculate_bollinger_bands(df_test, window=params['window'], num_std=params['num_std'])
             df_test = generate_bollinger_band_signals(df_test)
         elif strategy == 'MACD':
-            df_test = calculate_macd(
-                df_test, fast=params['fast'], slow=params['slow'], signal=params['signal'])
+            df_test = calculate_macd(df_test, fast=params['fast'], slow=params['slow'], signal=params['signal'])
             df_test = generate_macd_signals(df_test)
-
         metrics = backtest(df_test, strategy)
         results.append({
             'Strategy': strategy,
@@ -229,7 +211,6 @@ def optimize_hft_parameters(df, strategy, **kwargs):
             **metrics
         })
     return pd.DataFrame(results)
-
 
 def generate_trade_list(df, strategy):
     trades = []
@@ -258,6 +239,38 @@ def generate_trade_list(df, strategy):
 
     return pd.DataFrame(trades)
 
+def optimize_high_frequency_ma_parameters(df, short_range, long_range):
+    results = []
+    for short_window in short_range:
+        for long_window in long_range:
+            if short_window >= long_window:
+                continue
+            df_test = add_high_frequency_moving_averages(df.copy(), short_window, long_window)
+            df_test = generate_high_frequency_ma_signals(df_test)
+            metrics = backtest(df_test, 'HF_MA', max_trades_per_day=4)  # Allow up to 4 trades per day
+            results.append({
+                'Strategy': 'High_Frequency_MA',
+                'Short_Window': short_window,
+                'Long_Window': long_window,
+                **metrics
+            })
+    return pd.DataFrame(results)
+
+def add_high_frequency_moving_averages(df, short_window, long_window):
+    df['Short_MA'] = df['price'].ewm(span=short_window, adjust=False).mean()  # Use EMA instead of SMA
+    df['Long_MA'] = df['price'].ewm(span=long_window, adjust=False).mean()
+    return df
+
+def generate_high_frequency_ma_signals(df):
+    df['HF_MA_Signal'] = 0
+    df.loc[df['Short_MA'] > df['Long_MA'], 'HF_MA_Signal'] = 1
+    df.loc[df['Short_MA'] < df['Long_MA'], 'HF_MA_Signal'] = -1
+    
+    # Add a minimum holding period
+    min_holding_period = 15  # minimum number of data points to hold a position
+    df['HF_MA_Signal'] = df['HF_MA_Signal'].where(df['HF_MA_Signal'].diff().abs().rolling(window=min_holding_period).sum() != 0, 0)
+    
+    return df
 
 def run_trading_system(df):
     # Resample data to different timeframes
@@ -275,69 +288,73 @@ def run_trading_system(df):
 
     # Original strategies
     print("Running MA Crossover Strategy...")
-    ma_results = optimize_ma_parameters(
-        df_hourly, range(4, 25, 2), range(26, 51, 2))
+    ma_results = optimize_ma_parameters(df_hourly, range(4, 25, 2), range(26, 51, 2))
     best_ma = ma_results.loc[ma_results['Total_Return'].idxmax()]
     print("\nBest MA Crossover parameters:")
     print(best_ma)
 
     # Generate trade list for best MA strategy
-    best_ma_df = add_moving_averages(
-        df_hourly.copy(), best_ma['Short_Window'], best_ma['Long_Window'])
+    best_ma_df = add_moving_averages(df_hourly.copy(), best_ma['Short_Window'], best_ma['Long_Window'])
     best_ma_df = generate_ma_signals(best_ma_df)
     ma_trades = generate_trade_list(best_ma_df, 'MA')
     ma_trades.to_csv('ma_trades.csv', index=False)
     print("MA Crossover trades saved to 'ma_trades.csv'")
 
     print("\nRunning RSI Strategy...")
-    rsi_results = optimize_rsi_parameters(df_hourly, range(
-        10, 21, 2), range(65, 81, 5), range(20, 36, 5))
+    rsi_results = optimize_rsi_parameters(df_hourly, range(10, 21, 2), range(65, 81, 5), range(20, 36, 5))
     best_rsi = rsi_results.loc[rsi_results['Total_Return'].idxmax()]
     print("\nBest RSI parameters:")
     print(best_rsi)
 
     # Generate trade list for best RSI strategy
     best_rsi_df = calculate_rsi(df_hourly.copy(), best_rsi['RSI_Window'])
-    best_rsi_df = generate_rsi_signals(
-        best_rsi_df, best_rsi['Overbought'], best_rsi['Oversold'])
+    best_rsi_df = generate_rsi_signals(best_rsi_df, best_rsi['Overbought'], best_rsi['Oversold'])
     rsi_trades = generate_trade_list(best_rsi_df, 'RSI')
     rsi_trades.to_csv('rsi_trades.csv', index=False)
     print("RSI trades saved to 'rsi_trades.csv'")
 
     # Higher Frequency Strategies
     print("\nRunning Bollinger Bands Strategy...")
-    bb_param_grid = [{'window': w, 'num_std': s}
-                     for w in range(10, 31, 5) for s in [1.5, 2, 2.5]]
-    bb_results = optimize_hft_parameters(
-        df_15min, 'BB', param_grid=bb_param_grid)
+    bb_param_grid = [{'window': w, 'num_std': s} for w in range(10, 31, 5) for s in [1.5, 2, 2.5]]
+    bb_results = optimize_hft_parameters(df_15min, 'BB', param_grid=bb_param_grid)
     best_bb = bb_results.loc[bb_results['Total_Return'].idxmax()]
     print("\nBest Bollinger Bands parameters:")
     print(best_bb)
 
     # Generate trade list for best Bollinger Bands strategy
-    best_bb_df = calculate_bollinger_bands(
-        df_15min.copy(), window=best_bb['window'], num_std=best_bb['num_std'])
+    best_bb_df = calculate_bollinger_bands(df_15min.copy(), window=best_bb['window'], num_std=best_bb['num_std'])
     best_bb_df = generate_bollinger_band_signals(best_bb_df)
     bb_trades = generate_trade_list(best_bb_df, 'BB')
     bb_trades.to_csv('bb_trades.csv', index=False)
     print("Bollinger Bands trades saved to 'bb_trades.csv'")
 
     print("\nRunning MACD Strategy...")
-    macd_param_grid = [{'fast': f, 'slow': s, 'signal': sig}
-                       for f in [6, 12, 18] for s in [20, 26, 32] for sig in [7, 9, 11]]
-    macd_results = optimize_hft_parameters(
-        df_15min, 'MACD', param_grid=macd_param_grid)
+    macd_param_grid = [{'fast': f, 'slow': s, 'signal': sig} for f in [6, 12, 18] for s in [20, 26, 32] for sig in [7, 9, 11]]
+    macd_results = optimize_hft_parameters(df_15min, 'MACD', param_grid=macd_param_grid)
     best_macd = macd_results.loc[macd_results['Total_Return'].idxmax()]
     print("\nBest MACD parameters:")
     print(best_macd)
 
     # Generate trade list for best MACD strategy
-    best_macd_df = calculate_macd(df_15min.copy(
-    ), fast=best_macd['fast'], slow=best_macd['slow'], signal=best_macd['signal'])
+    best_macd_df = calculate_macd(df_15min.copy(), fast=best_macd['fast'], slow=best_macd['slow'], signal=best_macd['signal'])
     best_macd_df = generate_macd_signals(best_macd_df)
     macd_trades = generate_trade_list(best_macd_df, 'MACD')
     macd_trades.to_csv('macd_trades.csv', index=False)
     print("MACD trades saved to 'macd_trades.csv'")
+
+    # High-Frequency MA Strategy
+    print("\nRunning High-Frequency MA Crossover Strategy...")
+    hf_ma_results = optimize_high_frequency_ma_parameters(df, range(2, 11), range(5, 21))
+    best_hf_ma = hf_ma_results.loc[hf_ma_results['Total_Return'].idxmax()]
+    print("\nBest High-Frequency MA Crossover parameters:")
+    print(best_hf_ma)
+
+    # Generate trade list for best High-Frequency MA strategy
+    best_hf_ma_df = add_high_frequency_moving_averages(df.copy(), best_hf_ma['Short_Window'], best_hf_ma['Long_Window'])
+    best_hf_ma_df = generate_high_frequency_ma_signals(best_hf_ma_df)
+    hf_ma_trades = generate_trade_list(best_hf_ma_df, 'HF_MA')
+    hf_ma_trades.to_csv('hf_ma_trades.csv', index=False)
+    print("High-Frequency MA Crossover trades saved to 'hf_ma_trades.csv'")
 
     # Print detailed results for each strategy
     print("\nDetailed Strategy Results:")
@@ -349,17 +366,8 @@ def run_trading_system(df):
     print(best_bb)
     print("\nMACD:")
     print(best_macd)
-
-# Print detailed results for each strategy
-    print("\nDetailed Strategy Results:")
-    print("MA Crossover:")
-    print(best_ma)
-    print("\nRSI:")
-    print(best_rsi)
-    print("\nBollinger Bands:")
-    print(best_bb)
-    print("\nMACD:")
-    print(best_macd)
+    print("\nHigh-Frequency MA:")
+    print(best_hf_ma)
 
     # Strategy Comparison
     print("\nStrategy Comparison:")
@@ -367,31 +375,17 @@ def run_trading_system(df):
         'MA Crossover': best_ma,
         'RSI': best_rsi,
         'Bollinger Bands': best_bb,
-        'MACD': best_macd
+        'MACD': best_macd,
+        'High-Frequency MA': best_hf_ma
     }).T
 
-    # Ensure 'Total_Return' is in the DataFrame
-    for strategy in ['MA Crossover', 'RSI', 'Bollinger Bands', 'MACD']:
-        if 'Total_Return' not in comparison.loc[strategy]:
-            comparison.loc[strategy, 'Total_Return'] = comparison.loc[strategy,
-                                                                      'Final_Balance'] / 10000 - 1
-
-    # Convert 'Total_Return' to numeric, replacing any non-numeric values with NaN
-    comparison['Total_Return'] = pd.to_numeric(
-        comparison['Total_Return'], errors='coerce')
-
-    print("\nComparison DataFrame Types:")
-    print(comparison.dtypes)
-
-    print("\nComparison DataFrame Values:")
     print(comparison)
 
     # Attempt to find the best strategy
     try:
         best_strategy = comparison['Total_Return'].idxmax()
         print(f"\nBest overall strategy: {best_strategy}")
-        print(
-            f"Best strategy Total Return: {comparison.loc[best_strategy, 'Total_Return']:.2f}%")
+        print(f"Best strategy Total Return: {comparison.loc[best_strategy, 'Total_Return']:.2f}%")
     except Exception as e:
         print(f"\nError in determining best strategy: {e}")
         print("Individual 'Total_Return' values:")
@@ -400,17 +394,14 @@ def run_trading_system(df):
             print(f"{strategy}: {total_return} (type: {type(total_return)})")
 
     # Combine results
-    all_results = pd.concat(
-        [ma_results, rsi_results, bb_results, macd_results])
+    all_results = pd.concat([ma_results, rsi_results, bb_results, macd_results, hf_ma_results])
     all_results.to_csv('optimization_results.csv', index=False)
     print("\nAll optimization results saved to 'optimization_results.csv'")
 
     return all_results, comparison
 
-
 def main():
-    parser = argparse.ArgumentParser(
-        description='Analyze Bitcoin trade log data.')
+    parser = argparse.ArgumentParser(description='Analyze Bitcoin trade log data.')
     parser.add_argument('--start-window-days-back', type=int, default=0,
                         help='Number of days to subtract from the current date as the start window')
     parser.add_argument('--end-window-days-back', type=int, default=0,
@@ -450,7 +441,6 @@ def main():
     print("Running trading system...")
     optimization_results, strategy_comparison = run_trading_system(df)
     print("Trading system analysis complete.")
-
 
 if __name__ == "__main__":
     main()
