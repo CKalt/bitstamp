@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 import os
 import argparse
+import time
 
 
 def parse_log_file(file_path, start_date=None, end_date=None):
@@ -308,24 +309,64 @@ def generate_high_frequency_ma_signals(df, min_holding_period=30, cooldown_perio
     return df[['HF_MA_Signal']]  # Return only the signal column to save memory
 
 
-def optimize_high_frequency_ma_parameters(df, short_range, long_range):
+def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_iterations=50, max_time_minutes=10):
     df = ensure_datetime_index(df)
     results = []
+    best_return = -np.inf
+    iterations = 0
+    start_time = time.time()
+
+    print(
+        f"Starting High-Frequency MA optimization. Max iterations: {max_iterations}, Max time: {max_time_minutes} minutes")
+
     for short_window in short_range:
         for long_window in long_range:
             if short_window >= long_window:
                 continue
+
+            iterations += 1
+            current_time = time.time()
+            elapsed_time = current_time - start_time
+
+            if iterations > max_iterations or elapsed_time > (max_time_minutes * 60):
+                print(
+                    f"Stopping optimization. Iterations: {iterations}, Time elapsed: {timedelta(seconds=int(elapsed_time))}")
+                break
+
+            print(
+                f"Iteration {iterations}: Testing Short Window = {short_window}, Long Window = {long_window}")
+
             df_test = add_high_frequency_moving_averages(
                 df.copy(), short_window, long_window)
             df_test['HF_MA_Signal'] = generate_high_frequency_ma_signals(
                 df_test, min_holding_period=30, cooldown_period=15, min_price_change_percent=0.1)['HF_MA_Signal']
             metrics = backtest(df_test, 'HF_MA', max_trades_per_day=20)
+
             results.append({
                 'Strategy': 'High_Frequency_MA',
                 'Short_Window': short_window,
                 'Long_Window': long_window,
                 **metrics
             })
+
+            print(f"  Total Return: {metrics['Total_Return']:.2f}%")
+
+            if metrics['Total_Return'] > best_return:
+                best_return = metrics['Total_Return']
+                print(f"  New best return: {best_return:.2f}%")
+            else:
+                # If we haven't improved in 5 iterations, stop
+                if len(results) > 5 and all(result['Total_Return'] <= best_return for result in results[-5:]):
+                    print("No improvement in last 5 iterations. Stopping optimization.")
+                    break
+
+        if iterations > max_iterations or elapsed_time > (max_time_minutes * 60):
+            break
+
+    total_time = time.time() - start_time
+    print(
+        f"High-Frequency MA optimization completed. Total iterations: {iterations}, Total time: {timedelta(seconds=int(total_time))}")
+
     return pd.DataFrame(results)
 
 
@@ -418,7 +459,7 @@ def run_trading_system(df):
     # High-Frequency MA Strategy
     print("\nRunning High-Frequency MA Crossover Strategy...")
     hf_ma_results = optimize_high_frequency_ma_parameters(
-        df, range(5, 21, 3), range(15, 61, 5))
+    df, range(2, 11, 2), range(5, 31, 5), max_iterations=30, max_time_minutes=15)
     best_hf_ma = hf_ma_results.loc[hf_ma_results['Total_Return'].idxmax()]
     print("\nBest High-Frequency MA Crossover parameters:")
     print(best_hf_ma)
@@ -457,7 +498,10 @@ def run_trading_system(df):
     print(comparison)
 
     # Extract only the Total_Return values for comparison
-    total_returns = comparison['Total_Return'].astype(float)
+    total_returns = comparison['Total_Return']
+
+    # Ensure all values are numeric
+    total_returns = pd.to_numeric(total_returns, errors='coerce')
 
     # Find the best strategy
     best_strategy = total_returns.idxmax()
