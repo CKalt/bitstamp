@@ -113,8 +113,8 @@ def add_moving_averages(df, short_window, long_window):
 
 def generate_ma_signals(df):
     df['MA_Signal'] = 0
-    df['MA_Signal'][df['Short_MA'] > df['Long_MA']] = 1
-    df['MA_Signal'][df['Short_MA'] < df['Long_MA']] = -1
+    df.loc[df['Short_MA'] > df['Long_MA'], 'MA_Signal'] = 1
+    df.loc[df['Short_MA'] < df['Long_MA'], 'MA_Signal'] = -1
     return df
 
 
@@ -130,10 +130,9 @@ def calculate_rsi(df, window=14):
 
 def generate_rsi_signals(df, overbought=70, oversold=30):
     df['RSI_Signal'] = 0
-    df['RSI_Signal'][df['RSI'] < oversold] = 1
-    df['RSI_Signal'][df['RSI'] > overbought] = -1
+    df.loc[df['RSI'] < oversold, 'RSI_Signal'] = 1
+    df.loc[df['RSI'] > overbought, 'RSI_Signal'] = -1
     return df
-
 
 def calculate_bollinger_bands(df, window=20, num_std=2):
     df = ensure_datetime_index(df)
@@ -146,8 +145,8 @@ def calculate_bollinger_bands(df, window=20, num_std=2):
 
 def generate_bollinger_band_signals(df):
     df['BB_Signal'] = 0
-    df['BB_Signal'][df['price'] < df['BB_Lower']] = 1  # Buy signal
-    df['BB_Signal'][df['price'] > df['BB_Upper']] = -1  # Sell signal
+    df.loc[df['price'] < df['BB_Lower'], 'BB_Signal'] = 1  # Buy signal
+    df.loc[df['price'] > df['BB_Upper'], 'BB_Signal'] = -1  # Sell signal
     return df
 
 
@@ -162,8 +161,10 @@ def calculate_macd(df, fast=12, slow=26, signal=9):
 
 def generate_macd_signals(df):
     df['MACD_Signal'] = 0
-    df['MACD_Signal'][df['MACD'] > df['MACD_Signal_Line']] = 1  # Buy signal
-    df['MACD_Signal'][df['MACD'] < df['MACD_Signal_Line']] = -1  # Sell signal
+    df.loc[df['MACD'] > df['MACD_Signal_Line'],
+           'MACD_Signal'] = 1  # Buy signal
+    df.loc[df['MACD'] < df['MACD_Signal_Line'],
+           'MACD_Signal'] = -1  # Sell signal
     return df
 
 
@@ -308,33 +309,43 @@ def add_high_frequency_moving_averages(df, short_window, long_window):
 def generate_high_frequency_ma_signals(df, min_holding_period=30, cooldown_period=15, min_price_change_percent=0.1):
     df['HF_MA_Signal'] = np.where(df['Short_MA'] > df['Long_MA'], 1,
                                   np.where(df['Short_MA'] < df['Long_MA'], -1, 0))
-    
+
     # Identify where signals change
     df['Signal_Change'] = df['HF_MA_Signal'].diff().fillna(0).abs()
-    
+
     # Record the time of the last trade signal
     df['Last_Trade_Time'] = df.index.where(df['Signal_Change'] != 0)
     df['Last_Trade_Time'].fillna(method='ffill', inplace=True)
-    
+
+    # Ensure 'Last_Trade_Time' is datetime64[ns] dtype
+    df['Last_Trade_Time'] = pd.to_datetime(df['Last_Trade_Time'])
+
+    # Convert index to Series for subtraction
+    index_series = df.index.to_series()
+
     # Calculate time since the last trade in minutes
-    df['Time_Since_Last_Trade'] = (df.index - df['Last_Trade_Time']).total_seconds() / 60
+    time_since_last_trade = (index_series - df['Last_Trade_Time'])
+    df['Time_Since_Last_Trade'] = time_since_last_trade.dt.total_seconds() / 60
     df['Time_Since_Last_Trade'] = df['Time_Since_Last_Trade'].fillna(0)
-    
+
     # Apply cooldown period
     df.loc[df['Time_Since_Last_Trade'] < cooldown_period, 'HF_MA_Signal'] = 0
-    
+
     # Filter signals based on minimum price change percentage
     df['Price_Change'] = df['price'].pct_change().fillna(0).abs() * 100
     df.loc[df['Price_Change'] < min_price_change_percent, 'HF_MA_Signal'] = 0
-    
+
     # Implement minimum holding period
-    df['Holding_Period'] = df['Signal_Change'].rolling(window=min_holding_period, min_periods=1).sum()
+    df['Holding_Period'] = df['Signal_Change'].rolling(
+        window=min_holding_period, min_periods=1).sum()
     df.loc[df['Holding_Period'] < 1, 'HF_MA_Signal'] = 0
-    
+
     # Clean up temporary columns
-    df.drop(columns=['Signal_Change', 'Last_Trade_Time', 'Time_Since_Last_Trade', 'Price_Change', 'Holding_Period'], inplace=True)
-    
+    df.drop(columns=['Signal_Change', 'Last_Trade_Time',
+            'Time_Since_Last_Trade', 'Price_Change', 'Holding_Period'], inplace=True)
+
     return df[['HF_MA_Signal']]
+
 
 def process_combination(params):
     short_window, long_window, df = params
