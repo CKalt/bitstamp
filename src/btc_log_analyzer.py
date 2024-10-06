@@ -274,7 +274,7 @@ def generate_high_frequency_ma_signals(df, min_holding_period=30, cooldown_perio
     df.loc[df['Price_Change'] < min_price_change_percent / 100, 'HF_MA_Signal'] = 0
     return df[['HF_MA_Signal']]
 
-def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_iterations=50, max_time_minutes=10):
+def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_iterations=50, max_time_minutes=10, chunk_size=10000):
     df = ensure_datetime_index(df)
     results = []
     best_return = -np.inf
@@ -282,9 +282,14 @@ def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_itera
     start_time = time.time()
 
     print(f"Starting High-Frequency MA optimization. Max iterations: {max_iterations}, Max time: {max_time_minutes} minutes")
-    print("Progress: 0%")
+    print(f"Total data points: {len(df)}")
+    print(f"Processing in chunks of {chunk_size} data points")
 
     total_combinations = len(short_range) * len(long_range)
+    total_chunks = len(df) // chunk_size + (1 if len(df) % chunk_size > 0 else 0)
+    total_operations = total_combinations * total_chunks
+    operations_completed = 0
+
     last_update_time = start_time
 
     for short_window in short_range:
@@ -296,29 +301,49 @@ def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_itera
             current_time = time.time()
             elapsed_time = current_time - start_time
 
-            # Time-based progress update (every 10 seconds)
-            if current_time - last_update_time > 10:
-                progress = iterations / min(total_combinations, max_iterations) * 100
-                print(f"Progress: {progress:.2f}% | Best Return: {best_return:.2f}% | Time elapsed: {timedelta(seconds=int(elapsed_time))}")
-                last_update_time = current_time
-
             if iterations > max_iterations or elapsed_time > (max_time_minutes * 60):
                 print(f"Stopping optimization. Iterations: {iterations}, Time elapsed: {timedelta(seconds=int(elapsed_time))}")
                 break
 
-            df_test = add_high_frequency_moving_averages(df.copy(), short_window, long_window)
-            df_test['HF_MA_Signal'] = generate_high_frequency_ma_signals(df_test, min_holding_period=30, cooldown_period=15, min_price_change_percent=0.1)['HF_MA_Signal']
-            metrics = backtest(df_test, 'HF_MA', max_trades_per_day=20)
+            print(f"Testing Short Window: {short_window}, Long Window: {long_window}")
+            
+            # Process data in chunks
+            chunk_results = []
+            for i in range(0, len(df), chunk_size):
+                chunk_num = i // chunk_size + 1
+                print(f"Processing chunk {chunk_num}/{total_chunks}")
+                df_chunk = df.iloc[i:i+chunk_size].copy()
+                df_chunk = add_high_frequency_moving_averages(df_chunk, short_window, long_window)
+                df_chunk['HF_MA_Signal'] = generate_high_frequency_ma_signals(df_chunk, min_holding_period=30, cooldown_period=15, min_price_change_percent=0.1)['HF_MA_Signal']
+                metrics = backtest(df_chunk, 'HF_MA', max_trades_per_day=20)
+                chunk_results.append(metrics)
+
+                operations_completed += 1
+                overall_progress = (operations_completed / total_operations) * 100
+
+                # Time-based progress update (every 5 seconds)
+                if current_time - last_update_time > 5:
+                    print(f"Overall Progress: {overall_progress:.2f}% | Best Return: {best_return:.2f}% | Time elapsed: {timedelta(seconds=int(elapsed_time))}")
+                    last_update_time = current_time
+
+            # Aggregate chunk results
+            aggregated_metrics = {
+                'Final_Balance': chunk_results[-1]['Final_Balance'],
+                'Total_Return': sum(cr['Total_Return'] for cr in chunk_results),
+                'Total_Trades': sum(cr['Total_Trades'] for cr in chunk_results),
+                'Profit_Factor': np.mean([cr['Profit_Factor'] for cr in chunk_results]),
+                'Sharpe_Ratio': np.mean([cr['Sharpe_Ratio'] for cr in chunk_results])
+            }
 
             results.append({
                 'Strategy': 'High_Frequency_MA',
                 'Short_Window': short_window,
                 'Long_Window': long_window,
-                **metrics
+                **aggregated_metrics
             })
 
-            if metrics['Total_Return'] > best_return:
-                best_return = metrics['Total_Return']
+            if aggregated_metrics['Total_Return'] > best_return:
+                best_return = aggregated_metrics['Total_Return']
                 print(f"New best return: {best_return:.2f}%")
             
             # Early stopping if no improvement in last 5 iterations
