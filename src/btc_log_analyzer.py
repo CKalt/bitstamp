@@ -1,4 +1,4 @@
-import json
+ import json
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,7 +7,8 @@ import os
 import argparse
 import time
 from tqdm import tqdm
-
+from itertools import product
+from multiprocessing import Pool
 
 def parse_log_file(file_path, start_date=None, end_date=None):
     data = []
@@ -57,7 +58,14 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     if end_reached:
         print(f"Reached end date: {end_date}")
     print("Creating DataFrame...")
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+
+    # Optimize data types
+    df['price'] = pd.to_numeric(df['price'], downcast='float')
+    df['amount'] = pd.to_numeric(df['amount'], downcast='float')
+    df['type'] = df['type'].astype('int8')
+
+    return df
 
 
 def analyze_data(df):
@@ -75,7 +83,8 @@ def analyze_data(df):
     plt.close()
     print("Calculating and plotting hourly trading volume...")
     df['volume'] = df['price'] * df['amount']
-    hourly_volume = df.resample('H', on='datetime')['volume'].sum()
+    df.set_index('datetime', inplace=True)
+    hourly_volume = df['volume'].resample('H').sum()
     plt.figure(figsize=(12, 6))
     plt.bar(hourly_volume.index, hourly_volume.values)
     plt.title('Hourly Trading Volume')
@@ -83,6 +92,7 @@ def analyze_data(df):
     plt.ylabel('Volume (USD)')
     plt.savefig('btc_hourly_volume.png')
     plt.close()
+    df.reset_index(inplace=True)
 
 
 def ensure_datetime_index(df):
@@ -102,16 +112,16 @@ def add_moving_averages(df, short_window, long_window):
 
 def generate_ma_signals(df):
     df['MA_Signal'] = 0
-    df.loc[df['Short_MA'] > df['Long_MA'], 'MA_Signal'] = 1
-    df.loc[df['Short_MA'] < df['Long_MA'], 'MA_Signal'] = -1
+    df['MA_Signal'][df['Short_MA'] > df['Long_MA']] = 1
+    df['MA_Signal'][df['Short_MA'] < df['Long_MA']] = -1
     return df
 
 
 def calculate_rsi(df, window=14):
     df = ensure_datetime_index(df)
     delta = df['price'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    gain = (delta.clip(lower=0)).rolling(window=window).mean()
+    loss = (-delta.clip(upper=0)).rolling(window=window).mean()
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
     return df
@@ -119,8 +129,8 @@ def calculate_rsi(df, window=14):
 
 def generate_rsi_signals(df, overbought=70, oversold=30):
     df['RSI_Signal'] = 0
-    df.loc[df['RSI'] < oversold, 'RSI_Signal'] = 1
-    df.loc[df['RSI'] > overbought, 'RSI_Signal'] = -1
+    df['RSI_Signal'][df['RSI'] < oversold] = 1
+    df['RSI_Signal'][df['RSI'] > overbought] = -1
     return df
 
 
@@ -135,8 +145,8 @@ def calculate_bollinger_bands(df, window=20, num_std=2):
 
 def generate_bollinger_band_signals(df):
     df['BB_Signal'] = 0
-    df.loc[df['price'] < df['BB_Lower'], 'BB_Signal'] = 1  # Buy signal
-    df.loc[df['price'] > df['BB_Upper'], 'BB_Signal'] = -1  # Sell signal
+    df['BB_Signal'][df['price'] < df['BB_Lower']] = 1  # Buy signal
+    df['BB_Signal'][df['price'] > df['BB_Upper']] = -1  # Sell signal
     return df
 
 
@@ -145,48 +155,45 @@ def calculate_macd(df, fast=12, slow=26, signal=9):
     df['MACD_Fast'] = df['price'].ewm(span=fast, adjust=False).mean()
     df['MACD_Slow'] = df['price'].ewm(span=slow, adjust=False).mean()
     df['MACD'] = df['MACD_Fast'] - df['MACD_Slow']
-    df['MACD_Signal'] = df['MACD'].ewm(span=signal, adjust=False).mean()
+    df['MACD_Signal_Line'] = df['MACD'].ewm(span=signal, adjust=False).mean()
     return df
 
 
 def generate_macd_signals(df):
     df['MACD_Signal'] = 0
-    df.loc[df['MACD'] > df['MACD_Signal'], 'MACD_Signal'] = 1  # Buy signal
-    df.loc[df['MACD'] < df['MACD_Signal'], 'MACD_Signal'] = -1  # Sell signal
+    df['MACD_Signal'][df['MACD'] > df['MACD_Signal_Line']] = 1  # Buy signal
+    df['MACD_Signal'][df['MACD'] < df['MACD_Signal_Line']] = -1  # Sell signal
     return df
 
 
 def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction_cost=0.001, max_trades_per_day=10):
     df = ensure_datetime_index(df)
-    df['Position'] = df[f'{strategy}_Signal'].shift(1)
-    df['Returns'] = df['price'].pct_change()
+    df['Position'] = df[f'{strategy}_Signal'].shift(1).fillna(0)
+    df['Returns'] = df['price'].pct_change().fillna(0)
     df['Strategy_Returns'] = df['Position'] * df['Returns']
 
+    # Calculate transaction costs
     df['Trade'] = df['Position'].diff().abs()
-    df['Cumulative_Trades'] = df['Trade'].groupby(df.index.date).cumsum()
-    df.loc[df['Cumulative_Trades'] > max_trades_per_day, 'Trade'] = 0
     df['Transaction_Costs'] = df['Trade'] * transaction_cost
-    df['Strategy_Returns'] = df['Strategy_Returns'] - df['Transaction_Costs']
 
+    # Limit trades per day
+    df['Daily_Trades'] = df['Trade'].groupby(df.index.date).cumsum()
+    df.loc[df['Daily_Trades'] > max_trades_per_day, 'Strategy_Returns'] = 0
+
+    df['Strategy_Returns'] -= df['Transaction_Costs']
     df['Cumulative_Returns'] = (1 + df['Strategy_Returns']).cumprod()
     df['Balance'] = initial_balance * df['Cumulative_Returns']
 
-    total_trades = np.sum(df['Trade'])
+    total_trades = df['Trade'].sum()
 
-    # Calculate profit factor
-    positive_returns = df['Strategy_Returns'][df['Strategy_Returns'] > 0].sum()
-    negative_returns = abs(df['Strategy_Returns']
-                           [df['Strategy_Returns'] < 0].sum())
-    profit_factor = positive_returns / \
-        negative_returns if negative_returns != 0 else np.inf
+    # Profit factor and Sharpe ratio
+    positive_returns = df.loc[df['Strategy_Returns'] > 0, 'Strategy_Returns'].sum()
+    negative_returns = -df.loc[df['Strategy_Returns'] < 0, 'Strategy_Returns'].sum()
+    profit_factor = positive_returns / negative_returns if negative_returns != 0 else np.inf
 
-    # Calculate Sharpe ratio
-    mean_returns = df['Strategy_Returns'].mean()
-    std_returns = df['Strategy_Returns'].std()
-    sharpe_ratio = np.sqrt(252) * mean_returns / \
-        std_returns if std_returns != 0 else 0
+    sharpe_ratio = df['Strategy_Returns'].mean() / df['Strategy_Returns'].std() * np.sqrt(252) if df['Strategy_Returns'].std() != 0 else 0
 
-    final_balance = df['Balance'].iloc[-1] if len(df) > 0 else initial_balance
+    final_balance = df['Balance'].iloc[-1]
     total_return = (final_balance - initial_balance) / initial_balance * 100
 
     return {
@@ -238,7 +245,8 @@ def optimize_rsi_parameters(df, window_range, overbought_range, oversold_range):
 
 def optimize_hft_parameters(df, strategy, **kwargs):
     results = []
-    for params in kwargs['param_grid']:
+    param_grid = kwargs['param_grid']
+    for params in param_grid:
         df_test = df.copy()
         if strategy == 'BB':
             df_test = calculate_bollinger_bands(
@@ -293,127 +301,51 @@ def add_high_frequency_moving_averages(df, short_window, long_window):
 
 
 def generate_high_frequency_ma_signals(df, min_holding_period=30, cooldown_period=15, min_price_change_percent=0.1):
-    df = df.copy()
-    df['HF_MA_Signal'] = np.where(df['Short_MA'] > df['Long_MA'], 1, np.where(
-        df['Short_MA'] < df['Long_MA'], -1, 0))
-    df['Signal_Change'] = df['HF_MA_Signal'].diff().abs()
-    df['Holding_Period'] = df['Signal_Change'].rolling(
-        window=min_holding_period, min_periods=1).sum()
+    df['HF_MA_Signal'] = np.where(df['Short_MA'] > df['Long_MA'], 1,
+                                  np.where(df['Short_MA'] < df['Long_MA'], -1, 0))
+
+    # Implement cooldown period using shift and cumulative sum
+    df['Signal_Change'] = df['HF_MA_Signal'].diff().fillna(0).abs()
+    df['Last_Trade_Time'] = df['Signal_Change'].apply(
+        lambda x: df.index[df['Signal_Change'] == x][0] if x != 0 else pd.NaT)
+    df['Last_Trade_Time'] = df['Last_Trade_Time'].fillna(method='ffill')
+    df['Time_Since_Last_Trade'] = (df.index - df['Last_Trade_Time']).total_seconds() / 60
+    df.loc[df['Time_Since_Last_Trade'] < cooldown_period, 'HF_MA_Signal'] = 0
+
+    # Filter signals based on price change
+    df['Price_Change'] = df['price'].pct_change().fillna(0).abs() * 100
+    df.loc[df['Price_Change'] < min_price_change_percent, 'HF_MA_Signal'] = 0
+
+    # Implement minimum holding period
+    df['Holding_Period'] = df['Signal_Change'].rolling(window=min_holding_period).sum()
     df.loc[df['Holding_Period'] < 1, 'HF_MA_Signal'] = 0
-    last_trade_time = None
-    for i, (index, row) in enumerate(df.iterrows()):
-        if row['HF_MA_Signal'] != 0:
-            if last_trade_time is not None and (index - last_trade_time).total_seconds() / 60 < cooldown_period:
-                df.at[index, 'HF_MA_Signal'] = 0
-            else:
-                last_trade_time = index
-    df['Price_Change'] = df['price'].pct_change().abs()
-    df.loc[df['Price_Change'] < min_price_change_percent / 100, 'HF_MA_Signal'] = 0
+
     return df[['HF_MA_Signal']]
 
 
-def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_iterations=50, max_time_minutes=10, chunk_size=10000):
+def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_iterations=50):
     df = ensure_datetime_index(df)
-    results = []
-    best_return = -np.inf
-    iterations = 0
-    start_time = time.time()
+    df = df.sort_index()
+    parameter_combinations = [(sw, lw) for sw, lw in product(short_range, long_range) if sw < lw]
+    parameter_combinations = parameter_combinations[:max_iterations]
 
-    print(
-        f"Starting High-Frequency MA optimization. Max iterations: {max_iterations}, Max time: {max_time_minutes} minutes")
-    print(f"Total data points: {len(df)}")
-    print(f"Processing in chunks of {chunk_size} data points")
+    def process_combination(params):
+        short_window, long_window = params
+        df_temp = add_high_frequency_moving_averages(df.copy(), short_window, long_window)
+        df_temp['HF_MA_Signal'] = generate_high_frequency_ma_signals(df_temp)
+        metrics = backtest(df_temp, 'HF_MA', max_trades_per_day=20)
+        return {
+            'Strategy': 'High_Frequency_MA',
+            'Short_Window': short_window,
+            'Long_Window': long_window,
+            **metrics
+        }
 
-    total_combinations = len(short_range) * len(long_range)
-    total_chunks = len(df) // chunk_size + (1 if len(df) %
-                                            chunk_size > 0 else 0)
-    total_operations = total_combinations * total_chunks
-    operations_completed = 0
-
-    last_update_time = start_time
-
-    for short_window in short_range:
-        for long_window in long_range:
-            if short_window >= long_window:
-                continue
-
-            iterations += 1
-            current_time = time.time()
-            elapsed_time = current_time - start_time
-
-            if iterations > max_iterations or elapsed_time > (max_time_minutes * 60):
-                print(
-                    f"Stopping optimization. Iterations: {iterations}, Time elapsed: {timedelta(seconds=int(elapsed_time))}")
-                break
-
-            print(
-                f"Testing Short Window: {short_window}, Long Window: {long_window}")
-
-            # Process data in chunks
-            chunk_results = []
-            for i in range(0, len(df), chunk_size):
-                chunk_num = i // chunk_size + 1
-                print(f"Processing chunk {chunk_num}/{total_chunks}")
-                df_chunk = df.iloc[i:i+chunk_size].copy()
-                df_chunk = add_high_frequency_moving_averages(
-                    df_chunk, short_window, long_window)
-                df_chunk['HF_MA_Signal'] = generate_high_frequency_ma_signals(
-                    df_chunk, min_holding_period=30, cooldown_period=15, min_price_change_percent=0.1)['HF_MA_Signal']
-                try:
-                    metrics = backtest(df_chunk, 'HF_MA',
-                                       max_trades_per_day=20)
-                    chunk_results.append(metrics)
-                except Exception as e:
-                    print(f"Error in chunk {chunk_num}: {str(e)}")
-                    continue
-
-                operations_completed += 1
-                overall_progress = (operations_completed /
-                                    total_operations) * 100
-
-                # Time-based progress update (every 5 seconds)
-                if current_time - last_update_time > 5:
-                    print(
-                        f"Overall Progress: {overall_progress:.2f}% | Best Return: {best_return:.2f}% | Time elapsed: {timedelta(seconds=int(elapsed_time))}")
-                    last_update_time = current_time
-
-            # Aggregate chunk results
-            if chunk_results:
-                aggregated_metrics = {
-                    'Final_Balance': chunk_results[-1]['Final_Balance'],
-                    'Total_Return': sum(cr['Total_Return'] for cr in chunk_results),
-                    'Total_Trades': sum(cr['Total_Trades'] for cr in chunk_results),
-                    'Profit_Factor': np.mean([cr['Profit_Factor'] for cr in chunk_results]),
-                    'Sharpe_Ratio': np.mean([cr['Sharpe_Ratio'] for cr in chunk_results])
-                }
-
-                results.append({
-                    'Strategy': 'High_Frequency_MA',
-                    'Short_Window': short_window,
-                    'Long_Window': long_window,
-                    **aggregated_metrics
-                })
-
-                if aggregated_metrics['Total_Return'] > best_return:
-                    best_return = aggregated_metrics['Total_Return']
-                    print(f"New best return: {best_return:.2f}%")
-
-                # Early stopping if no improvement in last 5 iterations
-                if len(results) > 5 and all(result['Total_Return'] <= best_return for result in results[-5:]):
-                    print("No improvement in last 5 iterations. Stopping optimization.")
-                    break
-            else:
-                print(
-                    f"No valid results for Short Window: {short_window}, Long Window: {long_window}")
-
-        if iterations > max_iterations or elapsed_time > (max_time_minutes * 60):
-            break
-
-    total_time = time.time() - start_time
-    print(
-        f"High-Frequency MA optimization completed. Total iterations: {iterations}, Total time: {timedelta(seconds=int(total_time))}")
+    with Pool() as pool:
+        results = pool.map(process_combination, parameter_combinations)
 
     return pd.DataFrame(results)
+
 
 def run_trading_system(df):
     print("Starting run_trading_system function...")
@@ -493,7 +425,7 @@ def run_trading_system(df):
     print("MACD trades saved to 'macd_trades.csv'")
 
     print("\nStarting High-Frequency MA Crossover Strategy optimization. This may take several minutes...")
-    hf_ma_results = optimize_high_frequency_ma_parameters(df, range(2, 7, 1), range(5, 16, 2), max_iterations=20, max_time_minutes=10, chunk_size=10000)
+    hf_ma_results = optimize_high_frequency_ma_parameters(df, range(2, 7, 1), range(5, 16, 2), max_iterations=20)
     
     if not hf_ma_results.empty:
         best_hf_ma = hf_ma_results.loc[hf_ma_results['Total_Return'].idxmax()]
@@ -549,6 +481,7 @@ def run_trading_system(df):
     print("\nAll optimization results saved to 'optimization_results.csv'")
 
     return all_results, comparison
+
 
 def main():
     parser = argparse.ArgumentParser(
