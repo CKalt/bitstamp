@@ -322,24 +322,24 @@ def generate_high_frequency_ma_signals(df, min_holding_period=30, cooldown_perio
 
     return df[['HF_MA_Signal']]
 
+# Moved the function 'process_combination' to global scope
+def process_combination(params):
+    short_window, long_window, df = params
+    df_temp = add_high_frequency_moving_averages(df.copy(), short_window, long_window)
+    df_temp['HF_MA_Signal'] = generate_high_frequency_ma_signals(df_temp)
+    metrics = backtest(df_temp, 'HF_MA', max_trades_per_day=20)
+    return {
+        'Strategy': 'High_Frequency_MA',
+        'Short_Window': short_window,
+        'Long_Window': long_window,
+        **metrics
+    }
 
 def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_iterations=50):
     df = ensure_datetime_index(df)
     df = df.sort_index()
-    parameter_combinations = [(sw, lw) for sw, lw in product(short_range, long_range) if sw < lw]
+    parameter_combinations = [(sw, lw, df) for sw, lw in product(short_range, long_range) if sw < lw]
     parameter_combinations = parameter_combinations[:max_iterations]
-
-    def process_combination(params):
-        short_window, long_window = params
-        df_temp = add_high_frequency_moving_averages(df.copy(), short_window, long_window)
-        df_temp['HF_MA_Signal'] = generate_high_frequency_ma_signals(df_temp)
-        metrics = backtest(df_temp, 'HF_MA', max_trades_per_day=20)
-        return {
-            'Strategy': 'High_Frequency_MA',
-            'Short_Window': short_window,
-            'Long_Window': long_window,
-            **metrics
-        }
 
     with Pool() as pool:
         results = pool.map(process_combination, parameter_combinations)
@@ -353,6 +353,7 @@ def run_trading_system(df):
     print(f"DataFrame shape after ensuring datetime index: {df.shape}")
 
     print("Resampling data to hourly timeframe...")
+    df['volume'] = df['price'] * df['amount']
     df_hourly = df.resample('1H').agg({
         'price': 'last',
         'amount': 'sum',
