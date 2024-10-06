@@ -308,27 +308,33 @@ def add_high_frequency_moving_averages(df, short_window, long_window):
 def generate_high_frequency_ma_signals(df, min_holding_period=30, cooldown_period=15, min_price_change_percent=0.1):
     df['HF_MA_Signal'] = np.where(df['Short_MA'] > df['Long_MA'], 1,
                                   np.where(df['Short_MA'] < df['Long_MA'], -1, 0))
-
-    # Implement cooldown period using shift and cumulative sum
+    
+    # Identify where signals change
     df['Signal_Change'] = df['HF_MA_Signal'].diff().fillna(0).abs()
-    df['Last_Trade_Time'] = df['Signal_Change'].apply(
-        lambda x: df.index[df['Signal_Change'] == x][0] if x != 0 else pd.NaT)
-    df['Last_Trade_Time'] = df['Last_Trade_Time'].fillna(method='ffill')
-    df['Time_Since_Last_Trade'] = (
-        df.index - df['Last_Trade_Time']).total_seconds() / 60
+    
+    # Record the time of the last trade signal
+    df['Last_Trade_Time'] = df.index.where(df['Signal_Change'] != 0)
+    df['Last_Trade_Time'].fillna(method='ffill', inplace=True)
+    
+    # Calculate time since the last trade in minutes
+    df['Time_Since_Last_Trade'] = (df.index - df['Last_Trade_Time']).total_seconds() / 60
+    df['Time_Since_Last_Trade'] = df['Time_Since_Last_Trade'].fillna(0)
+    
+    # Apply cooldown period
     df.loc[df['Time_Since_Last_Trade'] < cooldown_period, 'HF_MA_Signal'] = 0
-
-    # Filter signals based on price change
+    
+    # Filter signals based on minimum price change percentage
     df['Price_Change'] = df['price'].pct_change().fillna(0).abs() * 100
     df.loc[df['Price_Change'] < min_price_change_percent, 'HF_MA_Signal'] = 0
-
+    
     # Implement minimum holding period
-    df['Holding_Period'] = df['Signal_Change'].rolling(
-        window=min_holding_period).sum()
+    df['Holding_Period'] = df['Signal_Change'].rolling(window=min_holding_period, min_periods=1).sum()
     df.loc[df['Holding_Period'] < 1, 'HF_MA_Signal'] = 0
-
+    
+    # Clean up temporary columns
+    df.drop(columns=['Signal_Change', 'Last_Trade_Time', 'Time_Since_Last_Trade', 'Price_Change', 'Holding_Period'], inplace=True)
+    
     return df[['HF_MA_Signal']]
-
 
 def process_combination(params):
     short_window, long_window, df = params
