@@ -134,6 +134,7 @@ def generate_rsi_signals(df, overbought=70, oversold=30):
     df.loc[df['RSI'] > overbought, 'RSI_Signal'] = -1
     return df
 
+
 def calculate_bollinger_bands(df, window=20, num_std=2):
     df = ensure_datetime_index(df)
     df['BB_MA'] = df['price'].rolling(window=window).mean()
@@ -188,6 +189,10 @@ def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction
 
     total_trades = df['Trade'].sum()
 
+    # Calculate average trades per day
+    trading_days = (df.index[-1].date() - df.index[0].date()).days + 1
+    average_trades_per_day = total_trades / trading_days if trading_days > 0 else 0
+
     # Profit factor and Sharpe ratio
     positive_returns = df.loc[df['Strategy_Returns']
                               > 0, 'Strategy_Returns'].sum()
@@ -206,9 +211,30 @@ def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction
         'Final_Balance': final_balance,
         'Total_Return': total_return,
         'Total_Trades': total_trades,
+        'Average_Trades_Per_Day': average_trades_per_day,
         'Profit_Factor': profit_factor,
         'Sharpe_Ratio': sharpe_ratio
     }
+
+
+def optimize_ma_parameters(df, short_range, long_range):
+    results = []
+    for short_window in short_range:
+        for long_window in long_range:
+            if short_window >= long_window:
+                continue
+            df_test = add_moving_averages(df.copy(), short_window, long_window)
+            df_test = generate_ma_signals(df_test)
+            metrics = backtest(df_test, 'MA')
+            average_trades_per_day = metrics['Average_Trades_Per_Day']
+            if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
+                results.append({
+                    'Strategy': 'MA',
+                    'Short_Window': short_window,
+                    'Long_Window': long_window,
+                    **metrics
+                })
+    return pd.DataFrame(results)
 
 
 def optimize_ma_parameters(df, short_range, long_range):
@@ -229,26 +255,6 @@ def optimize_ma_parameters(df, short_range, long_range):
     return pd.DataFrame(results)
 
 
-def optimize_rsi_parameters(df, window_range, overbought_range, oversold_range):
-    results = []
-    for window in window_range:
-        for overbought in overbought_range:
-            for oversold in oversold_range:
-                if oversold >= overbought:
-                    continue
-                df_test = calculate_rsi(df.copy(), window)
-                df_test = generate_rsi_signals(df_test, overbought, oversold)
-                metrics = backtest(df_test, 'RSI')
-                results.append({
-                    'Strategy': 'RSI',
-                    'RSI_Window': window,
-                    'Overbought': overbought,
-                    'Oversold': oversold,
-                    **metrics
-                })
-    return pd.DataFrame(results)
-
-
 def optimize_hft_parameters(df, strategy, **kwargs):
     results = []
     param_grid = kwargs['param_grid']
@@ -263,12 +269,15 @@ def optimize_hft_parameters(df, strategy, **kwargs):
                 df_test, fast=params['fast'], slow=params['slow'], signal=params['signal'])
             df_test = generate_macd_signals(df_test)
         metrics = backtest(df_test, strategy)
-        results.append({
-            'Strategy': strategy,
-            **params,
-            **metrics
-        })
+        average_trades_per_day = metrics['Average_Trades_Per_Day']
+        if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
+            results.append({
+                'Strategy': strategy,
+                **params,
+                **metrics
+            })
     return pd.DataFrame(results)
+
 
 
 def generate_trade_list(df, strategy):
@@ -364,20 +373,19 @@ def process_combination(params):
 def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_iterations=50):
     df = ensure_datetime_index(df)
     df = df.sort_index()
-    parameter_combinations = [(sw, lw, df) for sw, lw in product(
-        short_range, long_range) if sw < lw]
+    parameter_combinations = [(sw, lw, df) for sw, lw in product(short_range, long_range) if sw < lw]
     parameter_combinations = parameter_combinations[:max_iterations]
 
-    print(
-        f"Total parameter combinations to test: {len(parameter_combinations)}")
+    print(f"Total parameter combinations to test: {len(parameter_combinations)}")
 
     with Pool() as pool:
         results = []
-        # Use imap_unordered to get results as they become available
         for result in tqdm(pool.imap_unordered(process_combination, parameter_combinations),
                            total=len(parameter_combinations),
                            desc="Optimizing High-Frequency MA Parameters"):
-            results.append(result)
+            average_trades_per_day = result['Average_Trades_Per_Day']
+            if 1 <= average_trades_per_day <= 4 and result['Total_Return'] > 0:
+                results.append(result)
 
     return pd.DataFrame(results)
 
@@ -406,132 +414,126 @@ def run_trading_system(df):
     df_15min['timestamp'] = df_15min.index.view('int64') // 10**9
     print(f"15-minute DataFrame shape: {df_15min.shape}")
 
-    print("Running MA Crossover Strategy...")
-    ma_results = optimize_ma_parameters(
-        df_hourly, range(4, 25, 2), range(26, 51, 2))
-    best_ma = ma_results.loc[ma_results['Total_Return'].idxmax()]
-    print("Best MA Crossover parameters:")
-    print(best_ma)
+    strategies = {}
 
-    print("Generating trade list for best MA strategy...")
-    best_ma_df = add_moving_averages(
-        df_hourly.copy(), best_ma['Short_Window'], best_ma['Long_Window'])
-    best_ma_df = generate_ma_signals(best_ma_df)
-    ma_trades = generate_trade_list(best_ma_df, 'MA')
-    ma_trades.to_csv('ma_trades.csv', index=False)
-    print("MA Crossover trades saved to 'ma_trades.csv'")
+    print("Running MA Crossover Strategy...")
+    ma_results = optimize_ma_parameters(df_hourly, range(4, 25, 2), range(26, 51, 2))
+    if not ma_results.empty:
+        best_ma = ma_results.loc[ma_results['Total_Return'].idxmax()]
+        print("Best MA Crossover parameters:")
+        print(best_ma)
+
+        print("Generating trade list for best MA strategy...")
+        best_ma_df = add_moving_averages(df_hourly.copy(), best_ma['Short_Window'], best_ma['Long_Window'])
+        best_ma_df = generate_ma_signals(best_ma_df)
+        ma_trades = generate_trade_list(best_ma_df, 'MA')
+        ma_trades.to_csv('ma_trades.csv', index=False)
+        print("MA Crossover trades saved to 'ma_trades.csv'")
+        strategies['MA Crossover'] = best_ma
+    else:
+        print("No MA Crossover strategies met the criteria.")
 
     print("Running RSI Strategy...")
-    rsi_results = optimize_rsi_parameters(df_hourly, range(
-        10, 21, 2), range(65, 81, 5), range(20, 36, 5))
-    best_rsi = rsi_results.loc[rsi_results['Total_Return'].idxmax()]
-    print("Best RSI parameters:")
-    print(best_rsi)
+    rsi_results = optimize_rsi_parameters(df_hourly, range(10, 21, 2), range(65, 81, 5), range(20, 36, 5))
+    if not rsi_results.empty:
+        best_rsi = rsi_results.loc[rsi_results['Total_Return'].idxmax()]
+        print("Best RSI parameters:")
+        print(best_rsi)
 
-    print("Generating trade list for best RSI strategy...")
-    best_rsi_df = calculate_rsi(df_hourly.copy(), best_rsi['RSI_Window'])
-    best_rsi_df = generate_rsi_signals(
-        best_rsi_df, best_rsi['Overbought'], best_rsi['Oversold'])
-    rsi_trades = generate_trade_list(best_rsi_df, 'RSI')
-    rsi_trades.to_csv('rsi_trades.csv', index=False)
-    print("RSI trades saved to 'rsi_trades.csv'")
+        print("Generating trade list for best RSI strategy...")
+        best_rsi_df = calculate_rsi(df_hourly.copy(), best_rsi['RSI_Window'])
+        best_rsi_df = generate_rsi_signals(best_rsi_df, best_rsi['Overbought'], best_rsi['Oversold'])
+        rsi_trades = generate_trade_list(best_rsi_df, 'RSI')
+        rsi_trades.to_csv('rsi_trades.csv', index=False)
+        print("RSI trades saved to 'rsi_trades.csv'")
+        strategies['RSI'] = best_rsi
+    else:
+        print("No RSI strategies met the criteria.")
 
     print("Running Bollinger Bands Strategy...")
-    bb_param_grid = [{'window': w, 'num_std': s}
-                     for w in range(10, 31, 5) for s in [1.5, 2, 2.5]]
-    bb_results = optimize_hft_parameters(
-        df_15min, 'BB', param_grid=bb_param_grid)
-    best_bb = bb_results.loc[bb_results['Total_Return'].idxmax()]
-    print("Best Bollinger Bands parameters:")
-    print(best_bb)
+    bb_param_grid = [{'window': w, 'num_std': s} for w in range(10, 31, 5) for s in [1.5, 2, 2.5]]
+    bb_results = optimize_hft_parameters(df_15min, 'BB', param_grid=bb_param_grid)
+    if not bb_results.empty:
+        best_bb = bb_results.loc[bb_results['Total_Return'].idxmax()]
+        print("Best Bollinger Bands parameters:")
+        print(best_bb)
 
-    print("Generating trade list for best Bollinger Bands strategy...")
-    best_bb_df = calculate_bollinger_bands(
-        df_15min.copy(), window=best_bb['window'], num_std=best_bb['num_std'])
-    best_bb_df = generate_bollinger_band_signals(best_bb_df)
-    bb_trades = generate_trade_list(best_bb_df, 'BB')
-    bb_trades.to_csv('bb_trades.csv', index=False)
-    print("Bollinger Bands trades saved to 'bb_trades.csv'")
+        print("Generating trade list for best Bollinger Bands strategy...")
+        best_bb_df = calculate_bollinger_bands(df_15min.copy(), window=best_bb['window'], num_std=best_bb['num_std'])
+        best_bb_df = generate_bollinger_band_signals(best_bb_df)
+        bb_trades = generate_trade_list(best_bb_df, 'BB')
+        bb_trades.to_csv('bb_trades.csv', index=False)
+        print("Bollinger Bands trades saved to 'bb_trades.csv'")
+        strategies['Bollinger Bands'] = best_bb
+    else:
+        print("No Bollinger Bands strategies met the criteria.")
 
     print("Running MACD Strategy...")
-    macd_param_grid = [{'fast': f, 'slow': s, 'signal': sig}
-                       for f in [6, 12, 18] for s in [20, 26, 32] for sig in [7, 9, 11]]
-    macd_results = optimize_hft_parameters(
-        df_15min, 'MACD', param_grid=macd_param_grid)
-    best_macd = macd_results.loc[macd_results['Total_Return'].idxmax()]
-    print("Best MACD parameters:")
-    print(best_macd)
+    macd_param_grid = [{'fast': f, 'slow': s, 'signal': sig} for f in [6, 12, 18] for s in [20, 26, 32] for sig in [7, 9, 11]]
+    macd_results = optimize_hft_parameters(df_15min, 'MACD', param_grid=macd_param_grid)
+    if not macd_results.empty:
+        best_macd = macd_results.loc[macd_results['Total_Return'].idxmax()]
+        print("Best MACD parameters:")
+        print(best_macd)
 
-    print("Generating trade list for best MACD strategy...")
-    best_macd_df = calculate_macd(df_15min.copy(
-    ), fast=best_macd['fast'], slow=best_macd['slow'], signal=best_macd['signal'])
-    best_macd_df = generate_macd_signals(best_macd_df)
-    macd_trades = generate_trade_list(best_macd_df, 'MACD')
-    macd_trades.to_csv('macd_trades.csv', index=False)
-    print("MACD trades saved to 'macd_trades.csv'")
+        print("Generating trade list for best MACD strategy...")
+        best_macd_df = calculate_macd(df_15min.copy(), fast=best_macd['fast'], slow=best_macd['slow'], signal=best_macd['signal'])
+        best_macd_df = generate_macd_signals(best_macd_df)
+        macd_trades = generate_trade_list(best_macd_df, 'MACD')
+        macd_trades.to_csv('macd_trades.csv', index=False)
+        print("MACD trades saved to 'macd_trades.csv'")
+        strategies['MACD'] = best_macd
+    else:
+        print("No MACD strategies met the criteria.")
 
     print("\nStarting High-Frequency MA Crossover Strategy optimization. This may take several minutes...")
-    hf_ma_results = optimize_high_frequency_ma_parameters(
-        df, range(2, 7, 1), range(5, 16, 2), max_iterations=20)
-
+    hf_ma_results = optimize_high_frequency_ma_parameters(df, range(2, 7, 1), range(5, 16, 2), max_iterations=20)
     if not hf_ma_results.empty:
         best_hf_ma = hf_ma_results.loc[hf_ma_results['Total_Return'].idxmax()]
         print("\nBest High-Frequency MA Crossover parameters:")
         print(best_hf_ma)
 
         print("Generating trade list for best High-Frequency MA strategy...")
-        best_hf_ma_df = add_high_frequency_moving_averages(
-            df.copy(), best_hf_ma['Short_Window'], best_hf_ma['Long_Window'])
-        best_hf_ma_df['HF_MA_Signal'] = generate_high_frequency_ma_signals(
-            best_hf_ma_df, min_holding_period=30, cooldown_period=15, min_price_change_percent=0.1)['HF_MA_Signal']
+        best_hf_ma_df = add_high_frequency_moving_averages(df.copy(), best_hf_ma['Short_Window'], best_hf_ma['Long_Window'])
+        best_hf_ma_df['HF_MA_Signal'] = generate_high_frequency_ma_signals(best_hf_ma_df)['HF_MA_Signal']
         hf_ma_trades = generate_trade_list(best_hf_ma_df, 'HF_MA')
         hf_ma_trades.to_csv('hf_ma_trades.csv', index=False)
         print("High-Frequency MA Crossover trades saved to 'hf_ma_trades.csv'")
+        strategies['High-Frequency MA'] = best_hf_ma
     else:
-        print("High-Frequency MA optimization did not produce any results.")
-        best_hf_ma = pd.Series()
+        print("No High-Frequency MA strategies met the criteria.")
 
-    print("Preparing detailed strategy results...")
-    print("\nDetailed Strategy Results:")
-    print("MA Crossover:")
-    print(best_ma)
-    print("\nRSI:")
-    print(best_rsi)
-    print("\nBollinger Bands:")
-    print(best_bb)
-    print("\nMACD:")
-    print(best_macd)
-    print("\nHigh-Frequency MA:")
-    print(best_hf_ma)
+    if strategies:
+        print("Preparing detailed strategy results...")
+        print("\nDetailed Strategy Results:")
+        for name, result in strategies.items():
+            print(f"{name}:")
+            print(result)
+            print()
 
-    print("\nStrategy Comparison:")
-    comparison = pd.DataFrame({
-        'MA Crossover': best_ma,
-        'RSI': best_rsi,
-        'Bollinger Bands': best_bb,
-        'MACD': best_macd,
-        'High-Frequency MA': best_hf_ma
-    }).T
+        print("\nStrategy Comparison:")
+        comparison = pd.DataFrame(strategies).T
+        print(comparison)
 
-    print(comparison)
+        total_returns = comparison['Total_Return']
+        total_returns = pd.to_numeric(total_returns, errors='coerce')
+        best_strategy = total_returns.idxmax()
+        print(f"\nBest overall strategy: {best_strategy}")
+        print(f"Best strategy Total Return: {total_returns[best_strategy]:.2f}%")
 
-    total_returns = comparison['Total_Return']
-    total_returns = pd.to_numeric(total_returns, errors='coerce')
-    best_strategy = total_returns.idxmax()
-    print(f"\nBest overall strategy: {best_strategy}")
-    print(f"Best strategy Total Return: {total_returns[best_strategy]:.2f}%")
+        print("\nAll strategy returns:")
+        for strategy, total_return in total_returns.items():
+            print(f"{strategy}: {total_return:.2f}%")
 
-    print("\nAll strategy returns:")
-    for strategy, total_return in total_returns.items():
-        print(f"{strategy}: {total_return:.2f}%")
-
-    all_results = pd.concat(
-        [ma_results, rsi_results, bb_results, macd_results, hf_ma_results])
-    all_results.to_csv('optimization_results.csv', index=False)
-    print("\nAll optimization results saved to 'optimization_results.csv'")
+        all_results = pd.concat([ma_results, rsi_results, bb_results, macd_results, hf_ma_results], ignore_index=True)
+        all_results.to_csv('optimization_results.csv', index=False)
+        print("\nAll optimization results saved to 'optimization_results.csv'")
+    else:
+        print("No strategies met the criteria. No comparison or results to display.")
+        comparison = pd.DataFrame()
+        all_results = pd.DataFrame()
 
     return all_results, comparison
-
 
 def main():
     parser = argparse.ArgumentParser(
