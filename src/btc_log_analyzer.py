@@ -10,21 +10,78 @@ from tqdm import tqdm
 from itertools import product
 from multiprocessing import Pool
 
+def create_metadata_file(log_file_path, metadata_file_path):
+    print("Creating metadata file...")
+    metadata = {}
+    total_lines = 0
+    last_timestamp = None
+
+    with open(log_file_path, 'r') as file:
+        for line in file:
+            total_lines += 1
+            if total_lines % 1000000 == 0:
+                print(f"Processed {total_lines} lines...")
+            try:
+                json_data = json.loads(line)
+                if json_data['event'] == 'trade':
+                    timestamp = int(json_data['data']['timestamp'])
+                    date = datetime.fromtimestamp(timestamp).date()
+                    if date not in metadata:
+                        metadata[str(date)] = {'start_line': total_lines, 'timestamp': timestamp}
+                    last_timestamp = timestamp
+            except json.JSONDecodeError:
+                continue
+
+    metadata['total_lines'] = total_lines
+    metadata['last_timestamp'] = last_timestamp
+
+    with open(metadata_file_path, 'w') as file:
+        json.dump(metadata, file)
+
+    print(f"Metadata file created: {metadata_file_path}")
+
+def get_start_line_from_metadata(metadata_file_path, start_date):
+    with open(metadata_file_path, 'r') as file:
+        metadata = json.load(file)
+
+    start_date_str = str(start_date.date())
+    if start_date_str in metadata:
+        return metadata[start_date_str]['start_line']
+    else:
+        # If exact date not found, find the nearest date
+        dates = [datetime.strptime(date, '%Y-%m-%d').date() for date in metadata.keys() if date != 'total_lines' and date != 'last_timestamp']
+        nearest_date = min(dates, key=lambda x: abs(x - start_date.date()))
+        return metadata[str(nearest_date)]['start_line']
+
 def parse_log_file(file_path, start_date=None, end_date=None):
+    metadata_file_path = f"{file_path}.metadata"
+    if not os.path.exists(metadata_file_path):
+        create_metadata_file(file_path, metadata_file_path)
+
     data = []
-    total_lines = sum(1 for _ in open(file_path, 'r'))
+    with open(metadata_file_path, 'r') as file:
+        metadata = json.load(file)
+
+    total_lines = metadata['total_lines']
     print(f"Total lines in log file: {total_lines}")
+
+    start_line = 1
+    if start_date:
+        start_line = get_start_line_from_metadata(metadata_file_path, start_date)
+        print(f"Starting from line {start_line} based on start date {start_date}")
+
     last_date = None
-    skipped_count = 0
+    skipped_count = start_line - 1
     processed_count = 0
     end_reached = False
 
     with open(file_path, 'r') as file:
         for i, line in enumerate(file, 1):
+            if i < start_line:
+                continue
+
             if i % 10000 == 0:
-                status = "Skipping" if skipped_count > processed_count else "Processing"
-                print(
-                    f"Line {i}/{total_lines} ({i/total_lines*100:.2f}%) - {status} - Last date: {last_date}")
+                print(f"Line {i}/{total_lines} ({i/total_lines*100:.2f}%) - Last date: {last_date}")
 
             try:
                 json_data = json.loads(line)
@@ -151,10 +208,8 @@ def calculate_macd(df, fast=12, slow=26, signal=9):
 
 def generate_macd_signals(df):
     df['MACD_Signal'] = 0
-    df.loc[df['MACD'] > df['MACD_Signal_Line'],
-           'MACD_Signal'] = 1  # Buy signal
-    df.loc[df['MACD'] < df['MACD_Signal_Line'],
-           'MACD_Signal'] = -1  # Sell signal
+    df.loc[df['MACD'] > df['MACD_Signal_Line'], 'MACD_Signal'] = 1  # Buy signal
+    df.loc[df['MACD'] < df['MACD_Signal_Line'], 'MACD_Signal'] = -1  # Sell signal
     return df
 
 def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction_cost=0.001, max_trades_per_day=10):
@@ -182,15 +237,11 @@ def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction
     average_trades_per_day = total_trades / trading_days if trading_days > 0 else 0
 
     # Profit factor and Sharpe ratio
-    positive_returns = df.loc[df['Strategy_Returns']
-                              > 0, 'Strategy_Returns'].sum()
-    negative_returns = -df.loc[df['Strategy_Returns']
-                               < 0, 'Strategy_Returns'].sum()
-    profit_factor = positive_returns / \
-        negative_returns if negative_returns != 0 else np.inf
+    positive_returns = df.loc[df['Strategy_Returns'] > 0, 'Strategy_Returns'].sum()
+    negative_returns = -df.loc[df['Strategy_Returns'] < 0, 'Strategy_Returns'].sum()
+    profit_factor = positive_returns / negative_returns if negative_returns != 0 else np.inf
 
-    sharpe_ratio = df['Strategy_Returns'].mean() / df['Strategy_Returns'].std() * \
-        np.sqrt(252) if df['Strategy_Returns'].std() != 0 else 0
+    sharpe_ratio = df['Strategy_Returns'].mean() / df['Strategy_Returns'].std() * np.sqrt(252) if df['Strategy_Returns'].std() != 0 else 0
 
     final_balance = df['Balance'].iloc[-1]
     total_return = (final_balance - initial_balance) / initial_balance * 100
@@ -250,12 +301,10 @@ def optimize_hft_parameters(df, strategy, **kwargs):
     for params in param_grid:
         df_test = df.copy()
         if strategy == 'BB':
-            df_test = calculate_bollinger_bands(
-                df_test, window=params['window'], num_std=params['num_std'])
+            df_test = calculate_bollinger_bands(df_test, window=params['window'], num_std=params['num_std'])
             df_test = generate_bollinger_band_signals(df_test)
         elif strategy == 'MACD':
-            df_test = calculate_macd(
-                df_test, fast=params['fast'], slow=params['slow'], signal=params['signal'])
+            df_test = calculate_macd(df_test, fast=params['fast'], slow=params['slow'], signal=params['signal'])
             df_test = generate_macd_signals(df_test)
         metrics = backtest(df_test, strategy)
         average_trades_per_day = metrics['Average_Trades_Per_Day']
@@ -525,9 +574,18 @@ def main():
                         help='Number of days to subtract from the current date as the end window')
     parser.add_argument('--max-iterations', type=int, default=50,
                         help='Maximum number of iterations for parameter optimization')
+    parser.add_argument('--create-metadata', action='store_true',
+                        help='Create metadata file for the log file')
     args = parser.parse_args()
 
     file_path = 'btcusd.log'
+    metadata_file_path = f"{file_path}.metadata"
+
+    if args.create_metadata or not os.path.exists(metadata_file_path):
+        create_metadata_file(file_path, metadata_file_path)
+        print("Metadata file created. Please run the script again without --create-metadata to analyze the data.")
+        return
+
     file_size = os.path.getsize(file_path) / (1024 * 1024)  # Size in MB
     print(f"Log file size: {file_size:.2f} MB")
 
