@@ -574,17 +574,15 @@ def main():
                         help='Number of days to subtract from the current date as the end window')
     parser.add_argument('--max-iterations', type=int, default=50,
                         help='Maximum number of iterations for parameter optimization')
-    parser.add_argument('--create-metadata', action='store_true',
-                        help='Create metadata file for the log file')
     args = parser.parse_args()
 
     file_path = 'btcusd.log'
     metadata_file_path = f"{file_path}.metadata"
 
-    if args.create_metadata or not os.path.exists(metadata_file_path):
+    if not os.path.exists(metadata_file_path):
+        print("Metadata file not found. Creating it now...")
         create_metadata_file(file_path, metadata_file_path)
-        print("Metadata file created. Please run the script again without --create-metadata to analyze the data.")
-        return
+        print("Metadata file created.")
 
     file_size = os.path.getsize(file_path) / (1024 * 1024)  # Size in MB
     print(f"Log file size: {file_size:.2f} MB")
