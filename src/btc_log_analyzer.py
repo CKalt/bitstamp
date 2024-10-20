@@ -421,6 +421,7 @@ def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_itera
 
     return pd.DataFrame(results)
 
+
 def run_trading_system(df, max_iterations=50):
     print("Starting run_trading_system function...")
     df = ensure_datetime_index(df)
@@ -548,17 +549,24 @@ def run_trading_system(df, max_iterations=50):
 
         total_returns = comparison['Total_Return']
         total_returns = pd.to_numeric(total_returns, errors='coerce')
-        best_strategy = total_returns.idxmax()
-        print(f"\nBest overall strategy: {best_strategy}")
-        print(f"Best strategy Total Return: {total_returns[best_strategy]:.2f}%")
+        
+        if len(total_returns) > 0:
+            best_strategy = total_returns.idxmax()
+            print(f"\nBest overall strategy: {best_strategy}")
+            print(f"Best strategy Total Return: {total_returns[best_strategy]:.2f}%")
 
-        print("\nAll strategy returns:")
-        for strategy, total_return in total_returns.items():
-            print(f"{strategy}: {total_return:.2f}%")
+            print("\nAll strategy returns:")
+            for strategy, total_return in total_returns.items():
+                print(f"{strategy}: {total_return:.2f}%")
+        else:
+            print("\nNo strategies met the criteria.")
 
-        all_results = pd.concat([ma_results, rsi_results, bb_results, macd_results, hf_ma_results], ignore_index=True)
-        all_results.to_csv('optimization_results.csv', index=False)
-        print("\nAll optimization results saved to 'optimization_results.csv'")
+        all_results = pd.concat([result for result in [ma_results, rsi_results, bb_results, macd_results, hf_ma_results] if not result.empty], ignore_index=True)
+        if not all_results.empty:
+            all_results.to_csv('optimization_results.csv', index=False)
+            print("\nAll optimization results saved to 'optimization_results.csv'")
+        else:
+            print("\nNo optimization results to save.")
     else:
         print("No strategies met the criteria. No comparison or results to display.")
         comparison = pd.DataFrame()
@@ -626,9 +634,10 @@ def main():
             for strategy in strategy_comparison.index:
                 print(f"{strategy}: Total Return = {strategy_comparison.loc[strategy, 'Total_Return']:.2f}%")
         
-            best_strategy = strategy_comparison['Total_Return'].idxmax()
-            print(f"\nOverall best strategy: {best_strategy}")
-            print(f"Best strategy Total Return: {strategy_comparison.loc[best_strategy, 'Total_Return']:.2f}%")
+            if len(strategy_comparison) > 1:
+                best_strategy = strategy_comparison['Total_Return'].idxmax()
+                print(f"\nOverall best strategy: {best_strategy}")
+                print(f"Best strategy Total Return: {strategy_comparison.loc[best_strategy, 'Total_Return']:.2f}%")
         else:
             print("No strategies met the criteria. No comparison results to display.")
     except Exception as e:
