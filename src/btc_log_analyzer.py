@@ -1,3 +1,5 @@
+#! src/btc_log_analyzer.py
+
 import json
 import pandas as pd
 import numpy as np
@@ -447,6 +449,7 @@ def run_trading_system(df, max_iterations=50):
     print(f"15-minute DataFrame shape: {df_15min.shape}")
 
     strategies = {}
+    all_results_list = []
 
     print("Running MA Crossover Strategy...")
     ma_results = optimize_ma_parameters(df_hourly, range(4, 25, 2), range(26, 51, 2))
@@ -454,6 +457,8 @@ def run_trading_system(df, max_iterations=50):
         best_ma = ma_results.loc[ma_results['Total_Return'].idxmax()]
         print("Best MA Crossover parameters:")
         print(best_ma)
+        strategies['MA Crossover'] = best_ma.to_dict()
+        all_results_list.append(ma_results)
 
         print("Generating trade list for best MA strategy...")
         best_ma_df = add_moving_averages(df_hourly.copy(), best_ma['Short_Window'], best_ma['Long_Window'])
@@ -461,7 +466,6 @@ def run_trading_system(df, max_iterations=50):
         ma_trades = generate_trade_list(best_ma_df, 'MA')
         ma_trades.to_csv('ma_trades.csv', index=False)
         print("MA Crossover trades saved to 'ma_trades.csv'")
-        strategies['MA Crossover'] = best_ma
     else:
         print("No MA Crossover strategies met the criteria.")
 
@@ -471,6 +475,8 @@ def run_trading_system(df, max_iterations=50):
         best_rsi = rsi_results.loc[rsi_results['Total_Return'].idxmax()]
         print("Best RSI parameters:")
         print(best_rsi)
+        strategies['RSI'] = best_rsi.to_dict()
+        all_results_list.append(rsi_results)
 
         print("Generating trade list for best RSI strategy...")
         best_rsi_df = calculate_rsi(df_hourly.copy(), best_rsi['RSI_Window'])
@@ -478,7 +484,6 @@ def run_trading_system(df, max_iterations=50):
         rsi_trades = generate_trade_list(best_rsi_df, 'RSI')
         rsi_trades.to_csv('rsi_trades.csv', index=False)
         print("RSI trades saved to 'rsi_trades.csv'")
-        strategies['RSI'] = best_rsi
     else:
         print("No RSI strategies met the criteria.")
 
@@ -489,6 +494,8 @@ def run_trading_system(df, max_iterations=50):
         best_bb = bb_results.loc[bb_results['Total_Return'].idxmax()]
         print("Best Bollinger Bands parameters:")
         print(best_bb)
+        strategies['Bollinger Bands'] = best_bb.to_dict()
+        all_results_list.append(bb_results)
 
         print("Generating trade list for best Bollinger Bands strategy...")
         best_bb_df = calculate_bollinger_bands(df_15min.copy(), window=best_bb['window'], num_std=best_bb['num_std'])
@@ -496,25 +503,31 @@ def run_trading_system(df, max_iterations=50):
         bb_trades = generate_trade_list(best_bb_df, 'BB')
         bb_trades.to_csv('bb_trades.csv', index=False)
         print("Bollinger Bands trades saved to 'bb_trades.csv'")
-        strategies['Bollinger Bands'] = best_bb
     else:
         print("No Bollinger Bands strategies met the criteria.")
 
     print("Running MACD Strategy...")
-    macd_param_grid = [{'fast': f, 'slow': s, 'signal': sig} for f in [6, 12, 18] for s in [20, 26, 32] for sig in [7, 9, 11]]
+    macd_param_grid = [{'fast': f, 'slow': s, 'signal': sig} 
+                      for f in [6, 12, 18] 
+                      for s in [20, 26, 32] 
+                      for sig in [7, 9, 11]]
     macd_results = optimize_hft_parameters(df_15min, 'MACD', param_grid=macd_param_grid)
     if not macd_results.empty:
         best_macd = macd_results.loc[macd_results['Total_Return'].idxmax()]
         print("Best MACD parameters:")
         print(best_macd)
+        strategies['MACD'] = best_macd.to_dict()
+        all_results_list.append(macd_results)
 
         print("Generating trade list for best MACD strategy...")
-        best_macd_df = calculate_macd(df_15min.copy(), fast=best_macd['fast'], slow=best_macd['slow'], signal=best_macd['signal'])
+        best_macd_df = calculate_macd(df_15min.copy(), 
+                                    fast=best_macd['fast'], 
+                                    slow=best_macd['slow'], 
+                                    signal=best_macd['signal'])
         best_macd_df = generate_macd_signals(best_macd_df)
         macd_trades = generate_trade_list(best_macd_df, 'MACD')
         macd_trades.to_csv('macd_trades.csv', index=False)
         print("MACD trades saved to 'macd_trades.csv'")
-        strategies['MACD'] = best_macd
     else:
         print("No MACD strategies met the criteria.")
 
@@ -524,14 +537,17 @@ def run_trading_system(df, max_iterations=50):
         best_hf_ma = hf_ma_results.loc[hf_ma_results['Total_Return'].idxmax()]
         print("\nBest High-Frequency MA Crossover parameters:")
         print(best_hf_ma)
+        strategies['High-Frequency MA'] = best_hf_ma.to_dict()
+        all_results_list.append(hf_ma_results)
 
         print("Generating trade list for best High-Frequency MA strategy...")
-        best_hf_ma_df = add_high_frequency_moving_averages(df.copy(), best_hf_ma['Short_Window'], best_hf_ma['Long_Window'])
+        best_hf_ma_df = add_high_frequency_moving_averages(df.copy(), 
+                                                         best_hf_ma['Short_Window'], 
+                                                         best_hf_ma['Long_Window'])
         best_hf_ma_df['HF_MA_Signal'] = generate_high_frequency_ma_signals(best_hf_ma_df)['HF_MA_Signal']
         hf_ma_trades = generate_trade_list(best_hf_ma_df, 'HF_MA')
         hf_ma_trades.to_csv('hf_ma_trades.csv', index=False)
         print("High-Frequency MA Crossover trades saved to 'hf_ma_trades.csv'")
-        strategies['High-Frequency MA'] = best_hf_ma
     else:
         print("No High-Frequency MA strategies met the criteria.")
 
@@ -540,18 +556,20 @@ def run_trading_system(df, max_iterations=50):
         print("\nDetailed Strategy Results:")
         for name, result in strategies.items():
             print(f"{name}:")
-            print(result)
+            for key, value in result.items():
+                print(f"{key}: {value}")
             print()
 
         print("\nStrategy Comparison:")
-        comparison = pd.DataFrame(strategies).T
-        print(comparison)
+        comparison_df = pd.DataFrame.from_dict(strategies, orient='index')
+        print(comparison_df)
 
-        total_returns = comparison['Total_Return']
-        total_returns = pd.to_numeric(total_returns, errors='coerce')
+        # Safely extract and compare total returns
+        total_returns = {name: result.get('Total_Return', 0) 
+                        for name, result in strategies.items()}
         
-        if len(total_returns) > 0:
-            best_strategy = total_returns.idxmax()
+        if total_returns:
+            best_strategy = max(total_returns.items(), key=lambda x: x[1])[0]
             print(f"\nBest overall strategy: {best_strategy}")
             print(f"Best strategy Total Return: {total_returns[best_strategy]:.2f}%")
 
@@ -561,18 +579,19 @@ def run_trading_system(df, max_iterations=50):
         else:
             print("\nNo strategies met the criteria.")
 
-        all_results = pd.concat([result for result in [ma_results, rsi_results, bb_results, macd_results, hf_ma_results] if not result.empty], ignore_index=True)
-        if not all_results.empty:
+        if all_results_list:
+            all_results = pd.concat(all_results_list, ignore_index=True)
             all_results.to_csv('optimization_results.csv', index=False)
             print("\nAll optimization results saved to 'optimization_results.csv'")
         else:
             print("\nNo optimization results to save.")
+            all_results = pd.DataFrame()
     else:
         print("No strategies met the criteria. No comparison or results to display.")
-        comparison = pd.DataFrame()
+        comparison_df = pd.DataFrame()
         all_results = pd.DataFrame()
 
-    return all_results, comparison
+    return all_results, comparison_df
 
 def main():
     parser = argparse.ArgumentParser(description='Analyze Bitcoin trade log data.')
@@ -580,6 +599,8 @@ def main():
                         help='Number of days to subtract from the current date as the start window')
     parser.add_argument('--end-window-days-back', type=int, default=0,
                         help='Number of days to subtract from the current date as the end window')
+    parser.add_argument('--trading-window-days', type=int,
+                        help='Number of days to analyze from the start date (overrides end-window-days-back)')
     parser.add_argument('--max-iterations', type=int, default=50,
                         help='Maximum number of iterations for parameter optimization')
     args = parser.parse_args()
@@ -604,7 +625,14 @@ def main():
         start_date = None
         print("No start date specified")
 
-    if args.end_window_days_back > 0:
+    # Handle trading window days if specified
+    if args.trading_window_days is not None:
+        if start_date is None:
+            raise ValueError("Cannot use trading-window-days without specifying start-window-days-back")
+        end_date = start_date + timedelta(days=args.trading_window_days)
+        print(f"Using trading window of {args.trading_window_days} days")
+        print(f"Analysis window: {start_date} to {end_date}")
+    elif args.end_window_days_back > 0:
         end_date = current_date - timedelta(days=args.end_window_days_back)
         print(f"Analyzing data up to {end_date}")
     else:
