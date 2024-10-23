@@ -187,7 +187,6 @@ def calculate_market_regime(df, lookback=20):
     Calculate market regime indicator using price volatility and trend strength
     Returns: -1 (mean-reverting), 0 (mixed), 1 (trending)
     """
-    # Ensure datetime index
     df = ensure_datetime_index(df)
 
     # Calculate price returns and volatility
@@ -216,6 +215,136 @@ def calculate_market_regime(df, lookback=20):
            (df['trend_strength'].abs() < df['trend_strength'].rolling(lookback).mean()), 'regime'] = -1
 
     return df['regime']
+
+
+def calculate_smart_vwma(df, vwma_window=50, ma_short=4, ma_long=34, min_trend_strength=0.001):
+    """
+    Calculate VWMA with additional trend confirmation criteria
+    
+    Args:
+        df: DataFrame with price and volume data
+        vwma_window: Window for VWMA calculation
+        ma_short: Short MA window (from successful MA Crossover)
+        ma_long: Long MA window (from successful MA Crossover)
+        min_trend_strength: Minimum required trend strength
+    """
+    df = ensure_datetime_index(df)
+    
+    # Calculate traditional VWMA components
+    df['volume'] = df['price'] * df['amount']
+    df['vol_price'] = df['price'] * df['volume']
+    df['VWMA'] = (df['vol_price'].rolling(window=vwma_window).sum() / 
+                  df['volume'].rolling(window=vwma_window).sum())
+    
+    # Add trend confirmation using MA Crossover parameters
+    df['Short_MA'] = df['price'].rolling(window=ma_short).mean()
+    df['Long_MA'] = df['price'].rolling(window=ma_long).mean()
+    
+    # Calculate trend strength
+    df['MA_Spread'] = (df['Short_MA'] - df['Long_MA']) / df['Long_MA']
+    
+    # Volume analysis
+    df['volume_sma'] = df['volume'].rolling(window=vwma_window).mean()
+    df['volume_ratio'] = df['volume'] / df['volume_sma']
+    
+    # Volatility measurement
+    df['returns'] = df['price'].pct_change()
+    df['volatility'] = df['returns'].rolling(window=vwma_window).std()
+    
+    return df
+
+
+def generate_smart_vwma_signals(df, vol_threshold=1.8, trend_threshold=0.001, 
+                              volatility_filter=0.02, min_price_move=0.001):
+    """
+    Generate trading signals with stricter entry criteria
+    
+    Args:
+        df: DataFrame with VWMA and trend indicators
+        vol_threshold: Volume ratio threshold
+        trend_threshold: Minimum trend strength required
+        volatility_filter: Maximum allowed volatility
+        min_price_move: Minimum price movement required
+    """
+    df['Smart_VWMA_Signal'] = 0
+    
+    # Basic price-VWMA crossover
+    price_above_vwma = df['price'] > df['VWMA']
+    price_below_vwma = df['price'] < df['VWMA']
+    
+    # Trend confirmation
+    trend_up = df['MA_Spread'] > trend_threshold
+    trend_down = df['MA_Spread'] < -trend_threshold
+    
+    # Volume confirmation
+    volume_significant = df['volume_ratio'] > vol_threshold
+    
+    # Volatility filter
+    volatility_acceptable = df['volatility'] < volatility_filter
+    
+    # Price movement confirmation
+    price_movement = df['returns'].abs() > min_price_move
+    
+    # Generate long signals
+    long_conditions = (
+        price_above_vwma &          # Price above VWMA
+        trend_up &                  # Trending up
+        volume_significant &        # Significant volume
+        volatility_acceptable &     # Not too volatile
+        price_movement             # Sufficient price movement
+    )
+    
+    # Generate short signals
+    short_conditions = (
+        price_below_vwma &         # Price below VWMA
+        trend_down &               # Trending down
+        volume_significant &       # Significant volume
+        volatility_acceptable &    # Not too volatile
+        price_movement            # Sufficient price movement
+    )
+    
+    # Set signals
+    df.loc[long_conditions, 'Smart_VWMA_Signal'] = 1
+    df.loc[short_conditions, 'Smart_VWMA_Signal'] = -1
+    
+    return df
+
+
+def calculate_vwma(df, window=20):
+    """
+    Calculate basic VWMA for comparison
+    """
+    df = ensure_datetime_index(df)
+    
+    # Calculate volume-price product
+    df['volume'] = df['price'] * df['amount']  # Ensure volume is calculated
+    df['vol_price'] = df['price'] * df['volume']
+    
+    # Calculate VWMA
+    df['VWMA'] = (df['vol_price'].rolling(window=window).sum() / 
+                  df['volume'].rolling(window=window).sum())
+    
+    # Calculate volume momentum
+    df['volume_sma'] = df['volume'].rolling(window=window).mean()
+    df['volume_ratio'] = df['volume'] / df['volume_sma']
+    
+    return df
+
+
+def generate_vwma_signals(df, vol_threshold=1.8):
+    """
+    Generate basic VWMA signals for comparison
+    """
+    df['VWMA_Signal'] = 0
+    
+    # Basic VWMA crossover signals
+    df.loc[df['price'] > df['VWMA'], 'VWMA_Signal'] = 1
+    df.loc[df['price'] < df['VWMA'], 'VWMA_Signal'] = -1
+    
+    # Only keep signals when volume is significant
+    df.loc[df['volume_ratio'] < vol_threshold, 'VWMA_Signal'] = 0
+    
+    return df
 
 
 def calculate_ramm_signals(df,
@@ -316,6 +445,85 @@ def optimize_ramm_parameters(df, max_iterations=50):
     return pd.DataFrame(results)
 
 
+def optimize_smart_vwma_parameters(df, 
+                                 vwma_range=range(20, 51, 10),
+                                 vol_threshold_range=np.arange(1.5, 2.1, 0.1),
+                                 trend_threshold_range=np.arange(0.0005, 0.003, 0.0005),
+                                 volatility_range=np.arange(0.01, 0.03, 0.005)):
+    """
+    Optimize Smart VWMA strategy parameters
+    """
+    results = []
+    total_combinations = (len(vwma_range) * len(vol_threshold_range) * 
+                         len(trend_threshold_range) * len(volatility_range))
+    
+    print(f"Testing {total_combinations} parameter combinations...")
+    
+    with tqdm(total=total_combinations, desc="Optimizing Smart VWMA Parameters") as pbar:
+        for vwma_window in vwma_range:
+            for vol_threshold in vol_threshold_range:
+                for trend_threshold in trend_threshold_range:
+                    for volatility_filter in volatility_range:
+                        df_test = df.copy()
+                        
+                        # Use the best MA Crossover parameters we found
+                        df_test = calculate_smart_vwma(df_test, 
+                                                     vwma_window=vwma_window,
+                                                     ma_short=4, 
+                                                     ma_long=34)
+                        
+                        df_test = generate_smart_vwma_signals(
+                            df_test,
+                            vol_threshold=vol_threshold,
+                            trend_threshold=trend_threshold,
+                            volatility_filter=volatility_filter
+                        )
+                        
+                        metrics = backtest(df_test, 'Smart_VWMA')
+                        average_trades_per_day = metrics['Average_Trades_Per_Day']
+                        
+                        if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
+                            results.append({
+                                'Strategy': 'Smart_VWMA',
+                                'VWMA_Window': vwma_window,
+                                'Volume_Threshold': vol_threshold,
+                                'Trend_Threshold': trend_threshold,
+                                'Volatility_Filter': volatility_filter,
+                                **metrics
+                            })
+                        
+                        pbar.update(1)
+    
+    return pd.DataFrame(results)
+
+
+def optimize_vwma_parameters(df, window_range=range(5, 51, 5), 
+                           vol_threshold_range=np.arange(1.1, 2.1, 0.1)):
+    """
+    Optimize basic VWMA strategy parameters
+    """
+    results = []
+    
+    for window in tqdm(window_range, desc="Optimizing VWMA Parameters"):
+        for vol_threshold in vol_threshold_range:
+            df_test = df.copy()
+            df_test = calculate_vwma(df_test, window)
+            df_test = generate_vwma_signals(df_test, vol_threshold)
+            
+            metrics = backtest(df_test, 'VWMA')
+            average_trades_per_day = metrics['Average_Trades_Per_Day']
+            
+            if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
+                results.append({
+                    'Strategy': 'VWMA',
+                    'Window': window,
+                    'Volume_Threshold': vol_threshold,
+                    **metrics
+                })
+    
+    return pd.DataFrame(results)
+
+
 def calculate_rsi(df, window=14):
     df = ensure_datetime_index(df)
     delta = df['price'].diff()
@@ -365,126 +573,6 @@ def generate_macd_signals(df):
     df.loc[df['MACD'] < df['MACD_Signal_Line'],
            'MACD_Signal'] = -1  # Sell signal
     return df
-
-
-def calculate_vwma(df, window=20):
-    """
-    Calculate Volume-Weighted Moving Average
-    
-    Args:
-        df: DataFrame with 'price' and 'volume' columns
-        window: Moving average window period
-    """
-    df = ensure_datetime_index(df)
-    
-    # Calculate volume-price product
-    df['volume'] = df['price'] * df['amount']  # Ensure volume is calculated
-    df['vol_price'] = df['price'] * df['volume']
-    
-    # Calculate VWMA
-    df['VWMA'] = (df['vol_price'].rolling(window=window).sum() / 
-                  df['volume'].rolling(window=window).sum())
-    
-    # Calculate volume momentum
-    df['volume_sma'] = df['volume'].rolling(window=window).mean()
-    df['volume_ratio'] = df['volume'] / df['volume_sma']
-    
-    return df
-
-
-def generate_vwma_signals(df, vol_threshold=1.5):
-    """
-    Generate trading signals based on VWMA and volume analysis
-    
-    Args:
-        df: DataFrame with VWMA and volume indicators
-        vol_threshold: Volume ratio threshold for signal confirmation
-    """
-    df['VWMA_Signal'] = 0
-    
-    # Basic VWMA crossover signals
-    df.loc[df['price'] > df['VWMA'], 'VWMA_Signal'] = 1
-    df.loc[df['price'] < df['VWMA'], 'VWMA_Signal'] = -1
-    
-    # Only keep signals when volume is significant
-    df.loc[df['volume_ratio'] < vol_threshold, 'VWMA_Signal'] = 0
-    
-    return df
-
-
-def optimize_vwma_parameters(df, window_range=range(5, 51, 5), 
-                           vol_threshold_range=np.arange(1.1, 2.1, 0.1)):
-    """
-    Optimize VWMA strategy parameters
-    """
-    results = []
-    
-    for window in tqdm(window_range, desc="Optimizing VWMA Parameters"):
-        for vol_threshold in vol_threshold_range:
-            df_test = df.copy()
-            df_test = calculate_vwma(df_test, window)
-            df_test = generate_vwma_signals(df_test, vol_threshold)
-            
-            metrics = backtest(df_test, 'VWMA')
-            average_trades_per_day = metrics['Average_Trades_Per_Day']
-            
-            if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
-                results.append({
-                    'Strategy': 'VWMA',
-                    'Window': window,
-                    'Volume_Threshold': vol_threshold,
-                    **metrics
-                })
-    
-    return pd.DataFrame(results)
-
-
-def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction_cost=0.001, max_trades_per_day=10):
-    df = ensure_datetime_index(df)
-    df['Position'] = df[f'{strategy}_Signal'].shift(1).fillna(0)
-    df['Returns'] = df['price'].pct_change().fillna(0)
-    df['Strategy_Returns'] = df['Position'] * df['Returns']
-
-    # Calculate transaction costs
-    df['Trade'] = df['Position'].diff().abs()
-    df['Transaction_Costs'] = df['Trade'] * transaction_cost
-
-    # Limit trades per day
-    df['Daily_Trades'] = df['Trade'].groupby(df.index.date).cumsum()
-    df.loc[df['Daily_Trades'] > max_trades_per_day, 'Strategy_Returns'] = 0
-
-    df['Strategy_Returns'] -= df['Transaction_Costs']
-    df['Cumulative_Returns'] = (1 + df['Strategy_Returns']).cumprod()
-    df['Balance'] = initial_balance * df['Cumulative_Returns']
-
-    total_trades = df['Trade'].sum()
-
-    # Calculate average trades per day
-    trading_days = (df.index[-1].date() - df.index[0].date()).days + 1
-    average_trades_per_day = total_trades / trading_days if trading_days > 0 else 0
-
-    # Profit factor and Sharpe ratio
-    positive_returns = df.loc[df['Strategy_Returns']
-                              > 0, 'Strategy_Returns'].sum()
-    negative_returns = -df.loc[df['Strategy_Returns']
-                               < 0, 'Strategy_Returns'].sum()
-    profit_factor = positive_returns / \
-        negative_returns if negative_returns != 0 else np.inf
-
-    sharpe_ratio = df['Strategy_Returns'].mean() / df['Strategy_Returns'].std() * \
-        np.sqrt(252) if df['Strategy_Returns'].std() != 0 else 0
-
-    final_balance = df['Balance'].iloc[-1]
-    total_return = (final_balance - initial_balance) / initial_balance * 100
-
-    return {
-        'Final_Balance': final_balance,
-        'Total_Return': total_return,
-        'Total_Trades': total_trades,
-        'Average_Trades_Per_Day': average_trades_per_day,
-        'Profit_Factor': profit_factor,
-        'Sharpe_Ratio': sharpe_ratio
-    }
 
 
 def optimize_ma_parameters(df, short_range, long_range):
@@ -553,6 +641,54 @@ def optimize_hft_parameters(df, strategy, **kwargs):
     return pd.DataFrame(results)
 
 
+def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction_cost=0.001, max_trades_per_day=10):
+    df = ensure_datetime_index(df)
+    df['Position'] = df[f'{strategy}_Signal'].shift(1).fillna(0)
+    df['Returns'] = df['price'].pct_change().fillna(0)
+    df['Strategy_Returns'] = df['Position'] * df['Returns']
+
+    # Calculate transaction costs
+    df['Trade'] = df['Position'].diff().abs()
+    df['Transaction_Costs'] = df['Trade'] * transaction_cost
+
+    # Limit trades per day
+    df['Daily_Trades'] = df['Trade'].groupby(df.index.date).cumsum()
+    df.loc[df['Daily_Trades'] > max_trades_per_day, 'Strategy_Returns'] = 0
+
+    df['Strategy_Returns'] -= df['Transaction_Costs']
+    df['Cumulative_Returns'] = (1 + df['Strategy_Returns']).cumprod()
+    df['Balance'] = initial_balance * df['Cumulative_Returns']
+
+    total_trades = df['Trade'].sum()
+
+    # Calculate average trades per day
+    trading_days = (df.index[-1].date() - df.index[0].date()).days + 1
+    average_trades_per_day = total_trades / trading_days if trading_days > 0 else 0
+
+    # Profit factor and Sharpe ratio
+    positive_returns = df.loc[df['Strategy_Returns']
+                              > 0, 'Strategy_Returns'].sum()
+    negative_returns = -df.loc[df['Strategy_Returns']
+                               < 0, 'Strategy_Returns'].sum()
+    profit_factor = positive_returns / \
+        negative_returns if negative_returns != 0 else np.inf
+
+    sharpe_ratio = df['Strategy_Returns'].mean() / df['Strategy_Returns'].std() * \
+        np.sqrt(252) if df['Strategy_Returns'].std() != 0 else 0
+
+    final_balance = df['Balance'].iloc[-1]
+    total_return = (final_balance - initial_balance) / initial_balance * 100
+
+    return {
+        'Final_Balance': final_balance,
+        'Total_Return': total_return,
+        'Total_Trades': total_trades,
+        'Average_Trades_Per_Day': average_trades_per_day,
+        'Profit_Factor': profit_factor,
+        'Sharpe_Ratio': sharpe_ratio
+    }
+
+
 def generate_trade_list(df, strategy):
     trades = []
     position = 0
@@ -579,90 +715,6 @@ def generate_trade_list(df, strategy):
             position = 0
 
     return pd.DataFrame(trades)
-
-
-def add_high_frequency_moving_averages(df, short_window, long_window):
-    df = ensure_datetime_index(df)
-    df['Short_MA'] = df['price'].ewm(span=short_window, adjust=False).mean()
-    df['Long_MA'] = df['price'].ewm(span=long_window, adjust=False).mean()
-    return df
-
-
-def generate_high_frequency_ma_signals(df, min_holding_period=30, cooldown_period=15, min_price_change_percent=0.1):
-    df['HF_MA_Signal'] = np.where(df['Short_MA'] > df['Long_MA'], 1,
-                                  np.where(df['Short_MA'] < df['Long_MA'], -1, 0))
-
-    # Identify where signals change
-    df['Signal_Change'] = df['HF_MA_Signal'].diff().fillna(0).abs()
-
-    # Record the time of the last trade signal
-    df['Last_Trade_Time'] = df.index.where(df['Signal_Change'] != 0)
-    df['Last_Trade_Time'].fillna(method='ffill', inplace=True)
-
-    # Ensure 'Last_Trade_Time' is datetime64[ns] dtype
-    df['Last_Trade_Time'] = pd.to_datetime(df['Last_Trade_Time'])
-
-    # Convert index to Series for subtraction
-    index_series = df.index.to_series()
-
-    # Calculate time since the last trade in minutes
-    time_since_last_trade = (index_series - df['Last_Trade_Time'])
-    df['Time_Since_Last_Trade'] = time_since_last_trade.dt.total_seconds() / 60
-    df['Time_Since_Last_Trade'] = df['Time_Since_Last_Trade'].fillna(0)
-
-    # Apply cooldown period
-    df.loc[df['Time_Since_Last_Trade'] < cooldown_period, 'HF_MA_Signal'] = 0
-
-    # Filter signals based on minimum price change percentage
-    df['Price_Change'] = df['price'].pct_change().fillna(0).abs() * 100
-    df.loc[df['Price_Change'] < min_price_change_percent, 'HF_MA_Signal'] = 0
-
-    # Implement minimum holding period
-    df['Holding_Period'] = df['Signal_Change'].rolling(
-        window=min_holding_period, min_periods=1).sum()
-    df.loc[df['Holding_Period'] < 1, 'HF_MA_Signal'] = 0
-
-    # Clean up temporary columns
-    df.drop(columns=['Signal_Change', 'Last_Trade_Time',
-            'Time_Since_Last_Trade', 'Price_Change', 'Holding_Period'], inplace=True)
-
-    return df[['HF_MA_Signal']]
-
-
-def process_combination(params):
-    short_window, long_window, df = params
-    df_temp = add_high_frequency_moving_averages(
-        df.copy(), short_window, long_window)
-    df_temp['HF_MA_Signal'] = generate_high_frequency_ma_signals(df_temp)
-    metrics = backtest(df_temp, 'HF_MA', max_trades_per_day=20)
-    return {
-        'Strategy': 'High_Frequency_MA',
-        'Short_Window': short_window,
-        'Long_Window': long_window,
-        **metrics
-    }
-
-
-def optimize_high_frequency_ma_parameters(df, short_range, long_range, max_iterations=50):
-    df = ensure_datetime_index(df)
-    df = df.sort_index()
-    parameter_combinations = [(sw, lw, df) for sw, lw in product(
-        short_range, long_range) if sw < lw]
-    parameter_combinations = parameter_combinations[:max_iterations]
-
-    print(
-        f"Total parameter combinations to test: {len(parameter_combinations)}")
-
-    with Pool() as pool:
-        results = []
-        for result in tqdm(pool.imap_unordered(process_combination, parameter_combinations),
-                           total=len(parameter_combinations),
-                           desc="Optimizing High-Frequency MA Parameters"):
-            average_trades_per_day = result['Average_Trades_Per_Day']
-            if 1 <= average_trades_per_day <= 4 and result['Total_Return'] > 0:
-                results.append(result)
-
-    return pd.DataFrame(results)
 
 
 def run_trading_system(df, max_iterations=50):
@@ -692,6 +744,7 @@ def run_trading_system(df, max_iterations=50):
     strategies = {}
     all_results_list = []
 
+    # Run MA Crossover Strategy
     print("Running MA Crossover Strategy...")
     ma_results = optimize_ma_parameters(
         df_hourly, range(4, 25, 2), range(26, 51, 2))
@@ -712,6 +765,7 @@ def run_trading_system(df, max_iterations=50):
     else:
         print("No MA Crossover strategies met the criteria.")
 
+    # Run RSI Strategy
     print("Running RSI Strategy...")
     rsi_results = optimize_rsi_parameters(df_hourly, range(
         10, 21, 2), range(65, 81, 5), range(20, 36, 5))
@@ -732,6 +786,7 @@ def run_trading_system(df, max_iterations=50):
     else:
         print("No RSI strategies met the criteria.")
 
+    # Run Bollinger Bands Strategy
     print("Running Bollinger Bands Strategy...")
     bb_param_grid = [{'window': w, 'num_std': s}
                      for w in range(10, 31, 5) for s in [1.5, 2, 2.5]]
@@ -754,6 +809,7 @@ def run_trading_system(df, max_iterations=50):
     else:
         print("No Bollinger Bands strategies met the criteria.")
 
+    # Run MACD Strategy
     print("Running MACD Strategy...")
     macd_param_grid = [{'fast': f, 'slow': s, 'signal': sig}
                        for f in [6, 12, 18]
@@ -780,6 +836,7 @@ def run_trading_system(df, max_iterations=50):
     else:
         print("No MACD strategies met the criteria.")
 
+    # Run RAMM Strategy
     print("Running RAMM Strategy...")
     ramm_results = optimize_ramm_parameters(df_hourly, max_iterations=50)
     if not ramm_results.empty:
@@ -805,45 +862,34 @@ def run_trading_system(df, max_iterations=50):
     else:
         print("No RAMM strategies met the criteria.")
 
-    print("Running VWMA Strategy...")
-    vwma_results = optimize_vwma_parameters(df_hourly)
-    if not vwma_results.empty:
-        best_vwma = vwma_results.loc[vwma_results['Total_Return'].idxmax()]
-        print("Best VWMA parameters:")
-        print(best_vwma)
-        strategies['VWMA'] = best_vwma.to_dict()
-        all_results_list.append(vwma_results)
+    # Run Smart VWMA Strategy
+    print("Running Smart VWMA Strategy...")
+    smart_vwma_results = optimize_smart_vwma_parameters(df_hourly)
+    if not smart_vwma_results.empty:
+        best_smart_vwma = smart_vwma_results.loc[smart_vwma_results['Total_Return'].idxmax()]
+        print("Best Smart VWMA parameters:")
+        print(best_smart_vwma)
+        strategies['Smart_VWMA'] = best_smart_vwma.to_dict()
+        all_results_list.append(smart_vwma_results)
 
-        print("Generating trade list for best VWMA strategy...")
-        best_vwma_df = calculate_vwma(df_hourly.copy(), best_vwma['Window'])
-        best_vwma_df = generate_vwma_signals(best_vwma_df, best_vwma['Volume_Threshold'])
-        vwma_trades = generate_trade_list(best_vwma_df, 'VWMA')
-        vwma_trades.to_csv('vwma_trades.csv', index=False)
-        print("VWMA trades saved to 'vwma_trades.csv'")
+        print("Generating trade list for best Smart VWMA strategy...")
+        best_smart_vwma_df = calculate_smart_vwma(
+            df_hourly.copy(), 
+            vwma_window=best_smart_vwma['VWMA_Window'],
+            ma_short=4,
+            ma_long=34
+        )
+        best_smart_vwma_df = generate_smart_vwma_signals(
+            best_smart_vwma_df,
+            vol_threshold=best_smart_vwma['Volume_Threshold'],
+            trend_threshold=best_smart_vwma['Trend_Threshold'],
+            volatility_filter=best_smart_vwma['Volatility_Filter']
+        )
+        smart_vwma_trades = generate_trade_list(best_smart_vwma_df, 'Smart_VWMA')
+        smart_vwma_trades.to_csv('smart_vwma_trades.csv', index=False)
+        print("Smart VWMA trades saved to 'smart_vwma_trades.csv'")
     else:
-        print("No VWMA strategies met the criteria.")
-
-    print("\nStarting High-Frequency MA Crossover Strategy optimization. This may take several minutes...")
-    hf_ma_results = optimize_high_frequency_ma_parameters(
-        df, range(2, 7, 1), range(5, 16, 2), max_iterations=max_iterations)
-    if not hf_ma_results.empty:
-        best_hf_ma = hf_ma_results.loc[hf_ma_results['Total_Return'].idxmax()]
-        print("\nBest High-Frequency MA Crossover parameters:")
-        print(best_hf_ma)
-        strategies['High-Frequency MA'] = best_hf_ma.to_dict()
-        all_results_list.append(hf_ma_results)
-
-        print("Generating trade list for best High-Frequency MA strategy...")
-        best_hf_ma_df = add_high_frequency_moving_averages(df.copy(),
-                                                           best_hf_ma['Short_Window'],
-                                                           best_hf_ma['Long_Window'])
-        best_hf_ma_df['HF_MA_Signal'] = generate_high_frequency_ma_signals(best_hf_ma_df)[
-            'HF_MA_Signal']
-        hf_ma_trades = generate_trade_list(best_hf_ma_df, 'HF_MA')
-        hf_ma_trades.to_csv('hf_ma_trades.csv', index=False)
-        print("High-Frequency MA Crossover trades saved to 'hf_ma_trades.csv'")
-    else:
-        print("No High-Frequency MA strategies met the criteria.")
+        print("No Smart VWMA strategies met the criteria.")
 
     if strategies:
         print("Preparing detailed strategy results...")
