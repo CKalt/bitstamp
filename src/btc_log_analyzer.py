@@ -75,24 +75,22 @@ def parse_log_file(file_path, start_date=None, end_date=None):
 
     start_line = 1
     if start_date:
-        start_line = get_start_line_from_metadata(
-            metadata_file_path, start_date)
-        print(
-            f"Starting from line {start_line} based on start date {start_date}")
+        start_line = get_start_line_from_metadata(metadata_file_path, start_date)
+        print(f"Starting from line {start_line} based on start date {start_date}")
 
     last_date = None
     skipped_count = start_line - 1
     processed_count = 0
     end_reached = False
+    progress_interval = total_lines // 10  # Only show 10 progress updates
 
     with open(file_path, 'r') as file:
         for i, line in enumerate(file, 1):
             if i < start_line:
                 continue
 
-            if i % 10000 == 0:
-                print(
-                    f"Line {i}/{total_lines} ({i/total_lines*100:.2f}%) - Last date: {last_date}")
+            if i % progress_interval == 0:  # Show progress every 10%
+                print(f"Progress: {i/total_lines*100:.1f}% - Last date: {last_date}")
 
             try:
                 json_data = json.loads(line)
@@ -120,7 +118,7 @@ def parse_log_file(file_path, start_date=None, end_date=None):
             except json.JSONDecodeError:
                 continue
 
-    print(f"Finished processing log file. Last date processed: {last_date}")
+    print(f"\nFinished processing log file. Last date processed: {last_date}")
     print(f"Total entries skipped: {skipped_count}")
     print(f"Total entries processed: {processed_count}")
     if end_reached:
@@ -134,7 +132,6 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     df['type'] = df['type'].astype('int8')
 
     return df
-
 
 def analyze_data(df):
     print("Converting timestamp to datetime...")
