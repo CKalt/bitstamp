@@ -217,16 +217,16 @@ def calculate_market_regime(df, lookback=20):
     return df['regime']
 
 
-def calculate_smart_vwma(df, vwma_window=50, ma_short=4, ma_long=34, min_trend_strength=0.001):
+def calculate_smart_vwma(df, vwma_window=20, ma_short=4, ma_long=34, min_trend_strength=0.0005):
     """
-    Calculate VWMA with additional trend confirmation criteria
+    Calculate VWMA with less restrictive trend confirmation criteria
     
     Args:
         df: DataFrame with price and volume data
-        vwma_window: Window for VWMA calculation
+        vwma_window: Window for VWMA calculation (reduced from 50)
         ma_short: Short MA window (from successful MA Crossover)
         ma_long: Long MA window (from successful MA Crossover)
-        min_trend_strength: Minimum required trend strength
+        min_trend_strength: Minimum required trend strength (reduced from 0.001)
     """
     df = ensure_datetime_index(df)
     
@@ -243,28 +243,28 @@ def calculate_smart_vwma(df, vwma_window=50, ma_short=4, ma_long=34, min_trend_s
     # Calculate trend strength
     df['MA_Spread'] = (df['Short_MA'] - df['Long_MA']) / df['Long_MA']
     
-    # Volume analysis
-    df['volume_sma'] = df['volume'].rolling(window=vwma_window).mean()
+    # Volume analysis with shorter lookback
+    df['volume_sma'] = df['volume'].rolling(window=max(5, vwma_window//2)).mean()
     df['volume_ratio'] = df['volume'] / df['volume_sma']
     
-    # Volatility measurement
+    # Volatility measurement with shorter window
     df['returns'] = df['price'].pct_change()
-    df['volatility'] = df['returns'].rolling(window=vwma_window).std()
+    df['volatility'] = df['returns'].rolling(window=max(5, vwma_window//2)).std()
     
     return df
 
 
-def generate_smart_vwma_signals(df, vol_threshold=1.8, trend_threshold=0.001, 
-                              volatility_filter=0.02, min_price_move=0.001):
+def generate_smart_vwma_signals(df, vol_threshold=1.3, trend_threshold=0.0005, 
+                              volatility_filter=0.04, min_price_move=0.0005):
     """
-    Generate trading signals with stricter entry criteria
+    Generate trading signals with less restrictive entry criteria
     
     Args:
         df: DataFrame with VWMA and trend indicators
-        vol_threshold: Volume ratio threshold
-        trend_threshold: Minimum trend strength required
-        volatility_filter: Maximum allowed volatility
-        min_price_move: Minimum price movement required
+        vol_threshold: Volume ratio threshold (reduced from 1.8)
+        trend_threshold: Minimum trend strength required (reduced from 0.001)
+        volatility_filter: Maximum allowed volatility (increased from 0.02)
+        min_price_move: Minimum price movement required (reduced from 0.001)
     """
     df['Smart_VWMA_Signal'] = 0
     
@@ -272,35 +272,33 @@ def generate_smart_vwma_signals(df, vol_threshold=1.8, trend_threshold=0.001,
     price_above_vwma = df['price'] > df['VWMA']
     price_below_vwma = df['price'] < df['VWMA']
     
-    # Trend confirmation
-    trend_up = df['MA_Spread'] > trend_threshold
-    trend_down = df['MA_Spread'] < -trend_threshold
+    # More lenient trend confirmation
+    trend_up = df['MA_Spread'] > -trend_threshold  # Allow for minimal downtrend
+    trend_down = df['MA_Spread'] < trend_threshold  # Allow for minimal uptrend
     
-    # Volume confirmation
+    # More lenient volume confirmation
     volume_significant = df['volume_ratio'] > vol_threshold
     
-    # Volatility filter
+    # More lenient volatility filter
     volatility_acceptable = df['volatility'] < volatility_filter
     
-    # Price movement confirmation
+    # More lenient price movement confirmation
     price_movement = df['returns'].abs() > min_price_move
     
-    # Generate long signals
+    # Generate long signals with less restrictive conditions
     long_conditions = (
         price_above_vwma &          # Price above VWMA
-        trend_up &                  # Trending up
-        volume_significant &        # Significant volume
-        volatility_acceptable &     # Not too volatile
-        price_movement             # Sufficient price movement
+        (trend_up | volume_significant) &  # Either trending up OR high volume
+        volatility_acceptable &     # Not extremely volatile
+        price_movement             # Minimal price movement
     )
     
-    # Generate short signals
+    # Generate short signals with less restrictive conditions
     short_conditions = (
         price_below_vwma &         # Price below VWMA
-        trend_down &               # Trending down
-        volume_significant &       # Significant volume
-        volatility_acceptable &    # Not too volatile
-        price_movement            # Sufficient price movement
+        (trend_down | volume_significant) &  # Either trending down OR high volume
+        volatility_acceptable &    # Not extremely volatile
+        price_movement            # Minimal price movement
     )
     
     # Set signals
@@ -308,8 +306,6 @@ def generate_smart_vwma_signals(df, vol_threshold=1.8, trend_threshold=0.001,
     df.loc[short_conditions, 'Smart_VWMA_Signal'] = -1
     
     return df
-
-
 def calculate_vwma(df, window=20):
     """
     Calculate basic VWMA for comparison
@@ -446,12 +442,12 @@ def optimize_ramm_parameters(df, max_iterations=50):
 
 
 def optimize_smart_vwma_parameters(df, 
-                                 vwma_range=range(20, 51, 10),
-                                 vol_threshold_range=np.arange(1.5, 2.1, 0.1),
-                                 trend_threshold_range=np.arange(0.0005, 0.003, 0.0005),
-                                 volatility_range=np.arange(0.01, 0.03, 0.005)):
+                                 vwma_range=range(5, 31, 5),  # Shorter windows
+                                 vol_threshold_range=np.arange(1.1, 1.6, 0.1),  # Lower thresholds
+                                 trend_threshold_range=np.arange(0.0003, 0.001, 0.0002),  # More sensitive
+                                 volatility_range=np.arange(0.02, 0.06, 0.01)):  # Higher tolerance
     """
-    Optimize Smart VWMA strategy parameters
+    Optimize Smart VWMA strategy parameters with broader ranges
     """
     results = []
     total_combinations = (len(vwma_range) * len(vol_threshold_range) * 
@@ -495,7 +491,6 @@ def optimize_smart_vwma_parameters(df,
                         pbar.update(1)
     
     return pd.DataFrame(results)
-
 
 def optimize_vwma_parameters(df, window_range=range(5, 51, 5), 
                            vol_threshold_range=np.arange(1.1, 2.1, 0.1)):
