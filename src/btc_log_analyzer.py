@@ -1,4 +1,5 @@
-#! src/btc_log_analyzer.py
+#!/usr/bin/env python
+# src/btc_log_analyzer.py
 
 import json
 import pandas as pd
@@ -55,8 +56,8 @@ def get_start_line_from_metadata(metadata_file_path, start_date):
         return metadata[start_date_str]['start_line']
     else:
         # If exact date not found, find the nearest date
-        dates = [datetime.strptime(date, '%Y-%m-%d').date() for date in metadata.keys(
-        ) if date != 'total_lines' and date != 'last_timestamp']
+        dates = [datetime.strptime(date, '%Y-%m-%d').date() for date in metadata.keys()
+                 if date != 'total_lines' and date != 'last_timestamp']
         nearest_date = min(dates, key=lambda x: abs(x - start_date.date()))
         return metadata[str(nearest_date)]['start_line']
 
@@ -239,7 +240,7 @@ def calculate_adaptive_vwma(df, base_window=10):
     # Rolling VWMA with adaptive window
     df['VWMA'] = df.apply(
         lambda x: (df['vol_price'].rolling(int(x['adaptive_window'])).sum() / 
-                  df['volume'].rolling(int(x['adaptive_window'])).sum())[x.name],
+                   df['volume'].rolling(int(x['adaptive_window'])).sum())[x.name],
         axis=1
     )
     
@@ -434,32 +435,32 @@ def calculate_ramm_signals(df,
     return df
 
 
-def optimize_adaptive_vwma_parameters(df, 
-                                    base_window_range=range(5, 21, 3),
-                                    vol_scale_range=np.arange(0.8, 1.4, 0.1)):
+def optimize_adaptive_vwma_parameters(df,
+                                      base_window_range=range(5, 21, 3),
+                                      vol_scale_range=np.arange(0.8, 1.4, 0.1)):
     """
     Optimize Adaptive VWMA parameters
     """
     results = []
     total_combinations = len(base_window_range) * len(vol_scale_range)
-    
+
     print(f"Testing {total_combinations} parameter combinations...")
-    
+
     with tqdm(total=total_combinations, desc="Optimizing Adaptive VWMA Parameters") as pbar:
         for base_window in base_window_range:
             for vol_scale in vol_scale_range:
                 df_test = df.copy()
-                
+
                 # Calculate adaptive VWMA
                 df_test = calculate_adaptive_vwma(df_test, base_window=base_window)
-                
+
                 # Generate signals
                 df_test = generate_adaptive_vwma_signals(df_test, vol_scale=vol_scale)
-                
+
                 # Run backtest
                 metrics = backtest(df_test, 'Adaptive_VWMA')
                 average_trades_per_day = metrics['Average_Trades_Per_Day']
-                
+
                 if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
                     results.append({
                         'Strategy': 'Adaptive_VWMA',
@@ -467,9 +468,9 @@ def optimize_adaptive_vwma_parameters(df,
                         'Volume_Scale': vol_scale,
                         **metrics
                     })
-                
+
                 pbar.update(1)
-    
+
     return pd.DataFrame(results)
 
 
@@ -669,29 +670,31 @@ def generate_trade_list(df, strategy):
     return pd.DataFrame(trades)
 
 
-def run_trading_system(df, max_iterations=50):
+def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterations=50):
     print("Starting run_trading_system function...")
     df = ensure_datetime_index(df)
     print(f"DataFrame shape after ensuring datetime index: {df.shape}")
 
-    print("Resampling data to hourly timeframe...")
+    # Resample data to higher timeframe
+    print(f"Resampling data to higher timeframe ({high_frequency})...")
     df['volume'] = df['price'] * df['amount']
-    df_hourly = df.resample('1H').agg({
+    df_high = df.resample(high_frequency).agg({
         'price': 'last',
         'amount': 'sum',
         'volume': 'sum'
     }).dropna()
-    df_hourly['timestamp'] = df_hourly.index.view('int64') // 10**9
-    print(f"Hourly DataFrame shape: {df_hourly.shape}")
+    df_high['timestamp'] = df_high.index.view('int64') // 10**9
+    print(f"Higher timeframe DataFrame shape: {df_high.shape}")
 
-    print("Resampling data to 15-minute timeframe...")
-    df_15min = df.resample('15T').agg({
+    # Resample data to lower timeframe
+    print(f"Resampling data to lower timeframe ({low_frequency})...")
+    df_low = df.resample(low_frequency).agg({
         'price': 'last',
         'amount': 'sum',
         'volume': 'sum'
     }).dropna()
-    df_15min['timestamp'] = df_15min.index.view('int64') // 10**9
-    print(f"15-minute DataFrame shape: {df_15min.shape}")
+    df_low['timestamp'] = df_low.index.view('int64') // 10**9
+    print(f"Lower timeframe DataFrame shape: {df_low.shape}")
 
     strategies = {}
     all_results_list = []
@@ -699,7 +702,7 @@ def run_trading_system(df, max_iterations=50):
     # Run MA Crossover Strategy
     print("Running MA Crossover Strategy...")
     ma_results = optimize_ma_parameters(
-        df_hourly, range(4, 25, 2), range(26, 51, 2))
+        df_high, range(4, 25, 2), range(26, 51, 2))
     if not ma_results.empty:
         best_ma = ma_results.loc[ma_results['Total_Return'].idxmax()]
         print("Best MA Crossover parameters:")
@@ -709,7 +712,7 @@ def run_trading_system(df, max_iterations=50):
 
         print("Generating trade list for best MA strategy...")
         best_ma_df = add_moving_averages(
-            df_hourly.copy(), best_ma['Short_Window'], best_ma['Long_Window'])
+            df_high.copy(), best_ma['Short_Window'], best_ma['Long_Window'])
         best_ma_df = generate_ma_signals(best_ma_df)
         ma_trades = generate_trade_list(best_ma_df, 'MA')
         ma_trades.to_csv('ma_trades.csv', index=False)
@@ -719,7 +722,7 @@ def run_trading_system(df, max_iterations=50):
 
     # Run RSI Strategy
     print("Running RSI Strategy...")
-    rsi_results = optimize_rsi_parameters(df_hourly, range(
+    rsi_results = optimize_rsi_parameters(df_high, range(
         10, 21, 2), range(65, 81, 5), range(20, 36, 5))
     if not rsi_results.empty:
         best_rsi = rsi_results.loc[rsi_results['Total_Return'].idxmax()]
@@ -729,7 +732,7 @@ def run_trading_system(df, max_iterations=50):
         all_results_list.append(rsi_results)
 
         print("Generating trade list for best RSI strategy...")
-        best_rsi_df = calculate_rsi(df_hourly.copy(), best_rsi['RSI_Window'])
+        best_rsi_df = calculate_rsi(df_high.copy(), best_rsi['RSI_Window'])
         best_rsi_df = generate_rsi_signals(
             best_rsi_df, best_rsi['Overbought'], best_rsi['Oversold'])
         rsi_trades = generate_trade_list(best_rsi_df, 'RSI')
@@ -743,7 +746,7 @@ def run_trading_system(df, max_iterations=50):
     bb_param_grid = [{'window': w, 'num_std': s}
                      for w in range(10, 31, 5) for s in [1.5, 2, 2.5]]
     bb_results = optimize_hft_parameters(
-        df_15min, 'BB', param_grid=bb_param_grid)
+        df_low, 'BB', param_grid=bb_param_grid)
     if not bb_results.empty:
         best_bb = bb_results.loc[bb_results['Total_Return'].idxmax()]
         print("Best Bollinger Bands parameters:")
@@ -753,7 +756,7 @@ def run_trading_system(df, max_iterations=50):
 
         print("Generating trade list for best Bollinger Bands strategy...")
         best_bb_df = calculate_bollinger_bands(
-            df_15min.copy(), window=best_bb['window'], num_std=best_bb['num_std'])
+            df_low.copy(), window=best_bb['window'], num_std=best_bb['num_std'])
         best_bb_df = generate_bollinger_band_signals(best_bb_df)
         bb_trades = generate_trade_list(best_bb_df, 'BB')
         bb_trades.to_csv('bb_trades.csv', index=False)
@@ -768,7 +771,7 @@ def run_trading_system(df, max_iterations=50):
                        for s in [20, 26, 32]
                        for sig in [7, 9, 11]]
     macd_results = optimize_hft_parameters(
-        df_15min, 'MACD', param_grid=macd_param_grid)
+        df_low, 'MACD', param_grid=macd_param_grid)
     if not macd_results.empty:
         best_macd = macd_results.loc[macd_results['Total_Return'].idxmax()]
         print("Best MACD parameters:")
@@ -777,7 +780,7 @@ def run_trading_system(df, max_iterations=50):
         all_results_list.append(macd_results)
 
         print("Generating trade list for best MACD strategy...")
-        best_macd_df = calculate_macd(df_15min.copy(),
+        best_macd_df = calculate_macd(df_low.copy(),
                                       fast=best_macd['fast'],
                                       slow=best_macd['slow'],
                                       signal=best_macd['signal'])
@@ -790,7 +793,7 @@ def run_trading_system(df, max_iterations=50):
 
     # Run RAMM Strategy
     print("Running RAMM Strategy...")
-    ramm_results = optimize_ramm_parameters(df_hourly, max_iterations=50)
+    ramm_results = optimize_ramm_parameters(df_high, max_iterations=50)
     if not ramm_results.empty:
         best_ramm = ramm_results.loc[ramm_results['Total_Return'].idxmax()]
         print("Best RAMM parameters:")
@@ -800,7 +803,7 @@ def run_trading_system(df, max_iterations=50):
 
         print("Generating trade list for best RAMM strategy...")
         best_ramm_df = calculate_ramm_signals(
-            df_hourly.copy(),
+            df_high.copy(),
             ma_short=best_ramm['MA_Short'],
             ma_long=best_ramm['MA_Long'],
             rsi_period=best_ramm['RSI_Period'],
@@ -816,7 +819,7 @@ def run_trading_system(df, max_iterations=50):
 
     # Run Adaptive VWMA Strategy
     print("Running Adaptive VWMA Strategy...")
-    adaptive_vwma_results = optimize_adaptive_vwma_parameters(df_hourly)
+    adaptive_vwma_results = optimize_adaptive_vwma_parameters(df_high)
     if not adaptive_vwma_results.empty:
         best_adaptive_vwma = adaptive_vwma_results.loc[adaptive_vwma_results['Total_Return'].idxmax()]
         print("Best Adaptive VWMA parameters:")
@@ -826,7 +829,7 @@ def run_trading_system(df, max_iterations=50):
 
         print("Generating trade list for best Adaptive VWMA strategy...")
         best_adaptive_vwma_df = calculate_adaptive_vwma(
-            df_hourly.copy(),
+            df_high.copy(),
             base_window=best_adaptive_vwma['Base_Window']
         )
         best_adaptive_vwma_df = generate_adaptive_vwma_signals(
@@ -894,6 +897,11 @@ def main():
                         help='Number of days to analyze from the start date (overrides end-window-days-back)')
     parser.add_argument('--max-iterations', type=int, default=50,
                         help='Maximum number of iterations for parameter optimization')
+    # New arguments for sampling frequencies
+    parser.add_argument('--high-frequency', type=str, default='1H',
+                        help='Sampling frequency for higher timeframe (e.g., "1H" for hourly)')
+    parser.add_argument('--low-frequency', type=str, default='15T',
+                        help='Sampling frequency for lower timeframe (e.g., "15T" for 15 minutes)')
     args = parser.parse_args()
 
     file_path = 'btcusd.log'
@@ -948,7 +956,11 @@ def main():
     print("Running trading system...")
     try:
         optimization_results, strategy_comparison = run_trading_system(
-            df, max_iterations=args.max_iterations)
+            df,
+            high_frequency=args.high_frequency,
+            low_frequency=args.low_frequency,
+            max_iterations=args.max_iterations
+        )
         print("Trading system analysis complete.")
 
         if not strategy_comparison.empty:
@@ -971,4 +983,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
