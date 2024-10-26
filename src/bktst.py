@@ -7,7 +7,9 @@ from datetime import datetime, timedelta
 
 # Ensure that the 'src' directory is in sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
 sys.path.append(current_dir)
+sys.path.append(parent_dir)
 
 from data.loader import create_metadata_file, parse_log_file
 from utils.analysis import analyze_data, run_trading_system

@@ -2,8 +2,6 @@
 
 import pandas as pd
 import matplotlib.pyplot as plt
-import os
-from datetime import datetime
 
 from indicators.technical_indicators import ensure_datetime_index
 from backtesting.backtester import generate_trade_list
@@ -27,7 +25,7 @@ from indicators.technical_indicators import (
     calculate_adaptive_vwma,
     generate_adaptive_vwma_signals
 )
-from utils.helpers import ensure_datetime_index
+from utils.helpers import ensure_datetime_index, print_strategy_results
 
 def analyze_data(df):
     print("Converting timestamp to datetime...")
@@ -230,12 +228,8 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
 
     if strategies:
         print("Preparing detailed strategy results...")
-        print("\nDetailed Strategy Results:")
-        for name, result in strategies.items():
-            print(f"{name}:")
-            for key, value in result.items():
-                print(f"{key}: {value}")
-            print()
+        # Use print_strategy_results from helpers.py
+        print_strategy_results(strategies)
 
         print("\nStrategy Comparison:")
         comparison_df = pd.DataFrame.from_dict(strategies, orient='index')
