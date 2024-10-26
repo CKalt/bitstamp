@@ -2,7 +2,7 @@ env
 .bitstamp
 .influxdb
 influx/create-all-access-api-token.output
-data/
+/data
 ./*.log
 *.csv
 *.log
