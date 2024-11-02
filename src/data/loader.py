@@ -3,7 +3,8 @@
 import json
 import os
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
+
 
 def create_metadata_file(log_file_path, metadata_file_path):
     print("Creating metadata file...")
@@ -36,6 +37,7 @@ def create_metadata_file(log_file_path, metadata_file_path):
 
     print(f"Metadata file created: {metadata_file_path}")
 
+
 def get_start_line_from_metadata(metadata_file_path, start_date):
     with open(metadata_file_path, 'r') as file:
         metadata = json.load(file)
@@ -49,6 +51,7 @@ def get_start_line_from_metadata(metadata_file_path, start_date):
                  if date != 'total_lines' and date != 'last_timestamp']
         nearest_date = min(dates, key=lambda x: abs(x - start_date.date()))
         return metadata[str(nearest_date)]['start_line']
+
 
 def parse_log_file(file_path, start_date=None, end_date=None):
     metadata_file_path = f"{file_path}.metadata"
@@ -64,14 +67,17 @@ def parse_log_file(file_path, start_date=None, end_date=None):
 
     start_line = 1
     if start_date:
-        start_line = get_start_line_from_metadata(metadata_file_path, start_date)
-        print(f"Starting from line {start_line} based on start date {start_date}")
+        start_line = get_start_line_from_metadata(
+            metadata_file_path, start_date)
+        print(
+            f"Starting from line {start_line} based on start date {start_date}")
 
     last_date = None
     skipped_count = start_line - 1
     processed_count = 0
     end_reached = False
-    progress_interval = max(total_lines // 10, 1)  # Only show 10 progress updates
+    # Only show 10 progress updates
+    progress_interval = max(total_lines // 10, 1)
 
     with open(file_path, 'r') as file:
         for i, line in enumerate(file, 1):
@@ -79,7 +85,8 @@ def parse_log_file(file_path, start_date=None, end_date=None):
                 continue
 
             if i % progress_interval == 0:  # Show progress every 10%
-                print(f"Progress: {i/total_lines*100:.1f}% - Last date: {last_date}")
+                print(
+                    f"Progress: {i/total_lines*100:.1f}% - Last date: {last_date}")
 
             try:
                 json_data = json.loads(line)

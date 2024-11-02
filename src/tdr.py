@@ -118,6 +118,9 @@ class CryptoDataManager:
     def get_price_series(self, symbol):
         return [price for timestamp, price in self.data[symbol]]
 
+    def get_data_point_count(self, symbol):
+        return len(self.data[symbol])
+
 async def subscribe_to_websocket(url: str, symbol: str, data_manager):
     channel = f"live_trades_{symbol}"
 
@@ -311,7 +314,10 @@ class MACrossoverStrategy:
             'current_price': self.prices[-1] if self.prices else None,
             'short_ma': self.short_ma,
             'long_ma': self.long_ma,
-            'ma_difference': (self.short_ma - self.long_ma) if self.short_ma and self.long_ma else None
+            'ma_difference': (self.short_ma - self.long_ma) if self.short_ma and self.long_ma else None,
+            'data_points_collected': len(self.prices),
+            'data_points_required': self.long_window,
+            'data_points_needed': max(0, self.long_window - len(self.prices))
         }
         return status
 
@@ -584,23 +590,29 @@ class CryptoShell(cmd.Cmd):
             print("Auto-Trading Status:")
             print(f"  Running: {status['running']}")
             print(f"  Position: {position}")
-            if status['current_price'] is not None:
-                print(f"  Current Price: {status['current_price']:.2f}")
-            else:
-                print("  Current Price: Not available")
-            if status['short_ma'] is not None and status['long_ma'] is not None:
-                print(f"  Short Moving Average ({self.auto_trader.short_window}): {status['short_ma']:.2f}")
-                print(f"  Long Moving Average ({self.auto_trader.long_window}): {status['long_ma']:.2f}")
-                print(f"  Difference (Short MA - Long MA): {status['ma_difference']:.6f}")
-                print("  Next Trigger Point:")
-                if self.auto_trader.position <= 0 and status['short_ma'] <= status['long_ma']:
-                    print("    Awaiting Buy Signal (Short MA crossing above Long MA)")
-                elif self.auto_trader.position >= 0 and status['short_ma'] >= status['long_ma']:
-                    print("    Awaiting Sell Signal (Short MA crossing below Long MA)")
-                else:
-                    print("    Monitoring for crossover signals...")
-            else:
+            print(f"  Data Points Collected: {status['data_points_collected']}")
+            print(f"  Data Points Required: {status['data_points_required']}")
+            if status['data_points_needed'] > 0:
+                print(f"  Data Points Needed for Moving Averages: {status['data_points_needed']}")
                 print("  Moving averages are not yet calculated.")
+            else:
+                if status['current_price'] is not None:
+                    print(f"  Current Price: {status['current_price']:.2f}")
+                else:
+                    print("  Current Price: Not available")
+                if status['short_ma'] is not None and status['long_ma'] is not None:
+                    print(f"  Short Moving Average ({self.auto_trader.short_window}): {status['short_ma']:.2f}")
+                    print(f"  Long Moving Average ({self.auto_trader.long_window}): {status['long_ma']:.2f}")
+                    print(f"  Difference (Short MA - Long MA): {status['ma_difference']:.6f}")
+                    print("  Next Trigger Point:")
+                    if self.auto_trader.position <= 0 and status['short_ma'] <= status['long_ma']:
+                        print("    Awaiting Buy Signal (Short MA crossing above Long MA)")
+                    elif self.auto_trader.position >= 0 and status['short_ma'] >= status['long_ma']:
+                        print("    Awaiting Sell Signal (Short MA crossing below Long MA)")
+                    else:
+                        print("    Monitoring for crossover signals...")
+                else:
+                    print("  Moving averages are not yet calculated.")
         else:
             print("Auto-trading is not running.")
 
