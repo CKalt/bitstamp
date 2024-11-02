@@ -1,6 +1,10 @@
 #!/env/bin/python
 # src/tdr.py
 
+import sys
+import os
+import pandas as pd
+import numpy as np
 import asyncio
 import websockets
 import json
@@ -11,34 +15,48 @@ import hmac
 import uuid
 from urllib.parse import urlencode
 import requests
-from collections import deque
 import cmd
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
-import sys
-import os
 
-class CandlestickData:
-    def __init__(self):
-        self.open = None
-        self.high = None
-        self.low = None
-        self.close = None
-        self.volume = 0
-        self.trades = 0
+# Adjust sys.path to import modules from 'src' directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+sys.path.append(current_dir)
+
+# Import necessary functions and modules from bktst.py and its dependencies
+from data.loader import parse_log_file
+from indicators.technical_indicators import (
+    ensure_datetime_index,
+    add_moving_averages,
+    generate_ma_signals,
+)
+from utils.helpers import print_strategy_results
+
+# Other imports from bktst.py dependencies if needed
+# Make sure to have all necessary modules accessible
+
 
 class CryptoDataManager:
     def __init__(self, symbols, logger, verbose=False):
-        self.data = {symbol: deque(maxlen=3600) for symbol in symbols}  # Store last hour of data
+        self.data = {symbol: pd.DataFrame(columns=['timestamp', 'price', 'amount']) for symbol in symbols}
         self.candlesticks = {symbol: {} for symbol in symbols}
-        self.candlestick_observers = []  # Observers for candlestick completion
-        self.trade_observers = []        # Observers for each trade
+        self.candlestick_observers = []
+        self.trade_observers = []
         self.logger = logger
         self.verbose = verbose
         self.last_candle_time = {symbol: None for symbol in symbols}
         self.last_price = {symbol: None for symbol in symbols}
-        self.order_placer = None  # Will be set later
+        self.order_placer = None
+
+    def load_historical_data(self, data_dict):
+        for symbol, df in data_dict.items():
+            self.data[symbol] = df.reset_index()
+            if not df.empty:
+                self.last_price[symbol] = df.iloc[-1]['price']
+                self.logger.debug(f"Loaded historical data for {symbol}, last price: {self.last_price[symbol]}")
 
     def add_candlestick_observer(self, callback):
         self.candlestick_observers.append(callback)
@@ -51,75 +69,37 @@ class CryptoDataManager:
 
     def add_trade(self, symbol, price, timestamp):
         price = float(price)
-        self.data[symbol].append((timestamp, price))
+        timestamp = pd.to_datetime(timestamp, unit='s')
+        amount = 0  # Live trade data might not include 'amount'
+        new_row = {'timestamp': timestamp, 'price': price, 'amount': amount}
+        self.data[symbol] = pd.concat([self.data[symbol], pd.DataFrame([new_row])], ignore_index=True)
         self.last_price[symbol] = price
-
-        # Update candlestick data
-        minute = timestamp - (timestamp % 60)
-        if minute not in self.candlesticks[symbol]:
-            self.candlesticks[symbol][minute] = CandlestickData()
-
-        candle = self.candlesticks[symbol][minute]
-        if candle.open is None:
-            candle.open = price
-        candle.high = max(candle.high or price, price)
-        candle.low = min(candle.low or price, price)
-        candle.close = price
-        candle.volume += 1
-        candle.trades += 1
 
         # Notify trade observers
         for observer in self.trade_observers:
             observer(symbol, price, timestamp)
 
-        # Check if the candlestick is complete
-        current_time = int(time.time())
-        if current_time >= minute + 60:
-            self._complete_candlestick(symbol, minute)
-
-    def _complete_candlestick(self, symbol, minute):
-        candle = self.candlesticks[symbol].pop(minute, None)
-        if candle:
-            readable_time = datetime.fromtimestamp(minute).strftime('%Y-%m-%d %H:%M:%S')
-            if self.verbose:
-                self.logger.debug(f"Completing candlestick for {symbol} at {readable_time}")
-            for observer in self.candlestick_observers:
-                observer(symbol, minute, candle)
-            self.last_candle_time[symbol] = minute
-
-    def force_update_candlesticks(self):
-        current_time = int(time.time())
-        current_minute = current_time - (current_time % 60)
-        for symbol in self.candlesticks:
-            if self.last_candle_time[symbol] is None or current_minute > self.last_candle_time[symbol] + 60:
-                last_complete_minute = self.last_candle_time[symbol] if self.last_candle_time[symbol] is not None else current_minute - 120
-                for minute in range(last_complete_minute + 60, current_minute, 60):
-                    if minute not in self.candlesticks[symbol]:
-                        # Create a zero-trade candlestick
-                        zero_candle = CandlestickData()
-                        if self.last_price[symbol] is not None:
-                            zero_candle.open = zero_candle.high = zero_candle.low = zero_candle.close = self.last_price[symbol]
-                        self._complete_candlestick(symbol, minute)
-                    else:
-                        self._complete_candlestick(symbol, minute)
-
     def get_current_price(self, symbol):
-        if self.data[symbol]:
-            return self.data[symbol][-1][1]
+        if not self.data[symbol].empty:
+            return self.data[symbol].iloc[-1]['price']
         return None
 
     def get_price_range(self, symbol, minutes):
-        now = time.time()
-        relevant_data = [price for ts, price in self.data[symbol] if now - ts <= minutes * 60]
-        if relevant_data:
-            return min(relevant_data), max(relevant_data)
+        now = pd.Timestamp.now()
+        start_time = now - pd.Timedelta(minutes=minutes)
+        df = self.data[symbol]
+        mask = df['timestamp'] >= start_time
+        relevant_data = df.loc[mask, 'price']
+        if not relevant_data.empty:
+            return relevant_data.min(), relevant_data.max()
         return None, None
 
-    def get_price_series(self, symbol):
-        return [price for timestamp, price in self.data[symbol]]
+    def get_price_dataframe(self, symbol):
+        return self.data[symbol]
 
     def get_data_point_count(self, symbol):
         return len(self.data[symbol])
+
 
 async def subscribe_to_websocket(url: str, symbol: str, data_manager):
     channel = f"live_trades_{symbol}"
@@ -155,6 +135,7 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
         except Exception as e:
             data_manager.logger.error(f"{symbol}: An error occurred: {str(e)}")
             await asyncio.sleep(5)
+
 
 class OrderPlacer:
     def __init__(self, config_file='.bitstamp'):
@@ -215,6 +196,7 @@ class OrderPlacer:
     def place_limit_sell_order(self, currency_pair, amount, price, **kwargs):
         return self.place_order('sell', currency_pair, amount, price, **kwargs)
 
+
 class MACrossoverStrategy:
     def __init__(self, data_manager, short_window, long_window, amount, symbol, logger, live_trading=False):
         self.data_manager = data_manager
@@ -225,13 +207,10 @@ class MACrossoverStrategy:
         self.symbol = symbol
         self.logger = logger
         self.position = 0  # 1 for long, -1 for short, 0 for neutral
-        self.prices = []
         self.running = False
         self.live_trading = live_trading
         self.trade_log = []  # For dry run logging
-        self.trade_log_file = 'trades.json'  # Log file for all trades
-        self.short_ma = None
-        self.long_ma = None
+        self.trade_log_file = 'trades.json'
 
     def start(self):
         self.running = True
@@ -253,29 +232,37 @@ class MACrossoverStrategy:
 
     def run_strategy_loop(self):
         while self.running:
-            price_series = self.data_manager.get_price_series(self.symbol)
-            if price_series and len(price_series) >= self.long_window:
-                self.prices = price_series
-                self.calculate_moving_averages()
-                self.check_for_signals()
-            time.sleep(5)  # Adjust as needed
+            df = self.data_manager.get_price_dataframe(self.symbol)
+            if not df.empty:
+                # Ensure datetime index
+                df = ensure_datetime_index(df)
+                # Resample to hourly frequency
+                df_high = df.resample('1H').agg({
+                    'price': 'last',
+                    'amount': 'sum',
+                }).dropna()
+                if len(df_high) >= self.long_window:
+                    # Calculate moving averages
+                    df_ma = add_moving_averages(df_high.copy(), self.short_window, self.long_window)
+                    # Generate MA signals
+                    df_ma = generate_ma_signals(df_ma)
+                    # Get the latest signal
+                    latest_signal = df_ma.iloc[-1]['MA_Signal']
+                    current_price = df_ma.iloc[-1]['price']
+                    self.check_for_signals(latest_signal, current_price)
+            time.sleep(60)  # Check every minute
 
-    def calculate_moving_averages(self):
-        self.short_ma = sum(self.prices[-self.short_window:]) / self.short_window
-        self.long_ma = sum(self.prices[-self.long_window:]) / self.long_window
-
-    def check_for_signals(self):
-        current_price = self.prices[-1]
+    def check_for_signals(self, latest_signal, current_price):
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        if self.short_ma > self.long_ma and self.position <= 0:
+        if latest_signal == 1 and self.position <= 0:
             # Buy signal
-            self.logger.info(f"Buy signal: short MA ({self.short_ma}) > long MA ({self.long_ma}) at price {current_price}")
+            self.logger.info(f"Buy signal at price {current_price}")
             self.position = 1
             self.execute_trade("buy", current_price, timestamp)
-        elif self.short_ma < self.long_ma and self.position >= 0:
+        elif latest_signal == -1 and self.position >= 0:
             # Sell signal
-            self.logger.info(f"Sell signal: short MA ({self.short_ma}) < long MA ({self.long_ma}) at price {current_price}")
+            self.logger.info(f"Sell signal at price {current_price}")
             self.position = -1
             self.execute_trade("sell", current_price, timestamp)
 
@@ -311,15 +298,9 @@ class MACrossoverStrategy:
         status = {
             'running': self.running,
             'position': self.position,
-            'current_price': self.prices[-1] if self.prices else None,
-            'short_ma': self.short_ma,
-            'long_ma': self.long_ma,
-            'ma_difference': (self.short_ma - self.long_ma) if self.short_ma and self.long_ma else None,
-            'data_points_collected': len(self.prices),
-            'data_points_required': self.long_window,
-            'data_points_needed': max(0, self.long_window - len(self.prices))
         }
         return status
+
 
 class CryptoShell(cmd.Cmd):
     intro = 'Welcome to the Crypto Shell. Type help or ? to list commands.\n'
@@ -447,7 +428,7 @@ class CryptoShell(cmd.Cmd):
 
     def trade_callback(self, symbol, price, timestamp):
         if symbol in self.ticker_output:
-            time_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+            time_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
             print(f"{symbol} - {time_str}: Price: ${price:.2f}")
 
     def do_verbose(self, arg):
@@ -583,36 +564,13 @@ class CryptoShell(cmd.Cmd):
             print("Auto-trading is not running.")
 
     def do_status(self, arg):
-        """Show the status of auto-trading and the next trigger point."""
+        """Show the status of auto-trading."""
         if self.auto_trader is not None and self.auto_trader.running:
             status = self.auto_trader.get_status()
             position = {1: 'Long', -1: 'Short', 0: 'Neutral'}.get(status['position'], 'Unknown')
             print("Auto-Trading Status:")
             print(f"  Running: {status['running']}")
             print(f"  Position: {position}")
-            print(f"  Data Points Collected: {status['data_points_collected']}")
-            print(f"  Data Points Required: {status['data_points_required']}")
-            if status['data_points_needed'] > 0:
-                print(f"  Data Points Needed for Moving Averages: {status['data_points_needed']}")
-                print("  Moving averages are not yet calculated.")
-            else:
-                if status['current_price'] is not None:
-                    print(f"  Current Price: {status['current_price']:.2f}")
-                else:
-                    print("  Current Price: Not available")
-                if status['short_ma'] is not None and status['long_ma'] is not None:
-                    print(f"  Short Moving Average ({self.auto_trader.short_window}): {status['short_ma']:.2f}")
-                    print(f"  Long Moving Average ({self.auto_trader.long_window}): {status['long_ma']:.2f}")
-                    print(f"  Difference (Short MA - Long MA): {status['ma_difference']:.6f}")
-                    print("  Next Trigger Point:")
-                    if self.auto_trader.position <= 0 and status['short_ma'] <= status['long_ma']:
-                        print("    Awaiting Buy Signal (Short MA crossing above Long MA)")
-                    elif self.auto_trader.position >= 0 and status['short_ma'] >= status['long_ma']:
-                        print("    Awaiting Sell Signal (Short MA crossing below Long MA)")
-                    else:
-                        print("    Monitoring for crossover signals...")
-                else:
-                    print("  Moving averages are not yet calculated.")
         else:
             print("Auto-trading is not running.")
 
@@ -623,7 +581,7 @@ class CryptoShell(cmd.Cmd):
             print("\nCustom Commands:")
             print("  auto_trade       Start auto-trading using the best strategy")
             print("  stop_auto_trade  Stop auto-trading")
-            print("  status           Show the status of auto-trading and next trigger point")
+            print("  status           Show the status of auto-trading")
 
     def do_quit(self, arg):
         """Quit the program"""
@@ -631,6 +589,7 @@ class CryptoShell(cmd.Cmd):
         if self.auto_trader is not None and self.auto_trader.running:
             self.auto_trader.stop()
         return True
+
 
 def run_websocket(url, symbols, data_manager):
     loop = asyncio.new_event_loop()
@@ -643,11 +602,6 @@ def run_websocket(url, symbols, data_manager):
     finally:
         loop.close()
 
-def candlestick_timer(data_manager):
-    while True:
-        time.sleep(60)  # Wait for 60 seconds
-        data_manager.logger.debug("[Timer] Triggering force_update_candlesticks()")
-        data_manager.force_update_candlesticks()
 
 def setup_logging(verbose, log_file=None):
     logger = logging.getLogger("CryptoShellLogger")
@@ -671,6 +625,7 @@ def setup_logging(verbose, log_file=None):
 
     return logger
 
+
 def main():
     parser = argparse.ArgumentParser(description="Crypto trading shell")
     parser.add_argument('-v', '--verbose', nargs='?', const=True, default=False,
@@ -680,15 +635,12 @@ def main():
 
     # Setup logging based on verbose argument
     if args.verbose is True:
-        # Verbose enabled without specifying a log file; log to stderr
         logger = setup_logging(verbose=True)
         verbose_flag = True
     elif isinstance(args.verbose, str):
-        # Verbose enabled with a log file; log to the specified file
         logger = setup_logging(verbose=True, log_file=args.verbose)
         verbose_flag = True
     else:
-        # Verbose disabled
         logger = setup_logging(verbose=False)
         verbose_flag = False
 
@@ -699,8 +651,21 @@ def main():
     else:
         print("Live trading is DISABLED. Running in dry run mode.")
 
-    symbols = ["btcusd", "ethusd"]  # Add more symbols as needed
+    symbols = ["btcusd"]  # Adjust as needed
     data_manager = CryptoDataManager(symbols, logger=logger, verbose=verbose_flag)
+
+    # Read historical data
+    file_path = 'btcusd.log'  # Ensure this is the correct path to your log file
+    start_date = None  # Adjust as needed
+    end_date = datetime.now()
+
+    df = parse_log_file(file_path, start_date, end_date)
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
+    df.set_index('timestamp', inplace=True)
+
+    # Load historical data into the data manager
+    data_manager.load_historical_data({'btcusd': df})
+
     order_placer = OrderPlacer()
     data_manager.order_placer = order_placer  # Set order placer in data manager
 
@@ -712,11 +677,6 @@ def main():
         target=run_websocket, args=(url, symbols, data_manager), daemon=True)
     websocket_thread.start()
 
-    # Start candlestick timer in a separate thread
-    timer_thread = threading.Thread(
-        target=candlestick_timer, args=(data_manager,), daemon=True)
-    timer_thread.start()
-
     # Start the shell
     try:
         shell.cmdloop()
@@ -724,6 +684,7 @@ def main():
         print("\nInterrupted. Exiting...")
         if shell.auto_trader is not None and shell.auto_trader.running:
             shell.auto_trader.stop()
+
 
 if __name__ == '__main__':
     main()
