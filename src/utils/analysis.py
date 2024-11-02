@@ -2,7 +2,7 @@
 
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import json
 from indicators.technical_indicators import ensure_datetime_index
 from backtesting.backtester import generate_trade_list
 from optimization.optimizer import (
@@ -26,6 +26,7 @@ from indicators.technical_indicators import (
     generate_adaptive_vwma_signals
 )
 from utils.helpers import ensure_datetime_index, print_strategy_results
+
 
 def analyze_data(df):
     print("Converting timestamp to datetime...")
@@ -53,6 +54,7 @@ def analyze_data(df):
     plt.close()
     df.reset_index(inplace=True)
     print("Analysis complete. Check the current directory for generated PNG files.")
+
 
 def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterations=50):
     print("Starting run_trading_system function...")
@@ -116,7 +118,8 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
         all_results_list.append(rsi_results)
 
         print("Generating trade list for best RSI strategy...")
-        best_rsi_df = calculate_rsi(df_high.copy(), int(best_rsi['RSI_Window']))
+        best_rsi_df = calculate_rsi(
+            df_high.copy(), int(best_rsi['RSI_Window']))
         best_rsi_df = generate_rsi_signals(
             best_rsi_df, int(best_rsi['Overbought']), int(best_rsi['Oversold']))
         rsi_trades = generate_trade_list(best_rsi_df, 'RSI')
@@ -177,7 +180,8 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
 
     # Run RAMM Strategy
     print("Running RAMM Strategy...")
-    ramm_results = optimize_ramm_parameters(df_high, max_iterations=max_iterations)
+    ramm_results = optimize_ramm_parameters(
+        df_high, max_iterations=max_iterations)
     if not ramm_results.empty:
         best_ramm = ramm_results.loc[ramm_results['Total_Return'].idxmax()]
         print("Best RAMM parameters:")
@@ -205,7 +209,8 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
     print("Running Adaptive VWMA Strategy...")
     adaptive_vwma_results = optimize_adaptive_vwma_parameters(df_high)
     if not adaptive_vwma_results.empty:
-        best_adaptive_vwma = adaptive_vwma_results.loc[adaptive_vwma_results['Total_Return'].idxmax()]
+        best_adaptive_vwma = adaptive_vwma_results.loc[adaptive_vwma_results['Total_Return'].idxmax(
+        )]
         print("Best Adaptive VWMA parameters:")
         print(best_adaptive_vwma)
         strategies['Adaptive_VWMA'] = best_adaptive_vwma.to_dict()
@@ -220,7 +225,8 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
             best_adaptive_vwma_df,
             vol_scale=best_adaptive_vwma['Volume_Scale']
         )
-        adaptive_vwma_trades = generate_trade_list(best_adaptive_vwma_df, 'Adaptive_VWMA')
+        adaptive_vwma_trades = generate_trade_list(
+            best_adaptive_vwma_df, 'Adaptive_VWMA')
         adaptive_vwma_trades.to_csv('adaptive_vwma_trades.csv', index=False)
         print("Adaptive VWMA trades saved to 'adaptive_vwma_trades.csv'")
     else:
@@ -242,7 +248,14 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
         if total_returns:
             best_strategy = max(total_returns.items(), key=lambda x: x[1])[0]
             print(f"\nBest overall strategy: {best_strategy}")
-            print(f"Best strategy Total Return: {total_returns[best_strategy]:.2f}%")
+            print(
+                f"Best strategy Total Return: {total_returns[best_strategy]:.2f}%")
+
+            # Save the best strategy parameters to a JSON file
+            best_strategy_params = strategies[best_strategy]
+            with open('best_strategy.json', 'w') as f:
+                json.dump(best_strategy_params, f, indent=4)
+            print("\nBest strategy parameters saved to 'best_strategy.json'")
 
             print("\nAll strategy returns:")
             for strategy, total_return in total_returns.items():
