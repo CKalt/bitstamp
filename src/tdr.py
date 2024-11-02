@@ -17,7 +17,7 @@ import threading
 from datetime import datetime, timedelta
 import logging
 import sys
-
+import os
 
 class CandlestickData:
     def __init__(self):
@@ -27,7 +27,6 @@ class CandlestickData:
         self.close = None
         self.volume = 0
         self.trades = 0
-
 
 class CryptoDataManager:
     def __init__(self, symbols, logger, verbose=False):
@@ -39,6 +38,7 @@ class CryptoDataManager:
         self.verbose = verbose
         self.last_candle_time = {symbol: None for symbol in symbols}
         self.last_price = {symbol: None for symbol in symbols}
+        self.order_placer = None  # Will be set later
 
     def add_candlestick_observer(self, callback):
         self.candlestick_observers.append(callback)
@@ -103,9 +103,6 @@ class CryptoDataManager:
                     else:
                         self._complete_candlestick(symbol, minute)
 
-    def add_observer(self, callback):
-        self.candlestick_observers.append(callback)
-
     def get_current_price(self, symbol):
         if self.data[symbol]:
             return self.data[symbol][-1][1]
@@ -118,6 +115,8 @@ class CryptoDataManager:
             return min(relevant_data), max(relevant_data)
         return None, None
 
+    def get_price_series(self, symbol):
+        return [price for timestamp, price in self.data[symbol]]
 
 async def subscribe_to_websocket(url: str, symbol: str, data_manager):
     channel = f"live_trades_{symbol}"
@@ -158,7 +157,6 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
             # Wait for 5 seconds before trying to reconnect
             await asyncio.sleep(5)
 
-
 class OrderPlacer:
     def __init__(self, config_file='.bitstamp'):
         self.config = self.read_config(config_file)
@@ -178,7 +176,7 @@ class OrderPlacer:
         payload = {'amount': str(amount)}
         if price:
             payload['price'] = str(price)
-        
+
         # Add additional parameters for limit orders
         for key, value in kwargs.items():
             if value is not None:
@@ -215,19 +213,93 @@ class OrderPlacer:
     def place_limit_sell_order(self, currency_pair, amount, price, **kwargs):
         return self.place_order('sell', currency_pair, amount, price, **kwargs)
 
+class MACrossoverStrategy:
+    def __init__(self, data_manager, short_window, long_window, amount, symbol, logger, live_trading=False):
+        self.data_manager = data_manager
+        self.order_placer = data_manager.order_placer
+        self.short_window = short_window
+        self.long_window = long_window
+        self.amount = amount
+        self.symbol = symbol
+        self.logger = logger
+        self.position = 0  # 1 for long, -1 for short, 0 for neutral
+        self.prices = []
+        self.running = False
+        self.live_trading = live_trading
+        self.trade_log = []  # For dry run logging
+
+    def start(self):
+        self.running = True
+        threading.Thread(target=self.run_strategy_loop, daemon=True).start()
+
+    def stop(self):
+        self.running = False
+        # Save trades to trades.json if dry run
+        if not self.live_trading and self.trade_log:
+            try:
+                with open('trades.json', 'w') as f:
+                    json.dump(self.trade_log, f, indent=2)
+                print("Trades logged to 'trades.json'")
+            except Exception as e:
+                print(f"Failed to write trades to 'trades.json': {e}")
+
+    def run_strategy_loop(self):
+        while self.running:
+            price_series = self.data_manager.get_price_series(self.symbol)
+            if price_series and len(price_series) >= self.long_window:
+                self.prices = price_series
+                self.check_for_signals()
+            time.sleep(5)  # Adjust as needed
+
+    def check_for_signals(self):
+        short_ma = sum(self.prices[-self.short_window:]) / self.short_window
+        long_ma = sum(self.prices[-self.long_window:]) / self.long_window
+        current_price = self.prices[-1]
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        if short_ma > long_ma and self.position <= 0:
+            # Buy signal
+            self.logger.info(f"Buy signal: short MA ({short_ma}) > long MA ({long_ma}) at price {current_price}")
+            self.position = 1
+            self.execute_trade("buy", current_price, timestamp)
+        elif short_ma < long_ma and self.position >= 0:
+            # Sell signal
+            self.logger.info(f"Sell signal: short MA ({short_ma}) < long MA ({long_ma}) at price {current_price}")
+            self.position = -1
+            self.execute_trade("sell", current_price, timestamp)
+
+    def execute_trade(self, trade_type, price, timestamp):
+        trade_info = {
+            'type': trade_type,
+            'symbol': self.symbol,
+            'amount': self.amount,
+            'price': price,
+            'timestamp': timestamp
+        }
+        if self.live_trading:
+            result = self.order_placer.place_order(
+                f"market-{trade_type}", self.symbol, self.amount)
+            self.logger.info(f"Executed {trade_type} order: {result}")
+            trade_info['order_result'] = result
+        else:
+            self.logger.info(f"Dry run - {trade_type} order: {trade_info}")
+            self.trade_log.append(trade_info)
 
 class CryptoShell(cmd.Cmd):
     intro = 'Welcome to the Crypto Shell. Type help or ? to list commands.\n'
     prompt = '(crypto) '
 
-    def __init__(self, data_manager, order_placer, logger, verbose=False):
+    def __init__(self, data_manager, order_placer, logger, verbose=False, live_trading=False):
         super().__init__()
         self.data_manager = data_manager
         self.order_placer = order_placer
+        self.data_manager.order_placer = order_placer  # Set in data manager
         self.logger = logger
         self.candlestick_output = {}
         self.ticker_output = {}
         self.verbose = verbose
+        self.live_trading = live_trading
+        self.auto_trader = None
         self.examples = {
             'price': 'price btcusd',
             'range': 'range btcusd 30',
@@ -237,7 +309,9 @@ class CryptoShell(cmd.Cmd):
             'ticker': 'ticker btcusd',
             'example': 'example price',
             'limit_buy': 'limit_buy btcusd 0.001 50000 daily_order=true',
-            'limit_sell': 'limit_sell btcusd 0.001 60000 ioc_order=true'
+            'limit_sell': 'limit_sell btcusd 0.001 60000 ioc_order=true',
+            'auto_trade': 'auto_trade 2',
+            'stop_auto_trade': 'stop_auto_trade'
         }
 
         # Register callbacks
@@ -424,11 +498,58 @@ class CryptoShell(cmd.Cmd):
                         print(f"Invalid value for {key}: {value}. It should be a float.")
         return options
 
+    def do_auto_trade(self, arg):
+        """Start auto-trading using the best strategy: auto_trade <amount>"""
+        args = arg.split()
+        if len(args) != 1:
+            print("Usage: auto_trade <amount>")
+            return
+        amount = float(args[0])
+        try:
+            with open('best_strategy.json', 'r') as f:
+                best_strategy_params = json.load(f)
+        except FileNotFoundError:
+            print("Best strategy parameters file 'best_strategy.json' not found.")
+            return
+
+        strategy_name = best_strategy_params.get('Strategy')
+        if strategy_name != 'MA':
+            print(f"The best strategy is not MA Crossover. It's {strategy_name}.")
+            return
+
+        short_window = int(best_strategy_params['Short_Window'])
+        long_window = int(best_strategy_params['Long_Window'])
+        symbol = 'btcusd'  # Adjust as needed
+
+        self.auto_trader = MACrossoverStrategy(
+            self.data_manager, short_window, long_window, amount, symbol, self.logger, live_trading=self.live_trading)
+        self.auto_trader.start()
+        print(f"Auto-trading started with amount {amount} using MA Crossover strategy.")
+        if not self.live_trading:
+            print("Running in dry run mode. Trades will be logged to 'trades.json'.")
+
+    def do_stop_auto_trade(self, arg):
+        """Stop auto-trading"""
+        if hasattr(self, 'auto_trader') and self.auto_trader.running:
+            self.auto_trader.stop()
+            print("Auto-trading stopped.")
+        else:
+            print("Auto-trading is not running.")
+
+    def do_help(self, arg):
+        """List available commands with "help" or detailed help with "help cmd"."""
+        super().do_help(arg)
+        if arg == '':
+            print("\nCustom Commands:")
+            print("  auto_trade       Start auto-trading using the best strategy")
+            print("  stop_auto_trade  Stop auto-trading")
+
     def do_quit(self, arg):
         """Quit the program"""
         print("Quitting...")
+        if hasattr(self, 'auto_trader') and self.auto_trader.running:
+            self.auto_trader.stop()
         return True
-
 
 def run_websocket(url, symbols, data_manager):
     loop = asyncio.new_event_loop()
@@ -441,13 +562,11 @@ def run_websocket(url, symbols, data_manager):
     finally:
         loop.close()
 
-
 def candlestick_timer(data_manager):
     while True:
         time.sleep(60)  # Wait for 60 seconds
         data_manager.logger.debug("[Timer] Triggering force_update_candlesticks()")
         data_manager.force_update_candlesticks()
-
 
 def setup_logging(verbose, log_file=None):
     logger = logging.getLogger("CryptoShellLogger")
@@ -479,11 +598,11 @@ def setup_logging(verbose, log_file=None):
 
     return logger
 
-
 def main():
     parser = argparse.ArgumentParser(description="Crypto trading shell")
     parser.add_argument('-v', '--verbose', nargs='?', const=True, default=False,
                         help="Enable verbose output and optionally specify a log file (e.g., --verbose logfile.log)")
+    parser.add_argument('--do-live-trades', action='store_true', help="Enable live trading (default is dry run)")
     args = parser.parse_args()
 
     # Setup logging based on verbose argument
@@ -500,11 +619,19 @@ def main():
         logger = setup_logging(verbose=False)
         verbose_flag = False
 
+    live_trading = args.do_live_trades
+
+    if live_trading:
+        print("Live trading is ENABLED.")
+    else:
+        print("Live trading is DISABLED. Running in dry run mode.")
+
     symbols = ["btcusd", "ethusd"]  # Add more symbols as needed
     data_manager = CryptoDataManager(symbols, logger=logger, verbose=verbose_flag)
     order_placer = OrderPlacer()
+    data_manager.order_placer = order_placer  # Set order placer in data manager
 
-    shell = CryptoShell(data_manager, order_placer, logger=logger, verbose=verbose_flag)
+    shell = CryptoShell(data_manager, order_placer, logger=logger, verbose=verbose_flag, live_trading=live_trading)
 
     # Start WebSocket connections in a separate thread
     url = 'wss://ws.bitstamp.net'
@@ -522,7 +649,8 @@ def main():
         shell.cmdloop()
     except KeyboardInterrupt:
         print("\nInterrupted. Exiting...")
-
+        if hasattr(shell, 'auto_trader') and shell.auto_trader.running:
+            shell.auto_trader.stop()
 
 if __name__ == '__main__':
     main()
