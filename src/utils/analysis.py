@@ -1,8 +1,11 @@
 # src/utils/analysis.py
 
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import json
+import traceback
+import os
 from indicators.technical_indicators import ensure_datetime_index
 from backtesting.backtester import generate_trade_list
 from optimization.optimizer import (
@@ -54,7 +57,6 @@ def analyze_data(df):
     plt.close()
     df.reset_index(inplace=True)
     print("Analysis complete. Check the current directory for generated PNG files.")
-
 
 def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterations=50):
     print("Starting run_trading_system function...")
@@ -209,8 +211,7 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
     print("Running Adaptive VWMA Strategy...")
     adaptive_vwma_results = optimize_adaptive_vwma_parameters(df_high)
     if not adaptive_vwma_results.empty:
-        best_adaptive_vwma = adaptive_vwma_results.loc[adaptive_vwma_results['Total_Return'].idxmax(
-        )]
+        best_adaptive_vwma = adaptive_vwma_results.loc[adaptive_vwma_results['Total_Return'].idxmax()]
         print("Best Adaptive VWMA parameters:")
         print(best_adaptive_vwma)
         strategies['Adaptive_VWMA'] = best_adaptive_vwma.to_dict()
@@ -253,9 +254,29 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
 
             # Save the best strategy parameters to a JSON file
             best_strategy_params = strategies[best_strategy]
-            with open('best_strategy.json', 'w') as f:
-                json.dump(best_strategy_params, f, indent=4)
-            print("\nBest strategy parameters saved to 'best_strategy.json'")
+
+            # Convert any NumPy data types to native Python types
+            def convert_types(obj):
+                if isinstance(obj, (np.integer, np.int64)):
+                    return int(obj)
+                elif isinstance(obj, (np.floating, np.float64)):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, pd.Timestamp):
+                    return obj.isoformat()
+                else:
+                    return obj
+
+            best_strategy_params_converted = {key: convert_types(value) for key, value in best_strategy_params.items()}
+
+            try:
+                with open('best_strategy.json', 'w') as f:
+                    json.dump(best_strategy_params_converted, f, indent=4)
+                print("\nBest strategy parameters saved to 'best_strategy.json'")
+            except Exception as e:
+                print("An error occurred while writing the best strategy parameters to 'best_strategy.json':")
+                traceback.print_exc()
 
             print("\nAll strategy returns:")
             for strategy, total_return in total_returns.items():
