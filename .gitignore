@@ -12,3 +12,14 @@ trades/*
 # But don't ignore .csv files in the ./test_data directory
 !test_data/*.csv
 .ses_smtp_config.json
+
+# Ignore all .png, .zip, and .metadata files
+*.png
+*.zip
+*.metadata
+
+# Ignore files starting with foo*
+foo*
+
+# Ignore files in any __pycache__ directory
+__pycache__/

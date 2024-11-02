@@ -30,3 +30,28 @@ Regarding the transaction fees:
     For each of the trades, this fee is applied, which means the actual amount being traded gets reduced by this fee.
 
 In real-world scenarios, the fee structures might be more complex, with variable fees based on trade volumes, specific platforms, or other factors. However, this code assumes a constant fee for simplicity. If you're planning to implement this in a real-world scenario, it's essential to account for these nuances.
+
+
+# bktst
+src/
+├── backtesting/
+│   ├── __init__.py
+│   └── backtester.py
+├── data/
+│   ├── __init__.py
+│   └── loader.py
+├── indicators/
+│   ├── __init__.py
+│   └── technical_indicators.py
+├── optimization/
+│   ├── __init__.py
+│   └── optimizer.py
+├── strategies/
+│   ├── __init__.py
+│   └── ramm_strategy.py
+├── utils/
+│   ├── __init__.py
+│   ├── analysis.py
+│   └── helpers.py
+└── bktst.py
+

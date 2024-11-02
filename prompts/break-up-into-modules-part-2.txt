@@ -1,0 +1,669 @@
+Here are the listings you provided so far. The file path and name is at the top of each file.
+
+```
+# src/data/loader.py
+
+import json
+import os
+import pandas as pd
+from datetime import datetime, timedelta
+
+def create_metadata_file(log_file_path, metadata_file_path):
+    print("Creating metadata file...")
+    metadata = {}
+    total_lines = 0
+    last_timestamp = None
+
+    with open(log_file_path, 'r') as file:
+        for line in file:
+            total_lines += 1
+            if total_lines % 1000000 == 0:
+                print(f"Processed {total_lines} lines...")
+            try:
+                json_data = json.loads(line)
+                if json_data['event'] == 'trade':
+                    timestamp = int(json_data['data']['timestamp'])
+                    date = datetime.fromtimestamp(timestamp).date()
+                    if str(date) not in metadata:
+                        metadata[str(date)] = {
+                            'start_line': total_lines, 'timestamp': timestamp}
+                    last_timestamp = timestamp
+            except json.JSONDecodeError:
+                continue
+
+    metadata['total_lines'] = total_lines
+    metadata['last_timestamp'] = last_timestamp
+
+    with open(metadata_file_path, 'w') as file:
+        json.dump(metadata, file)
+
+    print(f"Metadata file created: {metadata_file_path}")
+
+def get_start_line_from_metadata(metadata_file_path, start_date):
+    with open(metadata_file_path, 'r') as file:
+        metadata = json.load(file)
+
+    start_date_str = str(start_date.date())
+    if start_date_str in metadata:
+        return metadata[start_date_str]['start_line']
+    else:
+        # If exact date not found, find the nearest date
+        dates = [datetime.strptime(date, '%Y-%m-%d').date() for date in metadata.keys()
+                 if date != 'total_lines' and date != 'last_timestamp']
+        nearest_date = min(dates, key=lambda x: abs(x - start_date.date()))
+        return metadata[str(nearest_date)]['start_line']
+
+def parse_log_file(file_path, start_date=None, end_date=None):
+    metadata_file_path = f"{file_path}.metadata"
+    if not os.path.exists(metadata_file_path):
+        create_metadata_file(file_path, metadata_file_path)
+
+    data = []
+    with open(metadata_file_path, 'r') as file:
+        metadata = json.load(file)
+
+    total_lines = metadata['total_lines']
+    print(f"Total lines in log file: {total_lines}")
+
+    start_line = 1
+    if start_date:
+        start_line = get_start_line_from_metadata(metadata_file_path, start_date)
+        print(f"Starting from line {start_line} based on start date {start_date}")
+
+    last_date = None
+    skipped_count = start_line - 1
+    processed_count = 0
+    end_reached = False
+    progress_interval = max(total_lines // 10, 1)  # Only show 10 progress updates
+
+    with open(file_path, 'r') as file:
+        for i, line in enumerate(file, 1):
+            if i < start_line:
+                continue
+
+            if i % progress_interval == 0:  # Show progress every 10%
+                print(f"Progress: {i/total_lines*100:.1f}% - Last date: {last_date}")
+
+            try:
+                json_data = json.loads(line)
+                if json_data['event'] == 'trade':
+                    trade_data = json_data['data']
+                    timestamp = int(trade_data['timestamp'])
+                    trade_date = datetime.fromtimestamp(timestamp)
+                    last_date = trade_date.strftime('%Y-%m-%d %H:%M:%S')
+
+                    if end_date and trade_date > end_date:
+                        end_reached = True
+                        break
+
+                    if start_date and trade_date < start_date:
+                        skipped_count += 1
+                        continue
+
+                    processed_count += 1
+                    data.append({
+                        'timestamp': timestamp,
+                        'price': float(trade_data['price']),
+                        'amount': float(trade_data['amount']),
+                        'type': int(trade_data['type'])
+                    })
+            except json.JSONDecodeError:
+                continue
+
+    print(f"\nFinished processing log file. Last date processed: {last_date}")
+    print(f"Total entries skipped: {skipped_count}")
+    print(f"Total entries processed: {processed_count}")
+    if end_reached:
+        print(f"Reached end date: {end_date}")
+    print("Creating DataFrame...")
+    df = pd.DataFrame(data)
+
+    # Optimize data types
+    df['price'] = pd.to_numeric(df['price'], downcast='float')
+    df['amount'] = pd.to_numeric(df['amount'], downcast='float')
+    df['type'] = df['type'].astype('int8')
+
+    return df
+```
+
+```
+# src/indicators/technical_indicators.py
+
+import pandas as pd
+import numpy as np
+
+def ensure_datetime_index(df):
+    if 'datetime' not in df.columns:
+        df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.set_index('datetime', inplace=True)
+    return df
+
+def calculate_market_conditions(df, lookback_short=5, lookback_long=20):
+    """
+    Calculate market conditions including regime, volatility state, and volume profile
+    """
+    df = ensure_datetime_index(df)
+    
+    # Price movement and volatility
+    df['returns'] = df['price'].pct_change()
+    df['volatility_short'] = df['returns'].rolling(lookback_short).std()
+    df['volatility_long'] = df['returns'].rolling(lookback_long).std()
+    df['volatility_ratio'] = df['volatility_short'] / df['volatility_long']
+    
+    # Volume profile
+    df['volume'] = df['price'] * df['amount']
+    df['volume_sma'] = df['volume'].rolling(lookback_long).mean()
+    df['volume_ratio'] = df['volume'] / df['volume_sma']
+    
+    # Trend strength
+    df['price_sma_short'] = df['price'].rolling(lookback_short).mean()
+    df['price_sma_long'] = df['price'].rolling(lookback_long).mean()
+    df['trend_strength'] = (df['price_sma_short'] - df['price_sma_long']) / df['price_sma_long']
+    
+    # Regime classification
+    df['regime'] = 0  # Default to neutral regime
+    
+    # Trending regime conditions
+    trending_conditions = (
+        (df['trend_strength'].abs() > df['trend_strength'].rolling(lookback_long).std()) &
+        (df['volume_ratio'] > 1.0)
+    )
+    df.loc[trending_conditions, 'regime'] = 1
+    
+    # Volatile regime conditions
+    volatile_conditions = (
+        (df['volatility_ratio'] > 1.2) &
+        (df['volume_ratio'] > 1.5)
+    )
+    df.loc[volatile_conditions, 'regime'] = 2
+    
+    # Range-bound regime conditions
+    range_bound_conditions = (
+        (df['volatility_ratio'] < 0.8) &
+        (df['trend_strength'].abs() < df['trend_strength'].rolling(lookback_long).std() * 0.5)
+    )
+    df.loc[range_bound_conditions, 'regime'] = -1
+    
+    return df
+
+def calculate_adaptive_vwma(df, base_window=10):
+    """
+    Calculate VWMA with adaptive parameters based on market conditions
+    """
+    df = ensure_datetime_index(df)
+    
+    # Calculate market conditions
+    df = calculate_market_conditions(df)
+    
+    # Adaptive VWMA window based on regime
+    df['adaptive_window'] = base_window
+    df.loc[df['regime'] == 1, 'adaptive_window'] = base_window * 0.5  # Shorter in trending
+    df.loc[df['regime'] == 2, 'adaptive_window'] = base_window * 0.3  # Shortest in volatile
+    df.loc[df['regime'] == -1, 'adaptive_window'] = base_window * 1.5  # Longer in range-bound
+    
+    # Calculate adaptive VWMA
+    df['vol_price'] = df['price'] * df['volume']
+    
+    df['VWMA'] = np.nan
+    for i in range(len(df)):
+        window_size = int(df['adaptive_window'].iloc[i])
+        if i >= window_size:
+            vol_price_sum = df['vol_price'].iloc[i-window_size+1:i+1].sum()
+            volume_sum = df['volume'].iloc[i-window_size+1:i+1].sum()
+            df['VWMA'].iloc[i] = vol_price_sum / volume_sum if volume_sum != 0 else np.nan
+        else:
+            df['VWMA'].iloc[i] = np.nan
+
+    # Calculate additional signals
+    df['VWMA_slope'] = df['VWMA'].pct_change(periods=3)
+    df['price_to_vwma'] = df['price'] / df['VWMA'] - 1
+    
+    return df
+
+def generate_adaptive_vwma_signals(df, vol_scale=1.0):
+    """
+    Generate trading signals with regime-based adaptivity
+    """
+    df['Adaptive_VWMA_Signal'] = 0
+    
+    # Base volume threshold varies by regime
+    df['vol_threshold'] = 1.1  # Default
+    df.loc[df['regime'] == 1, 'vol_threshold'] = 1.0  # Lower in trending
+    df.loc[df['regime'] == 2, 'vol_threshold'] = 1.3  # Higher in volatile
+    df.loc[df['regime'] == -1, 'vol_threshold'] = 1.2  # Moderate in range-bound
+    
+    # Adjust thresholds by scale parameter
+    df['vol_threshold'] = df['vol_threshold'] * vol_scale
+    
+    # Generate signals based on regime
+    for regime in [-1, 0, 1, 2]:
+        regime_mask = df['regime'] == regime
+        
+        if regime == 1:  # Trending regime
+            # More sensitive to crossovers, strong volume confirmation
+            long_conditions = regime_mask & (
+                (df['price'] > df['VWMA']) &
+                (df['VWMA_slope'] > 0) &
+                (df['volume_ratio'] > df['vol_threshold'])
+            )
+            short_conditions = regime_mask & (
+                (df['price'] < df['VWMA']) &
+                (df['VWMA_slope'] < 0) &
+                (df['volume_ratio'] > df['vol_threshold'])
+            )
+            
+        elif regime == 2:  # Volatile regime
+            # Quick reversals, very strict volume confirmation
+            long_conditions = regime_mask & (
+                (df['price_to_vwma'] < -0.02) &  # Oversold
+                (df['VWMA_slope'].shift(1) < 0) & (df['VWMA_slope'] > 0) &  # Slope reversal
+                (df['volume_ratio'] > df['vol_threshold'])
+            )
+            short_conditions = regime_mask & (
+                (df['price_to_vwma'] > 0.02) &  # Overbought
+                (df['VWMA_slope'].shift(1) > 0) & (df['VWMA_slope'] < 0) &  # Slope reversal
+                (df['volume_ratio'] > df['vol_threshold'])
+            )
+            
+        elif regime == -1:  # Range-bound regime
+            # Mean reversion signals
+            long_conditions = regime_mask & (
+                (df['price_to_vwma'] < -0.01) &
+                (df['volume_ratio'] > df['vol_threshold']) &
+                (df['volatility_ratio'] < 1.0)
+            )
+            short_conditions = regime_mask & (
+                (df['price_to_vwma'] > 0.01) &
+                (df['volume_ratio'] > df['vol_threshold']) &
+                (df['volatility_ratio'] < 1.0)
+            )
+            
+        else:  # Neutral regime
+            # Conservative signals
+            long_conditions = regime_mask & (
+                (df['price'] > df['VWMA']) &
+                (df['volume_ratio'] > df['vol_threshold']) &
+                (df['VWMA_slope'] > 0)
+            )
+            short_conditions = regime_mask & (
+                (df['price'] < df['VWMA']) &
+                (df['volume_ratio'] > df['vol_threshold']) &
+                (df['VWMA_slope'] < 0)
+            )
+        
+        df.loc[long_conditions, 'Adaptive_VWMA_Signal'] = 1
+        df.loc[short_conditions, 'Adaptive_VWMA_Signal'] = -1
+    
+    return df
+
+def add_moving_averages(df, short_window, long_window):
+    df = ensure_datetime_index(df)
+    df['Short_MA'] = df['price'].rolling(window=short_window).mean()
+    df['Long_MA'] = df['price'].rolling(window=long_window).mean()
+    return df
+
+def generate_ma_signals(df):
+    df['MA_Signal'] = 0
+    df.loc[df['Short_MA'] > df['Long_MA'], 'MA_Signal'] = 1
+    df.loc[df['Short_MA'] < df['Long_MA'], 'MA_Signal'] = -1
+    return df
+
+def calculate_rsi(df, window=14):
+    df = ensure_datetime_index(df)
+    delta = df['price'].diff()
+    gain = (delta.clip(lower=0)).rolling(window=window).mean()
+    loss = (-delta.clip(upper=0)).rolling(window=window).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+    return df
+
+def generate_rsi_signals(df, overbought=70, oversold=30):
+    df['RSI_Signal'] = 0
+    df.loc[df['RSI'] < oversold, 'RSI_Signal'] = 1
+    df.loc[df['RSI'] > overbought, 'RSI_Signal'] = -1
+    return df
+
+def calculate_bollinger_bands(df, window=20, num_std=2):
+    df = ensure_datetime_index(df)
+    df['BB_MA'] = df['price'].rolling(window=window).mean()
+    df['BB_STD'] = df['price'].rolling(window=window).std()
+    df['BB_Upper'] = df['BB_MA'] + (df['BB_STD'] * num_std)
+    df['BB_Lower'] = df['BB_MA'] - (df['BB_STD'] * num_std)
+    return df
+
+def generate_bollinger_band_signals(df):
+    df['BB_Signal'] = 0
+    df.loc[df['price'] < df['BB_Lower'], 'BB_Signal'] = 1  # Buy signal
+    df.loc[df['price'] > df['BB_Upper'], 'BB_Signal'] = -1  # Sell signal
+    return df
+
+def calculate_macd(df, fast=12, slow=26, signal=9):
+    df = ensure_datetime_index(df)
+    df['MACD_Fast'] = df['price'].ewm(span=fast, adjust=False).mean()
+    df['MACD_Slow'] = df['price'].ewm(span=slow, adjust=False).mean()
+    df['MACD'] = df['MACD_Fast'] - df['MACD_Slow']
+    df['MACD_Signal_Line'] = df['MACD'].ewm(span=signal, adjust=False).mean()
+    return df
+
+def generate_macd_signals(df):
+    df['MACD_Signal'] = 0
+    df.loc[df['MACD'] > df['MACD_Signal_Line'], 'MACD_Signal'] = 1
+    df.loc[df['MACD'] < df['MACD_Signal_Line'], 'MACD_Signal'] = -1
+    return df
+```
+
+```
+# src/strategies/ramm_strategy.py
+
+from indicators.technical_indicators import (
+    ensure_datetime_index,
+    add_moving_averages,
+    calculate_rsi,
+    calculate_market_conditions
+)
+
+def calculate_ramm_signals(df,
+                           ma_short=10, ma_long=50,  # MA parameters
+                           rsi_period=14, rsi_ob=70, rsi_os=30,  # RSI parameters
+                           regime_lookback=20):
+    """
+    Generate RAMM strategy signals combining MA Crossover and RSI based on market regime
+    """
+    df = ensure_datetime_index(df)
+
+    # Calculate market regime
+    df_regime = calculate_market_conditions(df.copy(), regime_lookback)
+    df['regime'] = df_regime['regime']
+
+    # Calculate MA signals
+    df = add_moving_averages(df, ma_short, ma_long)
+    df['MA_Signal'] = 0
+    df.loc[df['Short_MA'] > df['Long_MA'], 'MA_Signal'] = 1
+    df.loc[df['Short_MA'] < df['Long_MA'], 'MA_Signal'] = -1
+
+    # Calculate RSI signals
+    df = calculate_rsi(df, rsi_period)
+    df['RSI_Signal'] = 0
+    df.loc[df['RSI'] < rsi_os, 'RSI_Signal'] = 1
+    df.loc[df['RSI'] > rsi_ob, 'RSI_Signal'] = -1
+
+    # Generate RAMM signals based on regime
+    df['RAMM_Signal'] = 0
+
+    # Trending regime: use MA Crossover
+    df.loc[df['regime'] == 1, 'RAMM_Signal'] = df.loc[df['regime'] == 1, 'MA_Signal']
+
+    # Mean-reverting regime: use RSI
+    df.loc[df['regime'] == -1, 'RAMM_Signal'] = df.loc[df['regime'] == -1, 'RSI_Signal']
+
+    # Mixed regime: combine signals (only take trades when both agree)
+    mixed_mask = df['regime'] == 0
+    df.loc[mixed_mask & (df['MA_Signal'] == 1) & (df['RSI_Signal'] == 1), 'RAMM_Signal'] = 1
+    df.loc[mixed_mask & (df['MA_Signal'] == -1) & (df['RSI_Signal'] == -1), 'RAMM_Signal'] = -1
+
+    return df
+```
+
+```
+# src/optimization/optimizer.py
+
+import pandas as pd
+import numpy as np
+import random
+from tqdm import tqdm
+from itertools import product
+
+from backtesting.backtester import backtest
+from indicators.technical_indicators import (
+    calculate_adaptive_vwma,
+    generate_adaptive_vwma_signals,
+    add_moving_averages,
+    generate_ma_signals,
+    calculate_rsi,
+    generate_rsi_signals,
+    calculate_bollinger_bands,
+    generate_bollinger_band_signals,
+    calculate_macd,
+    generate_macd_signals,
+    ensure_datetime_index
+)
+from strategies.ramm_strategy import calculate_ramm_signals
+
+def optimize_adaptive_vwma_parameters(df,
+                                      base_window_range=range(5, 21, 3),
+                                      vol_scale_range=np.arange(0.8, 1.4, 0.1)):
+    """
+    Optimize Adaptive VWMA parameters
+    """
+    results = []
+    total_combinations = len(base_window_range) * len(vol_scale_range)
+
+    print(f"Testing {total_combinations} parameter combinations...")
+
+    with tqdm(total=total_combinations, desc="Optimizing Adaptive VWMA Parameters") as pbar:
+        for base_window in base_window_range:
+            for vol_scale in vol_scale_range:
+                df_test = df.copy()
+
+                # Calculate adaptive VWMA
+                df_test = calculate_adaptive_vwma(df_test, base_window=base_window)
+
+                # Generate signals
+                df_test = generate_adaptive_vwma_signals(df_test, vol_scale=vol_scale)
+
+                # Run backtest
+                metrics = backtest(df_test, 'Adaptive_VWMA')
+                average_trades_per_day = metrics['Average_Trades_Per_Day']
+
+                if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
+                    results.append({
+                        'Strategy': 'Adaptive_VWMA',
+                        'Base_Window': base_window,
+                        'Volume_Scale': vol_scale,
+                        **metrics
+                    })
+
+                pbar.update(1)
+
+    return pd.DataFrame(results)
+
+def optimize_ramm_parameters(df, max_iterations=50):
+    """
+    Optimize RAMM strategy parameters using grid search
+    """
+    results = []
+
+    # Define parameter ranges
+    ma_short_range = range(4, 21, 2)
+    ma_long_range = range(20, 51, 5)
+    rsi_period_range = range(10, 21, 2)
+    rsi_ob_range = range(65, 81, 5)
+    rsi_os_range = range(20, 36, 5)
+    regime_lookback_range = range(15, 31, 5)
+
+    # Create parameter combinations
+    param_combinations = list(product(
+        ma_short_range, ma_long_range,
+        rsi_period_range, rsi_ob_range, rsi_os_range,
+        regime_lookback_range
+    ))
+
+    # Limit combinations if needed
+    if len(param_combinations) > max_iterations:
+        param_combinations = random.sample(param_combinations, max_iterations)
+
+    for params in tqdm(param_combinations, desc="Optimizing RAMM Parameters"):
+        ma_short, ma_long, rsi_period, rsi_ob, rsi_os, regime_lookback = params
+
+        if ma_short >= ma_long or rsi_os >= rsi_ob:
+            continue
+
+        df_test = df.copy()
+        df_test = calculate_ramm_signals(
+            df_test, ma_short, ma_long,
+            rsi_period, rsi_ob, rsi_os,
+            regime_lookback
+        )
+
+        metrics = backtest(df_test, 'RAMM')
+        if 1 <= metrics['Average_Trades_Per_Day'] <= 4 and metrics['Total_Return'] > 0:
+            results.append({
+                'Strategy': 'RAMM',
+                'MA_Short': ma_short,
+                'MA_Long': ma_long,
+                'RSI_Period': rsi_period,
+                'RSI_Overbought': rsi_ob,
+                'RSI_Oversold': rsi_os,
+                'Regime_Lookback': regime_lookback,
+                **metrics
+            })
+
+    return pd.DataFrame(results)
+
+def optimize_ma_parameters(df, short_range, long_range):
+    results = []
+    for short_window in short_range:
+        for long_window in long_range:
+            if short_window >= long_window:
+                continue
+            df_test = add_moving_averages(df.copy(), short_window, long_window)
+            df_test = generate_ma_signals(df_test)
+            metrics = backtest(df_test, 'MA')
+            average_trades_per_day = metrics['Average_Trades_Per_Day']
+            if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
+                results.append({
+                    'Strategy': 'MA',
+                    'Short_Window': short_window,
+                    'Long_Window': long_window,
+                    **metrics
+                })
+    return pd.DataFrame(results)
+
+def optimize_rsi_parameters(df, window_range, overbought_range, oversold_range):
+    results = []
+    for window in window_range:
+        for overbought in overbought_range:
+            for oversold in oversold_range:
+                if oversold >= overbought:
+                    continue
+                df_test = calculate_rsi(df.copy(), window)
+                df_test = generate_rsi_signals(df_test, overbought, oversold)
+                metrics = backtest(df_test, 'RSI')
+                average_trades_per_day = metrics['Average_Trades_Per_Day']
+                if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
+                    results.append({
+                        'Strategy': 'RSI',
+                        'RSI_Window': window,
+                        'Overbought': overbought,
+                        'Oversold': oversold,
+                        **metrics
+                    })
+    return pd.DataFrame(results)
+
+def optimize_hft_parameters(df, strategy, **kwargs):
+    results = []
+    param_grid = kwargs['param_grid']
+    for params in param_grid:
+        df_test = df.copy()
+        if strategy == 'BB':
+            df_test = calculate_bollinger_bands(
+                df_test, window=params['window'], num_std=params['num_std'])
+            df_test = generate_bollinger_band_signals(df_test)
+        elif strategy == 'MACD':
+            df_test = calculate_macd(
+                df_test, fast=params['fast'], slow=params['slow'], signal=params['signal'])
+            df_test = generate_macd_signals(df_test)
+        else:
+            continue  # Skip if strategy not recognized
+        metrics = backtest(df_test, strategy)
+        average_trades_per_day = metrics['Average_Trades_Per_Day']
+        if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
+            results.append({
+                'Strategy': strategy,
+                **params,
+                **metrics
+            })
+    return pd.DataFrame(results)
+```
+
+```
+# src/backtesting/backtester.py
+
+import pandas as pd
+import numpy as np
+
+from indicators.technical_indicators import ensure_datetime_index
+
+def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction_cost=0.001, max_trades_per_day=10):
+    df = ensure_datetime_index(df)
+    df['Position'] = df[f'{strategy}_Signal'].shift(1).fillna(0)
+    df['Returns'] = df['price'].pct_change().fillna(0)
+    df['Strategy_Returns'] = df['Position'] * df['Returns']
+
+    # Calculate transaction costs
+    df['Trade'] = df['Position'].diff().abs()
+    df['Transaction_Costs'] = df['Trade'] * transaction_cost
+
+    # Limit trades per day
+    df['Daily_Trades'] = df['Trade'].groupby(df.index.date).cumsum()
+    df.loc[df['Daily_Trades'] > max_trades_per_day, 'Strategy_Returns'] = 0
+
+    df['Strategy_Returns'] -= df['Transaction_Costs']
+    df['Cumulative_Returns'] = (1 + df['Strategy_Returns']).cumprod()
+    df['Balance'] = initial_balance * df['Cumulative_Returns']
+
+    total_trades = df['Trade'].sum()
+
+    # Calculate average trades per day
+    trading_days = (df.index[-1].date() - df.index[0].date()).days + 1
+    average_trades_per_day = total_trades / trading_days if trading_days > 0 else 0
+
+    # Profit factor and Sharpe ratio
+    positive_returns = df.loc[df['Strategy_Returns'] > 0, 'Strategy_Returns'].sum()
+    negative_returns = -df.loc[df['Strategy_Returns'] < 0, 'Strategy_Returns'].sum()
+    profit_factor = positive_returns / negative_returns if negative_returns != 0 else np.inf
+
+    sharpe_ratio = (df['Strategy_Returns'].mean() / df['Strategy_Returns'].std()) * np.sqrt(252) if df['Strategy_Returns'].std() != 0 else 0
+
+    final_balance = df['Balance'].iloc[-1]
+    total_return = (final_balance - initial_balance) / initial_balance * 100
+
+    return {
+        'Final_Balance': final_balance,
+        'Total_Return': total_return,
+        'Total_Trades': total_trades,
+        'Average_Trades_Per_Day': average_trades_per_day,
+        'Profit_Factor': profit_factor,
+        'Sharpe_Ratio': sharpe_ratio
+    }
+
+def generate_trade_list(df, strategy):
+    trades = []
+    position = 0
+    entry_price = 0
+    entry_time = None
+
+    for index, row in df.iterrows():
+        signal = row[f'{strategy}_Signal']
+
+        if signal == 1 and position == 0:  # Enter long position
+            position = 1
+            entry_price = row['price']
+            entry_time = index
+        elif signal == -1 and position == 1:  # Exit long position
+            exit_price = row['price']
+            profit = (exit_price - entry_price) / entry_price
+            trades.append({
+                'Entry Time': entry_time,
+                'Exit Time': index,
+                'Entry Price': entry_price,
+                'Exit Price': exit_price,
+                'Profit (%)': profit * 100
+            })
+            position = 0
+
+    return pd.DataFrame(trades)
+```
+
+Would you please provide the rest of the listings without placeholders, and do not leave out any functionality from the original script?
