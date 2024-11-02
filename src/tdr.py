@@ -155,13 +155,16 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
 
 class OrderPlacer:
     def __init__(self, config_file='.bitstamp'):
-        self.config = self.read_config(config_file)
+        self.config_file = config_file
+        self.config = self.read_config(self.config_file)
         self.api_key = self.config['api_key']
         self.api_secret = bytes(self.config['api_secret'], 'utf-8')
 
-    @staticmethod
-    def read_config(file_name):
-        with open(file_name, 'r') as f:
+    def read_config(self, file_name):
+        # Use current working directory
+        current_dir = os.getcwd()
+        file_path = os.path.join(current_dir, file_name)
+        with open(file_path, 'r') as f:
             return json.load(f)
 
     def place_order(self, order_type, currency_pair, amount, price=None, **kwargs):
@@ -236,11 +239,14 @@ class MACrossoverStrategy:
         # Save trades to trades.json if dry run
         if self.trade_log:
             try:
-                with open(self.trade_log_file, 'w') as f:
+                # Use current working directory
+                current_dir = os.getcwd()
+                file_path = os.path.join(current_dir, self.trade_log_file)
+                with open(file_path, 'w') as f:
                     json.dump(self.trade_log, f, indent=2)
-                print(f"Trades logged to '{self.trade_log_file}'")
+                print(f"Trades logged to '{file_path}'")
             except Exception as e:
-                print(f"Failed to write trades to '{self.trade_log_file}': {e}")
+                print(f"Failed to write trades to '{file_path}': {e}")
 
     def run_strategy_loop(self):
         while self.running:
@@ -289,7 +295,10 @@ class MACrossoverStrategy:
             self.trade_log.append(trade_info)
         # Write the trade_info to the trade log file
         try:
-            with open(self.trade_log_file, 'a') as f:
+            # Use current working directory
+            current_dir = os.getcwd()
+            file_path = os.path.join(current_dir, self.trade_log_file)
+            with open(file_path, 'a') as f:
                 f.write(json.dumps(trade_info) + '\n')
         except Exception as e:
             self.logger.error(f"Failed to write trade to log file: {e}")
@@ -320,7 +329,7 @@ class CryptoShell(cmd.Cmd):
         self.ticker_output = {}
         self.verbose = verbose
         self.live_trading = live_trading
-        self.auto_trader = None
+        self.auto_trader = None  # Initialize to None
         self.examples = {
             'price': 'price btcusd',
             'range': 'range btcusd 30',
@@ -466,14 +475,17 @@ class CryptoShell(cmd.Cmd):
                     self.logger.removeHandler(handler)
             # Add FileHandler for verbose logs
             try:
-                file_handler = logging.FileHandler(log_file)
+                # Use current working directory
+                current_dir = os.getcwd()
+                log_file_path = os.path.join(current_dir, log_file)
+                file_handler = logging.FileHandler(log_file_path)
                 file_handler.setLevel(logging.DEBUG)
                 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
                 file_handler.setFormatter(formatter)
                 self.logger.addHandler(file_handler)
                 self.data_manager.set_verbose(True)
                 self.verbose = True
-                print(f"Verbose mode enabled. Logs are being written to {log_file}.")
+                print(f"Verbose mode enabled. Logs are being written to {log_file_path}.")
             except Exception as e:
                 print(f"Failed to open log file {log_file}: {e}")
 
@@ -528,9 +540,9 @@ class CryptoShell(cmd.Cmd):
             return
         amount = float(args[0])
 
-        # Determine the file path
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(script_dir, 'best_strategy.json')
+        # Use current working directory
+        current_dir = os.getcwd()
+        file_path = os.path.join(current_dir, 'best_strategy.json')
 
         try:
             with open(file_path, 'r') as f:
@@ -558,7 +570,7 @@ class CryptoShell(cmd.Cmd):
 
     def do_stop_auto_trade(self, arg):
         """Stop auto-trading"""
-        if hasattr(self, 'auto_trader') and self.auto_trader.running:
+        if self.auto_trader is not None and self.auto_trader.running:
             self.auto_trader.stop()
             print("Auto-trading stopped.")
         else:
@@ -566,7 +578,7 @@ class CryptoShell(cmd.Cmd):
 
     def do_status(self, arg):
         """Show the status of auto-trading and the next trigger point."""
-        if hasattr(self, 'auto_trader') and self.auto_trader.running:
+        if self.auto_trader is not None and self.auto_trader.running:
             status = self.auto_trader.get_status()
             position = {1: 'Long', -1: 'Short', 0: 'Neutral'}.get(status['position'], 'Unknown')
             print("Auto-Trading Status:")
@@ -604,7 +616,7 @@ class CryptoShell(cmd.Cmd):
     def do_quit(self, arg):
         """Quit the program"""
         print("Quitting...")
-        if hasattr(self, 'auto_trader') and self.auto_trader.running:
+        if self.auto_trader is not None and self.auto_trader.running:
             self.auto_trader.stop()
         return True
 
@@ -637,7 +649,10 @@ def setup_logging(verbose, log_file=None):
     logger.addHandler(stream_handler)
 
     # FileHandler for logging to a file
-    file_handler = logging.FileHandler('crypto_shell.log')
+    # Use current working directory
+    current_dir = os.getcwd()
+    log_file_path = os.path.join(current_dir, 'crypto_shell.log')
+    file_handler = logging.FileHandler(log_file_path)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
@@ -695,7 +710,7 @@ def main():
         shell.cmdloop()
     except KeyboardInterrupt:
         print("\nInterrupted. Exiting...")
-        if hasattr(shell, 'auto_trader') and shell.auto_trader.running:
+        if shell.auto_trader is not None and shell.auto_trader.running:
             shell.auto_trader.stop()
 
 if __name__ == '__main__':
