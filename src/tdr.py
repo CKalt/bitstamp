@@ -144,17 +144,13 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
                     if data.get('event') == 'trade':
                         price = data['data']['price']
                         timestamp = int(float(data['data']['timestamp']))
-                        # Adjust timestamp if necessary (e.g., if in milliseconds)
-                        # timestamp = timestamp // 1000  # Uncomment if timestamp is in milliseconds
                         data_manager.add_trade(symbol, price, timestamp)
 
         except websockets.ConnectionClosed:
             data_manager.logger.error(f"{symbol}: Connection closed, trying to reconnect in 5 seconds...")
-            # Wait for 5 seconds before trying to reconnect
             await asyncio.sleep(5)
         except Exception as e:
             data_manager.logger.error(f"{symbol}: An error occurred: {str(e)}")
-            # Wait for 5 seconds before trying to reconnect
             await asyncio.sleep(5)
 
 class OrderPlacer:
@@ -228,6 +224,8 @@ class MACrossoverStrategy:
         self.live_trading = live_trading
         self.trade_log = []  # For dry run logging
         self.trade_log_file = 'trades.json'  # Log file for all trades
+        self.short_ma = None
+        self.long_ma = None
 
     def start(self):
         self.running = True
@@ -249,23 +247,26 @@ class MACrossoverStrategy:
             price_series = self.data_manager.get_price_series(self.symbol)
             if price_series and len(price_series) >= self.long_window:
                 self.prices = price_series
+                self.calculate_moving_averages()
                 self.check_for_signals()
             time.sleep(5)  # Adjust as needed
 
+    def calculate_moving_averages(self):
+        self.short_ma = sum(self.prices[-self.short_window:]) / self.short_window
+        self.long_ma = sum(self.prices[-self.long_window:]) / self.long_window
+
     def check_for_signals(self):
-        short_ma = sum(self.prices[-self.short_window:]) / self.short_window
-        long_ma = sum(self.prices[-self.long_window:]) / self.long_window
         current_price = self.prices[-1]
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        if short_ma > long_ma and self.position <= 0:
+        if self.short_ma > self.long_ma and self.position <= 0:
             # Buy signal
-            self.logger.info(f"Buy signal: short MA ({short_ma}) > long MA ({long_ma}) at price {current_price}")
+            self.logger.info(f"Buy signal: short MA ({self.short_ma}) > long MA ({self.long_ma}) at price {current_price}")
             self.position = 1
             self.execute_trade("buy", current_price, timestamp)
-        elif short_ma < long_ma and self.position >= 0:
+        elif self.short_ma < self.long_ma and self.position >= 0:
             # Sell signal
-            self.logger.info(f"Sell signal: short MA ({short_ma}) < long MA ({long_ma}) at price {current_price}")
+            self.logger.info(f"Sell signal: short MA ({self.short_ma}) < long MA ({self.long_ma}) at price {current_price}")
             self.position = -1
             self.execute_trade("sell", current_price, timestamp)
 
@@ -293,6 +294,18 @@ class MACrossoverStrategy:
         except Exception as e:
             self.logger.error(f"Failed to write trade to log file: {e}")
 
+    def get_status(self):
+        """Return the current status of the strategy."""
+        status = {
+            'running': self.running,
+            'position': self.position,
+            'current_price': self.prices[-1] if self.prices else None,
+            'short_ma': self.short_ma,
+            'long_ma': self.long_ma,
+            'ma_difference': (self.short_ma - self.long_ma) if self.short_ma and self.long_ma else None
+        }
+        return status
+
 class CryptoShell(cmd.Cmd):
     intro = 'Welcome to the Crypto Shell. Type help or ? to list commands.\n'
     prompt = '(crypto) '
@@ -319,7 +332,8 @@ class CryptoShell(cmd.Cmd):
             'limit_buy': 'limit_buy btcusd 0.001 50000 daily_order=true',
             'limit_sell': 'limit_sell btcusd 0.001 60000 ioc_order=true',
             'auto_trade': 'auto_trade 2',
-            'stop_auto_trade': 'stop_auto_trade'
+            'stop_auto_trade': 'stop_auto_trade',
+            'status': 'status'
         }
 
         # Register callbacks
@@ -550,6 +564,34 @@ class CryptoShell(cmd.Cmd):
         else:
             print("Auto-trading is not running.")
 
+    def do_status(self, arg):
+        """Show the status of auto-trading and the next trigger point."""
+        if hasattr(self, 'auto_trader') and self.auto_trader.running:
+            status = self.auto_trader.get_status()
+            position = {1: 'Long', -1: 'Short', 0: 'Neutral'}.get(status['position'], 'Unknown')
+            print("Auto-Trading Status:")
+            print(f"  Running: {status['running']}")
+            print(f"  Position: {position}")
+            if status['current_price'] is not None:
+                print(f"  Current Price: {status['current_price']:.2f}")
+            else:
+                print("  Current Price: Not available")
+            if status['short_ma'] is not None and status['long_ma'] is not None:
+                print(f"  Short Moving Average ({self.auto_trader.short_window}): {status['short_ma']:.2f}")
+                print(f"  Long Moving Average ({self.auto_trader.long_window}): {status['long_ma']:.2f}")
+                print(f"  Difference (Short MA - Long MA): {status['ma_difference']:.6f}")
+                print("  Next Trigger Point:")
+                if self.auto_trader.position <= 0 and status['short_ma'] <= status['long_ma']:
+                    print("    Awaiting Buy Signal (Short MA crossing above Long MA)")
+                elif self.auto_trader.position >= 0 and status['short_ma'] >= status['long_ma']:
+                    print("    Awaiting Sell Signal (Short MA crossing below Long MA)")
+                else:
+                    print("    Monitoring for crossover signals...")
+            else:
+                print("  Moving averages are not yet calculated.")
+        else:
+            print("Auto-trading is not running.")
+
     def do_help(self, arg):
         """List available commands with "help" or detailed help with "help cmd"."""
         super().do_help(arg)
@@ -557,6 +599,7 @@ class CryptoShell(cmd.Cmd):
             print("\nCustom Commands:")
             print("  auto_trade       Start auto-trading using the best strategy")
             print("  stop_auto_trade  Stop auto-trading")
+            print("  status           Show the status of auto-trading and next trigger point")
 
     def do_quit(self, arg):
         """Quit the program"""

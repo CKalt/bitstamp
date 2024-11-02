@@ -3,6 +3,7 @@ env
 .influxdb
 influx/create-all-access-api-token.output
 /data
+/test_data
 ./*.log
 *.csv
 *.log
