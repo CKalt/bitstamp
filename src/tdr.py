@@ -143,7 +143,7 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
                     data = json.loads(message)
                     if data.get('event') == 'trade':
                         price = data['data']['price']
-                        timestamp = int(data['data']['timestamp'])
+                        timestamp = int(float(data['data']['timestamp']))
                         # Adjust timestamp if necessary (e.g., if in milliseconds)
                         # timestamp = timestamp // 1000  # Uncomment if timestamp is in milliseconds
                         data_manager.add_trade(symbol, price, timestamp)
@@ -227,6 +227,7 @@ class MACrossoverStrategy:
         self.running = False
         self.live_trading = live_trading
         self.trade_log = []  # For dry run logging
+        self.trade_log_file = 'trades.json'  # Log file for all trades
 
     def start(self):
         self.running = True
@@ -235,13 +236,13 @@ class MACrossoverStrategy:
     def stop(self):
         self.running = False
         # Save trades to trades.json if dry run
-        if not self.live_trading and self.trade_log:
+        if self.trade_log:
             try:
-                with open('trades.json', 'w') as f:
+                with open(self.trade_log_file, 'w') as f:
                     json.dump(self.trade_log, f, indent=2)
-                print("Trades logged to 'trades.json'")
+                print(f"Trades logged to '{self.trade_log_file}'")
             except Exception as e:
-                print(f"Failed to write trades to 'trades.json': {e}")
+                print(f"Failed to write trades to '{self.trade_log_file}': {e}")
 
     def run_strategy_loop(self):
         while self.running:
@@ -274,16 +275,23 @@ class MACrossoverStrategy:
             'symbol': self.symbol,
             'amount': self.amount,
             'price': price,
-            'timestamp': timestamp
+            'timestamp': timestamp,
+            'live_trading': self.live_trading
         }
         if self.live_trading:
             result = self.order_placer.place_order(
                 f"market-{trade_type}", self.symbol, self.amount)
-            self.logger.info(f"Executed {trade_type} order: {result}")
+            self.logger.info(f"Executed live {trade_type} order: {result}")
             trade_info['order_result'] = result
         else:
-            self.logger.info(f"Dry run - {trade_type} order: {trade_info}")
+            self.logger.info(f"Executed dry run {trade_type} order: {trade_info}")
             self.trade_log.append(trade_info)
+        # Write the trade_info to the trade log file
+        try:
+            with open(self.trade_log_file, 'a') as f:
+                f.write(json.dumps(trade_info) + '\n')
+        except Exception as e:
+            self.logger.error(f"Failed to write trade to log file: {e}")
 
 class CryptoShell(cmd.Cmd):
     intro = 'Welcome to the Crypto Shell. Type help or ? to list commands.\n'
@@ -505,11 +513,16 @@ class CryptoShell(cmd.Cmd):
             print("Usage: auto_trade <amount>")
             return
         amount = float(args[0])
+
+        # Determine the file path
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(script_dir, 'best_strategy.json')
+
         try:
-            with open('best_strategy.json', 'r') as f:
+            with open(file_path, 'r') as f:
                 best_strategy_params = json.load(f)
         except FileNotFoundError:
-            print("Best strategy parameters file 'best_strategy.json' not found.")
+            print(f"Best strategy parameters file '{file_path}' not found.")
             return
 
         strategy_name = best_strategy_params.get('Strategy')
@@ -525,8 +538,9 @@ class CryptoShell(cmd.Cmd):
             self.data_manager, short_window, long_window, amount, symbol, self.logger, live_trading=self.live_trading)
         self.auto_trader.start()
         print(f"Auto-trading started with amount {amount} using MA Crossover strategy.")
+        print(f"Trades will be logged to '{self.auto_trader.trade_log_file}'.")
         if not self.live_trading:
-            print("Running in dry run mode. Trades will be logged to 'trades.json'.")
+            print("Running in dry run mode.")
 
     def do_stop_auto_trade(self, arg):
         """Stop auto-trading"""
@@ -570,31 +584,20 @@ def candlestick_timer(data_manager):
 
 def setup_logging(verbose, log_file=None):
     logger = logging.getLogger("CryptoShellLogger")
-    logger.setLevel(logging.DEBUG if verbose else logging.WARNING)
+    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
-    # Always add a StreamHandler for WARNING and above
-    stream_handler = logging.StreamHandler(sys.stderr)
-    stream_handler.setLevel(logging.WARNING)
+    # StreamHandler for console output
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setLevel(logging.INFO)
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
 
-    if log_file:
-        # File handler for verbose logs
-        try:
-            file_handler = logging.FileHandler(log_file)
-            file_handler.setLevel(logging.DEBUG)
-            file_handler.setFormatter(formatter)
-            logger.addHandler(file_handler)
-        except Exception as e:
-            print(f"Failed to open log file {log_file}: {e}")
-            sys.exit(1)
-    elif verbose:
-        # Stream handler (stderr) for verbose logs
-        debug_stream_handler = logging.StreamHandler(sys.stderr)
-        debug_stream_handler.setLevel(logging.DEBUG)
-        debug_stream_handler.setFormatter(formatter)
-        logger.addHandler(debug_stream_handler)
+    # FileHandler for logging to a file
+    file_handler = logging.FileHandler('crypto_shell.log')
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
 
     return logger
 
