@@ -168,10 +168,11 @@ def generate_adaptive_vwma_signals(df, vol_scale=1.0):
     
     return df
 
+
 def add_moving_averages(df, short_window, long_window):
-    df = ensure_datetime_index(df)
-    df['Short_MA'] = df['price'].rolling(window=short_window).mean()
-    df['Long_MA'] = df['price'].rolling(window=long_window).mean()
+    # Removed the call to ensure_datetime_index(df)
+    df[f'MA_Short_{short_window}'] = df['price'].rolling(window=short_window).mean()
+    df[f'MA_Long_{long_window}'] = df['price'].rolling(window=long_window).mean()
     return df
 
 def generate_ma_signals(df):
