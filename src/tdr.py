@@ -26,14 +26,20 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 sys.path.append(current_dir)
 
-# Import necessary functions and modules from bktst.py and its dependencies
-from data.loader import parse_log_file
+# Import necessary functions and modules from technical_indicators.py and other dependencies
 from indicators.technical_indicators import (
     ensure_datetime_index,
     add_moving_averages,
     generate_ma_signals,
+    calculate_rsi,
+    generate_rsi_signals,
+    calculate_bollinger_bands,
+    generate_bollinger_band_signals,
+    calculate_macd,
+    generate_macd_signals,
 )
-from utils.helpers import print_strategy_results
+# Assuming there's a helper function print_strategy_results in utils.helpers
+from utils.helpers import print_strategy_results  # Adjust if the path differs
 
 # Import the same settings used in bktst.py
 HIGH_FREQUENCY = '1H'  # High-frequency resampling used in backtesting
@@ -67,9 +73,9 @@ class CryptoDataManager:
 
     def add_trade(self, symbol, price, timestamp):
         price = float(price)
-        timestamp = pd.to_datetime(timestamp, unit='s')
-        amount = 0  # Live trade data might not include 'amount'
-        new_row = {'timestamp': timestamp, 'price': price, 'amount': amount}
+        # Ensure 'timestamp' is in UNIX epoch format (integer seconds)
+        # Do NOT convert to datetime here; let technical_indicators.py handle it
+        new_row = {'timestamp': timestamp, 'price': price, 'amount': 0}
         self.data[symbol] = pd.concat([self.data[symbol], pd.DataFrame([new_row])], ignore_index=True)
         self.last_price[symbol] = price
 
@@ -86,7 +92,7 @@ class CryptoDataManager:
         now = pd.Timestamp.now()
         start_time = now - pd.Timedelta(minutes=minutes)
         df = self.data[symbol]
-        mask = df['timestamp'] >= start_time
+        mask = df['timestamp'] >= start_time.timestamp()  # Compare with UNIX epoch
         relevant_data = df.loc[mask, 'price']
         if not relevant_data.empty:
             return relevant_data.min(), relevant_data.max()
@@ -97,6 +103,7 @@ class CryptoDataManager:
 
     def get_data_point_count(self, symbol):
         return len(self.data[symbol])
+
 
 async def subscribe_to_websocket(url: str, symbol: str, data_manager):
     channel = f"live_trades_{symbol}"
@@ -239,6 +246,7 @@ class MACrossoverStrategy:
                     df_resampled = df.resample(HIGH_FREQUENCY).agg({
                         'price': 'last',
                         'amount': 'sum',
+                        'timestamp': 'last'  # Retain the latest timestamp in the resampled period
                     }).dropna()
                     if len(df_resampled) >= self.long_window:
                         # Calculate moving averages
@@ -438,7 +446,8 @@ class CryptoShell(cmd.Cmd):
 
     def trade_callback(self, symbol, price, timestamp):
         if symbol in self.ticker_output:
-            time_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            # Convert UNIX timestamp to readable format
+            time_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
             print(f"{symbol} - {time_str}: Price: ${price:.2f}")
 
     def do_verbose(self, arg):
@@ -693,8 +702,17 @@ def main():
         sys.exit(1)
 
     try:
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
-        df.set_index('timestamp', inplace=True)
+        # Retain 'timestamp' as UNIX epoch seconds
+        if 'timestamp' not in df.columns:
+            print(f"Missing 'timestamp' column in log file '{file_path}'. Exiting.")
+            sys.exit(1)
+        # Ensure 'timestamp' is integer seconds
+        df['timestamp'] = df['timestamp'].astype(int)
+        # Do NOT convert 'timestamp' to datetime here
+        # Let technical_indicators.py handle datetime indexing
+        # If 'datetime' column exists, drop it to avoid confusion
+        if 'datetime' in df.columns:
+            df = df.drop(columns=['datetime'])
     except KeyError as e:
         print(f"Missing expected column in log file: {e}")
         sys.exit(1)
