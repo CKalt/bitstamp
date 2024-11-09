@@ -44,6 +44,43 @@ from utils.helpers import print_strategy_results  # Adjust if the path differs
 # Import the same settings used in bktst.py
 HIGH_FREQUENCY = '1H'  # High-frequency resampling used in backtesting
 
+def parse_log_file(file_path, start_date=None, end_date=None):
+    """
+    Parses the log file and returns a DataFrame.
+    Assumes the log file is a CSV with columns: timestamp, price, amount.
+    
+    Parameters:
+        file_path (str): Path to the log file.
+        start_date (datetime, optional): Start date to filter data.
+        end_date (datetime, optional): End date to filter data.
+    
+    Returns:
+        pd.DataFrame: Parsed DataFrame with 'timestamp', 'price', 'amount'.
+    """
+    try:
+        df = pd.read_csv(file_path)
+    except Exception as e:
+        raise Exception(f"Failed to read log file '{file_path}': {e}")
+    
+    # Ensure required columns are present
+    required_columns = {'timestamp', 'price', 'amount'}
+    if not required_columns.issubset(df.columns):
+        missing = required_columns - set(df.columns)
+        raise KeyError(f"Missing columns in log file: {missing}")
+    
+    # Convert 'timestamp' to integer if not already
+    df['timestamp'] = df['timestamp'].astype(int)
+    
+    # Filter by date range if specified
+    if start_date:
+        start_timestamp = int(start_date.timestamp())
+        df = df[df['timestamp'] >= start_timestamp]
+    if end_date:
+        end_timestamp = int(end_date.timestamp())
+        df = df[df['timestamp'] <= end_timestamp]
+    
+    return df
+
 class CryptoDataManager:
     def __init__(self, symbols, logger, verbose=False):
         self.data = {symbol: pd.DataFrame(columns=['timestamp', 'price', 'amount']) for symbol in symbols}
@@ -57,7 +94,7 @@ class CryptoDataManager:
 
     def load_historical_data(self, data_dict):
         for symbol, df in data_dict.items():
-            self.data[symbol] = df.reset_index()
+            self.data[symbol] = df.reset_index(drop=True)
             if not df.empty:
                 self.last_price[symbol] = df.iloc[-1]['price']
                 self.logger.debug(f"Loaded historical data for {symbol}, last price: {self.last_price[symbol]}")
@@ -92,7 +129,7 @@ class CryptoDataManager:
         now = pd.Timestamp.now()
         start_time = now - pd.Timedelta(minutes=minutes)
         df = self.data[symbol]
-        mask = df['timestamp'] >= start_time.timestamp()  # Compare with UNIX epoch
+        mask = df['timestamp'] >= int(start_time.timestamp())
         relevant_data = df.loc[mask, 'price']
         if not relevant_data.empty:
             return relevant_data.min(), relevant_data.max()
@@ -152,8 +189,11 @@ class OrderPlacer:
         # Use current working directory
         current_dir = os.getcwd()
         file_path = os.path.join(current_dir, file_name)
-        with open(file_path, 'r') as f:
-            return json.load(f)
+        try:
+            with open(file_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            raise Exception(f"Failed to read config file '{file_name}': {e}")
 
     def place_order(self, order_type, currency_pair, amount, price=None, **kwargs):
         timestamp = str(int(round(time.time() * 1000)))
@@ -328,7 +368,7 @@ class CryptoShell(cmd.Cmd):
         super().__init__()
         self.data_manager = data_manager
         self.order_placer = order_placer
-        self.data_manager.order_placer = order_placer  # Set in data manager
+        self.data_manager.order_placer = order_placer  # Set order placer in data manager
         self.logger = logger
         self.candlestick_output = {}
         self.ticker_output = {}
@@ -648,7 +688,10 @@ def setup_logging(verbose, log_file=None):
     # FileHandler for logging to a file
     # Use current working directory
     current_dir = os.getcwd()
-    log_file_path = os.path.join(current_dir, 'crypto_shell.log')
+    if log_file:
+        log_file_path = os.path.join(current_dir, log_file)
+    else:
+        log_file_path = os.path.join(current_dir, 'crypto_shell.log')
     file_handler = logging.FileHandler(log_file_path)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
