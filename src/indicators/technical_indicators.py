@@ -10,11 +10,16 @@ def ensure_datetime_index(df):
     """
     if 'timestamp' not in df.columns:
         raise KeyError("The DataFrame must contain a 'timestamp' column.")
+    
+    # Create 'datetime' column if it doesn't exist
     if 'datetime' not in df.columns:
         df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
+    
+    # Set 'datetime' as index if not already
     if not isinstance(df.index, pd.DatetimeIndex):
         df.set_index('datetime', inplace=True)
-    df.drop('timestamp', axis=1, inplace=True)
+    
+    # Retain the 'timestamp' column
     return df
 
 def calculate_market_conditions(df, lookback_short=5, lookback_long=20):
@@ -174,6 +179,7 @@ def generate_adaptive_vwma_signals(df, vol_scale=1.0):
         df.loc[short_conditions, 'Adaptive_VWMA_Signal'] = -1
     
     return df
+
 
 def add_moving_averages(df, short_window, long_window):
     """
