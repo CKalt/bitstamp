@@ -39,15 +39,15 @@ from indicators.technical_indicators import (
     generate_macd_signals,
 )
 # Assuming there's a helper function print_strategy_results in utils.helpers
-from utils.helpers import print_strategy_results  # Adjust if the path differs
+# from utils.helpers import print_strategy_results  # Adjust if the path differs
 
 # Import the same settings used in bktst.py
 HIGH_FREQUENCY = '1H'  # High-frequency resampling used in backtesting
 
 def parse_log_file(file_path, start_date=None, end_date=None):
     """
-    Parses the log file and returns a DataFrame.
-    Assumes the log file is a CSV with columns: timestamp, price, amount.
+    Parses a JSON Lines log file and returns a DataFrame.
+    Each line in the log file is a JSON object containing trade data.
     
     Parameters:
         file_path (str): Path to the log file.
@@ -55,22 +55,45 @@ def parse_log_file(file_path, start_date=None, end_date=None):
         end_date (datetime, optional): End date to filter data.
     
     Returns:
-        pd.DataFrame: Parsed DataFrame with 'timestamp', 'price', 'amount'.
+        pd.DataFrame: DataFrame with 'timestamp', 'price', 'amount' columns.
     """
-    try:
-        df = pd.read_csv(file_path)
-    except Exception as e:
-        raise Exception(f"Failed to read log file '{file_path}': {e}")
-    
-    # Ensure required columns are present
-    required_columns = {'timestamp', 'price', 'amount'}
-    if not required_columns.issubset(df.columns):
-        missing = required_columns - set(df.columns)
-        raise KeyError(f"Missing columns in log file: {missing}")
-    
-    # Convert 'timestamp' to integer if not already
-    df['timestamp'] = df['timestamp'].astype(int)
-    
+    import json
+    import pandas as pd
+
+    records = []
+    total_lines = 0
+    valid_lines = 0
+
+    # First, count total lines for progress feedback
+    with open(file_path, 'r') as f:
+        for _ in f:
+            total_lines += 1
+
+    print(f"Total lines to parse: {total_lines}")
+
+    with open(file_path, 'r') as f:
+        for idx, line in enumerate(f, 1):
+            try:
+                obj = json.loads(line)
+                data = obj.get('data', {})
+                timestamp = int(data.get('timestamp', 0))
+                price = float(data.get('price', 0))
+                amount = float(data.get('amount', 0))
+                records.append({'timestamp': timestamp, 'price': price, 'amount': amount})
+                valid_lines += 1
+            except json.JSONDecodeError:
+                print(f"Line {idx}: JSON decoding failed. Skipping.")
+            except (ValueError, TypeError):
+                print(f"Line {idx}: Invalid data types. Skipping.")
+            
+            # Progress feedback every 10%
+            if total_lines >= 10:
+                if idx % (total_lines // 10) == 0:
+                    progress = (idx / total_lines) * 100
+                    print(f"Parsing log file: {progress:.0f}% completed.")
+
+    df = pd.DataFrame(records)
+
     # Filter by date range if specified
     if start_date:
         start_timestamp = int(start_date.timestamp())
@@ -78,7 +101,8 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     if end_date:
         end_timestamp = int(end_date.timestamp())
         df = df[df['timestamp'] <= end_timestamp]
-    
+
+    print(f"Finished parsing log file. Total lines: {total_lines}, Valid trades: {valid_lines}")
     return df
 
 class CryptoDataManager:
@@ -93,11 +117,13 @@ class CryptoDataManager:
         self.order_placer = None
 
     def load_historical_data(self, data_dict):
-        for symbol, df in data_dict.items():
+        total_symbols = len(data_dict)
+        for idx, (symbol, df) in enumerate(data_dict.items(), 1):
             self.data[symbol] = df.reset_index(drop=True)
             if not df.empty:
                 self.last_price[symbol] = df.iloc[-1]['price']
                 self.logger.debug(f"Loaded historical data for {symbol}, last price: {self.last_price[symbol]}")
+            print(f"Loaded historical data for {symbol} ({idx}/{total_symbols})")
 
     def add_candlestick_observer(self, callback):
         self.candlestick_observers.append(callback)
@@ -140,7 +166,6 @@ class CryptoDataManager:
 
     def get_data_point_count(self, symbol):
         return len(self.data[symbol])
-
 
 async def subscribe_to_websocket(url: str, symbol: str, data_manager):
     channel = f"live_trades_{symbol}"
@@ -260,20 +285,22 @@ class MACrossoverStrategy:
     def start(self):
         self.running = True
         threading.Thread(target=self.run_strategy_loop, daemon=True).start()
+        self.logger.info("Strategy loop started.")
 
     def stop(self):
         self.running = False
+        self.logger.info("Strategy loop stopped.")
         # Save trades to trades.json if dry run
-        if self.trade_log:
+        if self.trade_log and not self.live_trading:
             try:
                 # Use current working directory
                 current_dir = os.getcwd()
                 file_path = os.path.join(current_dir, self.trade_log_file)
                 with open(file_path, 'w') as f:
                     json.dump(self.trade_log, f, indent=2)
-                print(f"Trades logged to '{file_path}'")
+                self.logger.info(f"Trades logged to '{file_path}'")
             except Exception as e:
-                print(f"Failed to write trades to '{file_path}': {e}")
+                self.logger.error(f"Failed to write trades to '{file_path}': {e}")
 
     def run_strategy_loop(self):
         while self.running:
@@ -302,6 +329,8 @@ class MACrossoverStrategy:
                     self.logger.error(f"Missing column during strategy loop: {e}")
                 except Exception as e:
                     self.logger.error(f"Error during strategy loop: {e}")
+            else:
+                self.logger.debug(f"No data available for {self.symbol} to run strategy.")
             time.sleep(60)  # Check every minute
 
     def check_for_signals(self, latest_signal, current_price, signal_time):
@@ -348,6 +377,7 @@ class MACrossoverStrategy:
             file_path = os.path.join(current_dir, self.trade_log_file)
             with open(file_path, 'a') as f:
                 f.write(json.dumps(trade_info) + '\n')
+            self.logger.debug(f"Trade info written to '{file_path}'")
         except Exception as e:
             self.logger.error(f"Failed to write trade to log file: {e}")
 
@@ -733,7 +763,7 @@ def main():
     start_date = None  # Adjust as needed
     end_date = datetime.now()
 
-    # Parse historical data using the same function as in bktst.py
+    # Parse historical data using the updated parse_log_file function
     try:
         df = parse_log_file(file_path, start_date, end_date)
     except Exception as e:
@@ -776,6 +806,7 @@ def main():
     websocket_thread = threading.Thread(
         target=run_websocket, args=(url, symbols, data_manager), daemon=True)
     websocket_thread.start()
+    logger.debug("WebSocket thread started.")
 
     # Start the shell
     try:
