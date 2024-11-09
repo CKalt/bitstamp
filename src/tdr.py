@@ -48,12 +48,12 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     """
     Parses a JSON Lines log file and returns a DataFrame.
     Each line in the log file is a JSON object containing trade data.
-    
+
     Parameters:
         file_path (str): Path to the log file.
         start_date (datetime, optional): Start date to filter data.
         end_date (datetime, optional): End date to filter data.
-    
+
     Returns:
         pd.DataFrame: DataFrame with 'timestamp', 'price', 'amount' columns.
     """
@@ -74,18 +74,31 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     with open(file_path, 'r') as f:
         for idx, line in enumerate(f, 1):
             try:
-                obj = json.loads(line)
-                data = obj.get('data', {})
-                timestamp = int(data.get('timestamp', 0))
-                price = float(data.get('price', 0))
-                amount = float(data.get('amount', 0))
-                records.append({'timestamp': timestamp, 'price': price, 'amount': amount})
-                valid_lines += 1
+                obj = json.loads(line.strip())
+                if not isinstance(obj, dict):
+                    print(f"Line {idx}: Parsed object is not a dict. Skipping.")
+                    continue
+
+                # Ensure 'data' field exists and is a dict
+                data = obj.get('data')
+                if not isinstance(data, dict):
+                    print(f"Line {idx}: 'data' field is missing or not a dict. Skipping.")
+                    continue
+
+                # Extract 'timestamp', 'price', and 'amount' from 'data'
+                if 'timestamp' in data and 'price' in data and 'amount' in data:
+                    timestamp = int(data['timestamp'])
+                    price = float(data['price'])
+                    amount = float(data['amount'])
+                    records.append({'timestamp': timestamp, 'price': price, 'amount': amount})
+                    valid_lines += 1
+                else:
+                    print(f"Line {idx}: Missing required fields in 'data'. Skipping.")
             except json.JSONDecodeError:
                 print(f"Line {idx}: JSON decoding failed. Skipping.")
-            except (ValueError, TypeError):
-                print(f"Line {idx}: Invalid data types. Skipping.")
-            
+            except (ValueError, TypeError) as e:
+                print(f"Line {idx}: Invalid data types ({e}). Skipping.")
+
             # Progress feedback every 10%
             if total_lines >= 10:
                 if idx % (total_lines // 10) == 0:
