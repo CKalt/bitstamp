@@ -185,9 +185,9 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
 
     while True:  # Keep trying to reconnect
         try:
-            data_manager.logger.debug(f"Attempting to connect to WebSocket for {symbol}...")
+            data_manager.logger.info(f"{symbol}: Attempting to connect to WebSocket...")
             async with websockets.connect(url) as websocket:
-                data_manager.logger.debug(f"Connected to WebSocket for {symbol}")
+                data_manager.logger.info(f"{symbol}: Connected to WebSocket.")
 
                 # Subscribing to the channel.
                 subscribe_message = {
@@ -197,7 +197,7 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
                     }
                 }
                 await websocket.send(json.dumps(subscribe_message))
-                data_manager.logger.debug(f"Subscribed to channel: {channel}")
+                data_manager.logger.info(f"{symbol}: Subscribed to channel: {channel}")
 
                 # Receiving messages.
                 async for message in websocket:
