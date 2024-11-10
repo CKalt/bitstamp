@@ -19,8 +19,6 @@ import cmd
 import threading
 from datetime import datetime, timedelta
 import logging
-import tempfile
-import csv
 
 # Adjust sys.path to import modules from 'src' directory
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -50,7 +48,7 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     """
     Parses a JSON Lines log file and returns a DataFrame.
     Each line in the log file is a JSON object containing trade data.
-    Writes valid records to a temporary CSV file to handle large files efficiently.
+    Aggregates trade data into minute-level candlesticks during parsing.
 
     Parameters:
         file_path (str): Path to the log file.
@@ -58,80 +56,97 @@ def parse_log_file(file_path, start_date=None, end_date=None):
         end_date (datetime, optional): End date to filter data.
 
     Returns:
-        pd.DataFrame: DataFrame with 'timestamp', 'price', 'amount' columns.
+        pd.DataFrame: DataFrame with columns ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'trades']
     """
-
-    total_lines = 0
-    valid_lines = 0
+    import json
+    import pandas as pd
+    from datetime import datetime
 
     # First, count total lines for progress feedback
+    total_lines = 0
     with open(file_path, 'r') as f:
         for _ in f:
             total_lines += 1
 
     print(f"Total lines to parse: {total_lines}")
 
-    # Create a temporary file to store valid records
-    temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, newline='', suffix='.csv')
-    temp_file_name = temp_file.name
-    temp_file.close()  # We'll reopen it for writing
+    valid_lines = 0
 
-    with open(file_path, 'r') as f_in, open(temp_file_name, 'w', newline='') as f_out:
-        writer = csv.writer(f_out)
-        writer.writerow(['timestamp', 'price', 'amount'])  # Write header
+    # Calculate progress step
+    if total_lines >= 10:
+        progress_step = max(1, total_lines // 10)
+    else:
+        progress_step = 1
 
-        for idx, line in enumerate(f_in, 1):
+    # Create a dictionary to hold aggregated data
+    minute_bars = {}
+
+    with open(file_path, 'r') as f:
+        for idx, line in enumerate(f, 1):
             try:
                 obj = json.loads(line.strip())
                 if not isinstance(obj, dict):
                     continue
 
-                # Ensure 'data' field exists and is a dict
                 data = obj.get('data')
                 if not isinstance(data, dict):
                     continue
 
-                # Extract 'timestamp', 'price', and 'amount' from 'data'
                 if 'timestamp' in data and 'price' in data and 'amount' in data:
                     timestamp = int(data['timestamp'])
                     price = float(data['price'])
                     amount = float(data['amount'])
 
-                    # Filter by date range if specified
+                    # Filter by date range
                     if start_date and timestamp < int(start_date.timestamp()):
                         continue
                     if end_date and timestamp > int(end_date.timestamp()):
                         continue
 
-                    writer.writerow([timestamp, price, amount])
+                    dt = datetime.fromtimestamp(timestamp)
+                    minute = dt.replace(second=0, microsecond=0)
+
+                    if minute not in minute_bars:
+                        minute_bars[minute] = {
+                            'timestamp': int(minute.timestamp()),
+                            'open': price,
+                            'high': price,
+                            'low': price,
+                            'close': price,
+                            'volume': amount,
+                            'trades': 1
+                        }
+                    else:
+                        bar = minute_bars[minute]
+                        bar['high'] = max(bar['high'], price)
+                        bar['low'] = min(bar['low'], price)
+                        bar['close'] = price
+                        bar['volume'] += amount
+                        bar['trades'] += 1
+
                     valid_lines += 1
                 else:
                     continue
-            except json.JSONDecodeError:
-                continue
-            except (ValueError, TypeError) as e:
+            except (json.JSONDecodeError, ValueError, TypeError):
                 continue
 
-            # Progress feedback every 10%
-            if total_lines >= 10:
-                if idx % (total_lines // 10) == 0:
-                    progress = (idx / total_lines) * 100
-                    print(f"Parsing log file: {progress:.0f}% completed.")
+            # Progress feedback every progress_step lines
+            if idx % progress_step == 0 or idx == total_lines:
+                progress = (idx / total_lines) * 100
+                print(f"Parsing log file: {progress:.0f}% completed.")
 
     print(f"Finished parsing log file. Total lines: {total_lines}, Valid trades: {valid_lines}")
 
-    # Read the temporary CSV file into a DataFrame
-    df = pd.read_csv(temp_file_name)
-
-    # Delete the temporary file
-    os.remove(temp_file_name)
+    # Convert minute_bars to DataFrame
+    df = pd.DataFrame.from_dict(minute_bars, orient='index')
+    df.sort_index(inplace=True)
+    df.reset_index(drop=True, inplace=True)
 
     return df
 
-
 class CryptoDataManager:
     def __init__(self, symbols, logger, verbose=False):
-        self.data = {symbol: pd.DataFrame(columns=['timestamp', 'price', 'amount']) for symbol in symbols}
+        self.data = {symbol: pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'trades']) for symbol in symbols}
         self.candlesticks = {symbol: {} for symbol in symbols}
         self.candlestick_observers = []
         self.trade_observers = []
@@ -145,7 +160,7 @@ class CryptoDataManager:
         for idx, (symbol, df) in enumerate(data_dict.items(), 1):
             self.data[symbol] = df.reset_index(drop=True)
             if not df.empty:
-                self.last_price[symbol] = df.iloc[-1]['price']
+                self.last_price[symbol] = df.iloc[-1]['close']
                 self.logger.debug(f"Loaded historical data for {symbol}, last price: {self.last_price[symbol]}")
             print(f"Loaded historical data for {symbol} ({idx}/{total_symbols})")
 
@@ -160,10 +175,31 @@ class CryptoDataManager:
 
     def add_trade(self, symbol, price, timestamp):
         price = float(price)
-        # Ensure 'timestamp' is in UNIX epoch format (integer seconds)
-        # Do NOT convert to datetime here; let technical_indicators.py handle it
-        new_row = {'timestamp': timestamp, 'price': price, 'amount': 0}
-        self.data[symbol] = pd.concat([self.data[symbol], pd.DataFrame([new_row])], ignore_index=True)
+        # Aggregate trade into current minute candlestick
+        dt = datetime.fromtimestamp(timestamp)
+        minute = dt.replace(second=0, microsecond=0)
+
+        if symbol not in self.candlesticks:
+            self.candlesticks[symbol] = {}
+
+        if minute not in self.candlesticks[symbol]:
+            self.candlesticks[symbol][minute] = {
+                'timestamp': int(minute.timestamp()),
+                'open': price,
+                'high': price,
+                'low': price,
+                'close': price,
+                'volume': 0.0,
+                'trades': 0
+            }
+
+        candle = self.candlesticks[symbol][minute]
+        candle['high'] = max(candle['high'], price)
+        candle['low'] = min(candle['low'], price)
+        candle['close'] = price
+        candle['volume'] += 0.0  # We don't have 'amount' for live data here
+        candle['trades'] += 1
+
         self.last_price[symbol] = price
 
         # Notify trade observers
@@ -172,7 +208,7 @@ class CryptoDataManager:
 
     def get_current_price(self, symbol):
         if not self.data[symbol].empty:
-            return self.data[symbol].iloc[-1]['price']
+            return self.data[symbol].iloc[-1]['close']
         return None
 
     def get_price_range(self, symbol, minutes):
@@ -180,7 +216,7 @@ class CryptoDataManager:
         start_time = now - pd.Timedelta(minutes=minutes)
         df = self.data[symbol]
         mask = df['timestamp'] >= int(start_time.timestamp())
-        relevant_data = df.loc[mask, 'price']
+        relevant_data = df.loc[mask, 'close']
         if not relevant_data.empty:
             return relevant_data.min(), relevant_data.max()
         return None, None
@@ -190,6 +226,7 @@ class CryptoDataManager:
 
     def get_data_point_count(self, symbol):
         return len(self.data[symbol])
+
 
 async def subscribe_to_websocket(url: str, symbol: str, data_manager):
     channel = f"live_trades_{symbol}"
@@ -335,10 +372,15 @@ class MACrossoverStrategy:
                     df = ensure_datetime_index(df)
                     # Resample to high frequency used in backtesting
                     df_resampled = df.resample(HIGH_FREQUENCY).agg({
-                        'price': 'last',
-                        'amount': 'sum',
+                        'open': 'first',
+                        'high': 'max',
+                        'low': 'min',
+                        'close': 'last',
+                        'volume': 'sum',
+                        'trades': 'sum',
                         'timestamp': 'last'  # Retain the latest timestamp in the resampled period
                     }).dropna()
+
                     if len(df_resampled) >= self.long_window:
                         # Calculate moving averages
                         df_ma = add_moving_averages(df_resampled.copy(), self.short_window, self.long_window)
@@ -347,7 +389,7 @@ class MACrossoverStrategy:
                         # Get the latest signal
                         latest_signal = df_ma.iloc[-1]['MA_Signal']
                         signal_time = df_ma.index[-1]
-                        current_price = df_ma.iloc[-1]['price']
+                        current_price = df_ma.iloc[-1]['close']
                         self.check_for_signals(latest_signal, current_price, signal_time)
                 except KeyError as e:
                     self.logger.error(f"Missing column during strategy loop: {e}")
@@ -784,7 +826,9 @@ def main():
 
     # Read historical data
     file_path = 'btcusd.log'  # Ensure this is the correct path to your log file
-    start_date = None  # Adjust as needed
+
+    # Limit the data to prevent memory issues (e.g., last 90 days)
+    start_date = datetime.now() - timedelta(days=90)
     end_date = datetime.now()
 
     # Parse historical data using the updated parse_log_file function
@@ -795,7 +839,7 @@ def main():
         sys.exit(1)
 
     if df.empty:
-        print(f"No historical data found in '{file_path}'. Exiting.")
+        print(f"No historical data found in '{file_path}' for the specified date range. Exiting.")
         sys.exit(1)
 
     try:
@@ -817,7 +861,7 @@ def main():
         print(f"Error processing log file: {e}")
         sys.exit(1)
 
-    # Load historical data into the data manager
+    # Load aggregated data into the data manager
     data_manager.load_historical_data({'btcusd': df})
 
     order_placer = OrderPlacer()
