@@ -131,8 +131,8 @@ def parse_log_file(file_path, start_date=None, end_date=None):
 
             # Progress feedback
             if next_progress_idx < len(progress_thresholds) and idx >= progress_thresholds[next_progress_idx]:
-                progress = (idx / total_lines) * 100
-                print(f"Parsing log file: {progress_percentages[next_progress_idx]}% completed.")
+                progress = progress_percentages[next_progress_idx]
+                print(f"Parsing log file: {progress}% completed.", flush=True)
                 next_progress_idx += 1
 
     print(f"Finished parsing log file. Total lines: {total_lines}, Valid trades: {valid_lines}")
