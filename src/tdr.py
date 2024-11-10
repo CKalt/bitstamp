@@ -19,6 +19,8 @@ import cmd
 import threading
 from datetime import datetime, timedelta
 import logging
+import tempfile
+import csv
 
 # Adjust sys.path to import modules from 'src' directory
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -48,6 +50,7 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     """
     Parses a JSON Lines log file and returns a DataFrame.
     Each line in the log file is a JSON object containing trade data.
+    Writes valid records to a temporary CSV file to handle large files efficiently.
 
     Parameters:
         file_path (str): Path to the log file.
@@ -57,10 +60,7 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     Returns:
         pd.DataFrame: DataFrame with 'timestamp', 'price', 'amount' columns.
     """
-    import json
-    import pandas as pd
 
-    records = []
     total_lines = 0
     valid_lines = 0
 
@@ -71,18 +71,24 @@ def parse_log_file(file_path, start_date=None, end_date=None):
 
     print(f"Total lines to parse: {total_lines}")
 
-    with open(file_path, 'r') as f:
-        for idx, line in enumerate(f, 1):
+    # Create a temporary file to store valid records
+    temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, newline='', suffix='.csv')
+    temp_file_name = temp_file.name
+    temp_file.close()  # We'll reopen it for writing
+
+    with open(file_path, 'r') as f_in, open(temp_file_name, 'w', newline='') as f_out:
+        writer = csv.writer(f_out)
+        writer.writerow(['timestamp', 'price', 'amount'])  # Write header
+
+        for idx, line in enumerate(f_in, 1):
             try:
                 obj = json.loads(line.strip())
                 if not isinstance(obj, dict):
-                    print(f"Line {idx}: Parsed object is not a dict. Skipping.")
                     continue
 
                 # Ensure 'data' field exists and is a dict
                 data = obj.get('data')
                 if not isinstance(data, dict):
-                    print(f"Line {idx}: 'data' field is missing or not a dict. Skipping.")
                     continue
 
                 # Extract 'timestamp', 'price', and 'amount' from 'data'
@@ -90,14 +96,21 @@ def parse_log_file(file_path, start_date=None, end_date=None):
                     timestamp = int(data['timestamp'])
                     price = float(data['price'])
                     amount = float(data['amount'])
-                    records.append({'timestamp': timestamp, 'price': price, 'amount': amount})
+
+                    # Filter by date range if specified
+                    if start_date and timestamp < int(start_date.timestamp()):
+                        continue
+                    if end_date and timestamp > int(end_date.timestamp()):
+                        continue
+
+                    writer.writerow([timestamp, price, amount])
                     valid_lines += 1
                 else:
-                    print(f"Line {idx}: Missing required fields in 'data'. Skipping.")
+                    continue
             except json.JSONDecodeError:
-                print(f"Line {idx}: JSON decoding failed. Skipping.")
+                continue
             except (ValueError, TypeError) as e:
-                print(f"Line {idx}: Invalid data types ({e}). Skipping.")
+                continue
 
             # Progress feedback every 10%
             if total_lines >= 10:
@@ -105,18 +118,16 @@ def parse_log_file(file_path, start_date=None, end_date=None):
                     progress = (idx / total_lines) * 100
                     print(f"Parsing log file: {progress:.0f}% completed.")
 
-    df = pd.DataFrame(records)
-
-    # Filter by date range if specified
-    if start_date:
-        start_timestamp = int(start_date.timestamp())
-        df = df[df['timestamp'] >= start_timestamp]
-    if end_date:
-        end_timestamp = int(end_date.timestamp())
-        df = df[df['timestamp'] <= end_timestamp]
-
     print(f"Finished parsing log file. Total lines: {total_lines}, Valid trades: {valid_lines}")
+
+    # Read the temporary CSV file into a DataFrame
+    df = pd.read_csv(temp_file_name)
+
+    # Delete the temporary file
+    os.remove(temp_file_name)
+
     return df
+
 
 class CryptoDataManager:
     def __init__(self, symbols, logger, verbose=False):
