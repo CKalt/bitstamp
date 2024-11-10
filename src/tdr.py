@@ -72,11 +72,10 @@ def parse_log_file(file_path, start_date=None, end_date=None):
 
     valid_lines = 0
 
-    # Calculate progress step
-    if total_lines >= 10:
-        progress_step = max(1, total_lines // 10)
-    else:
-        progress_step = 1
+    # Prepare progress thresholds
+    progress_percentages = list(range(10, 101, 10))  # [10, 20, ..., 100]
+    progress_thresholds = [int(total_lines * p / 100) for p in progress_percentages]
+    next_progress_idx = 0
 
     # Create a dictionary to hold aggregated data
     minute_bars = {}
@@ -130,10 +129,11 @@ def parse_log_file(file_path, start_date=None, end_date=None):
             except (json.JSONDecodeError, ValueError, TypeError):
                 continue
 
-            # Progress feedback every progress_step lines
-            if idx % progress_step == 0 or idx == total_lines:
+            # Progress feedback
+            if next_progress_idx < len(progress_thresholds) and idx >= progress_thresholds[next_progress_idx]:
                 progress = (idx / total_lines) * 100
-                print(f"Parsing log file: {progress:.0f}% completed.")
+                print(f"Parsing log file: {progress_percentages[next_progress_idx]}% completed.")
+                next_progress_idx += 1
 
     print(f"Finished parsing log file. Total lines: {total_lines}, Valid trades: {valid_lines}")
 
@@ -222,7 +222,17 @@ class CryptoDataManager:
         return None, None
 
     def get_price_dataframe(self, symbol):
-        return self.data[symbol]
+        # Combine historical data with live data
+        df = self.data[symbol].copy()
+        # Add live candlesticks
+        if symbol in self.candlesticks:
+            live_df = pd.DataFrame.from_dict(self.candlesticks[symbol], orient='index')
+            live_df.sort_index(inplace=True)
+            df = pd.concat([df, live_df], ignore_index=True)
+            df.drop_duplicates(subset='timestamp', keep='last', inplace=True)
+            df.sort_values('timestamp', inplace=True)
+            df.reset_index(drop=True, inplace=True)
+        return df
 
     def get_data_point_count(self, symbol):
         return len(self.data[symbol])
@@ -273,8 +283,7 @@ class OrderPlacer:
 
     def read_config(self, file_name):
         # Use current working directory
-        current_dir = os.getcwd()
-        file_path = os.path.join(current_dir, file_name)
+        file_path = os.path.abspath(file_name)
         try:
             with open(file_path, 'r') as f:
                 return json.load(f)
@@ -355,8 +364,7 @@ class MACrossoverStrategy:
         if self.trade_log and not self.live_trading:
             try:
                 # Use current working directory
-                current_dir = os.getcwd()
-                file_path = os.path.join(current_dir, self.trade_log_file)
+                file_path = os.path.abspath(self.trade_log_file)
                 with open(file_path, 'w') as f:
                     json.dump(self.trade_log, f, indent=2)
                 self.logger.info(f"Trades logged to '{file_path}'")
@@ -385,7 +393,7 @@ class MACrossoverStrategy:
                         # Calculate moving averages
                         df_ma = add_moving_averages(df_resampled.copy(), self.short_window, self.long_window)
                         # Generate MA signals
-                        df_ma = generate_ma_signals(df_ma)
+                        df_ma = generate_ma_signals(df_ma, self.short_window)
                         # Get the latest signal
                         latest_signal = df_ma.iloc[-1]['MA_Signal']
                         signal_time = df_ma.index[-1]
@@ -439,8 +447,7 @@ class MACrossoverStrategy:
         # Write the trade_info to the trade log file
         try:
             # Use current working directory
-            current_dir = os.getcwd()
-            file_path = os.path.join(current_dir, self.trade_log_file)
+            file_path = os.path.abspath(self.trade_log_file)
             with open(file_path, 'a') as f:
                 f.write(json.dumps(trade_info) + '\n')
             self.logger.debug(f"Trade info written to '{file_path}'")
@@ -575,7 +582,7 @@ class CryptoShell(cmd.Cmd):
 
     def candlestick_callback(self, symbol, minute, candle):
         if symbol in self.candlestick_output:
-            timestamp = minute.strftime('%Y-%m-%d %H:%M:%S')
+            timestamp = datetime.fromtimestamp(candle['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
             print(f"{symbol} - {timestamp}: Open: ${candle['open']:.2f}, High: ${candle['high']:.2f}, "
                   f"Low: ${candle['low']:.2f}, Close: ${candle['close']:.2f}, "
                   f"Volume: {candle['volume']}, Trades: {candle['trades']}")
@@ -618,8 +625,7 @@ class CryptoShell(cmd.Cmd):
             # Add FileHandler for verbose logs
             try:
                 # Use current working directory
-                current_dir = os.getcwd()
-                log_file_path = os.path.join(current_dir, log_file)
+                log_file_path = os.path.abspath(log_file)
                 file_handler = logging.FileHandler(log_file_path)
                 file_handler.setLevel(logging.DEBUG)
                 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -686,9 +692,11 @@ class CryptoShell(cmd.Cmd):
             print("Amount must be a number.")
             return
 
-        # Use current working directory
-        current_dir = os.getcwd()
-        file_path = os.path.join(current_dir, 'best_strategy.json')
+        # Use the directory from which the command is issued
+        file_path = os.path.abspath('best_strategy.json')
+
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Looking for best_strategy.json at: {file_path}")
 
         try:
             with open(file_path, 'r') as f:
@@ -783,11 +791,10 @@ def setup_logging(verbose, log_file=None):
 
     # FileHandler for logging to a file
     # Use current working directory
-    current_dir = os.getcwd()
     if log_file:
-        log_file_path = os.path.join(current_dir, log_file)
+        log_file_path = os.path.abspath(log_file)
     else:
-        log_file_path = os.path.join(current_dir, 'crypto_shell.log')
+        log_file_path = os.path.abspath('crypto_shell.log')
     file_handler = logging.FileHandler(log_file_path)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
@@ -825,7 +832,10 @@ def main():
     data_manager = CryptoDataManager(symbols, logger=logger, verbose=verbose_flag)
 
     # Read historical data
-    file_path = 'btcusd.log'  # Ensure this is the correct path to your log file
+    # Use the directory from which the command is issued
+    file_path = os.path.abspath('btcusd.log')  # Ensure this is the correct path to your log file
+
+    print(f"Current working directory: {os.getcwd()}")
 
     # Limit the data to prevent memory issues (e.g., last 90 days)
     start_date = datetime.now() - timedelta(days=90)
