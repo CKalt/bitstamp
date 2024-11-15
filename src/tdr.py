@@ -391,9 +391,9 @@ class MACrossoverStrategy:
 
                     if len(df_resampled) >= self.long_window:
                         # Calculate moving averages
-                        df_ma = add_moving_averages(df_resampled.copy(), self.short_window, self.long_window)
+                        df_ma = add_moving_averages(df_resampled.copy(), self.short_window, self.long_window, price_col='close')
                         # Generate MA signals
-                        df_ma = generate_ma_signals(df_ma, self.short_window)
+                        df_ma = generate_ma_signals(df_ma)
                         # Get the latest signal
                         latest_signal = df_ma.iloc[-1]['MA_Signal']
                         signal_time = df_ma.index[-1]

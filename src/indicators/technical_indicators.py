@@ -22,26 +22,26 @@ def ensure_datetime_index(df):
     # Retain the 'timestamp' column
     return df
 
-def calculate_market_conditions(df, lookback_short=5, lookback_long=20):
+def calculate_market_conditions(df, lookback_short=5, lookback_long=20, price_col='price'):
     """
     Calculate market conditions including regime, volatility state, and volume profile.
     """
     df = ensure_datetime_index(df)
     
     # Price movement and volatility
-    df['returns'] = df['price'].pct_change()
+    df['returns'] = df[price_col].pct_change()
     df['volatility_short'] = df['returns'].rolling(window=lookback_short).std()
     df['volatility_long'] = df['returns'].rolling(window=lookback_long).std()
     df['volatility_ratio'] = df['volatility_short'] / df['volatility_long']
     
     # Volume profile
-    df['volume'] = df['price'] * df['amount']
-    df['volume_sma'] = df['volume'].rolling(window=lookback_long).mean()
-    df['volume_ratio'] = df['volume'] / df['volume_sma']
+    df['volume_value'] = df[price_col] * df['volume']
+    df['volume_sma'] = df['volume_value'].rolling(window=lookback_long).mean()
+    df['volume_ratio'] = df['volume_value'] / df['volume_sma']
     
     # Trend strength
-    df['price_sma_short'] = df['price'].rolling(window=lookback_short).mean()
-    df['price_sma_long'] = df['price'].rolling(window=lookback_long).mean()
+    df['price_sma_short'] = df[price_col].rolling(window=lookback_short).mean()
+    df['price_sma_long'] = df[price_col].rolling(window=lookback_long).mean()
     df['trend_strength'] = (df['price_sma_short'] - df['price_sma_long']) / df['price_sma_long']
     
     # Regime classification
@@ -70,14 +70,14 @@ def calculate_market_conditions(df, lookback_short=5, lookback_long=20):
     
     return df
 
-def calculate_adaptive_vwma(df, base_window=10):
+def calculate_adaptive_vwma(df, base_window=10, price_col='price'):
     """
     Calculate VWMA with adaptive parameters based on market conditions.
     """
     df = ensure_datetime_index(df)
     
     # Calculate market conditions
-    df = calculate_market_conditions(df)
+    df = calculate_market_conditions(df, price_col=price_col)
     
     # Adaptive VWMA window based on regime
     df['adaptive_window'] = base_window
@@ -86,7 +86,7 @@ def calculate_adaptive_vwma(df, base_window=10):
     df.loc[df['regime'] == -1, 'adaptive_window'] = base_window * 1.5  # Longer in range-bound
     
     # Calculate adaptive VWMA
-    df['vol_price'] = df['price'] * df['volume']
+    df['vol_price'] = df[price_col] * df['volume']
     
     df['VWMA'] = np.nan
     for i in range(len(df)):
@@ -100,7 +100,7 @@ def calculate_adaptive_vwma(df, base_window=10):
     
     # Calculate additional signals
     df['VWMA_slope'] = df['VWMA'].pct_change(periods=3)
-    df['price_to_vwma'] = df['price'] / df['VWMA'] - 1
+    df['price_to_vwma'] = df[price_col] / df['VWMA'] - 1
     
     return df
 
@@ -181,7 +181,7 @@ def generate_adaptive_vwma_signals(df, vol_scale=1.0):
     return df
 
 
-def add_moving_averages(df, short_window, long_window):
+def add_moving_averages(df, short_window, long_window, price_col='price'):
     """
     Adds short and long moving averages to the DataFrame with consistent column names.
     """
@@ -189,8 +189,8 @@ def add_moving_averages(df, short_window, long_window):
     df = ensure_datetime_index(df)
     
     # Add moving averages with standardized column names
-    df['Short_MA'] = df['price'].rolling(window=short_window).mean()
-    df['Long_MA'] = df['price'].rolling(window=long_window).mean()
+    df['Short_MA'] = df[price_col].rolling(window=short_window).mean()
+    df['Long_MA'] = df[price_col].rolling(window=long_window).mean()
     
     return df
 
@@ -203,12 +203,12 @@ def generate_ma_signals(df):
     df.loc[df['Short_MA'] < df['Long_MA'], 'MA_Signal'] = -1
     return df
 
-def calculate_rsi(df, window=14):
+def calculate_rsi(df, window=14, price_col='price'):
     """
     Calculate the Relative Strength Index (RSI).
     """
     df = ensure_datetime_index(df)
-    delta = df['price'].diff()
+    delta = df[price_col].diff()
     gain = (delta.clip(lower=0)).rolling(window=window).mean()
     loss = (-delta.clip(upper=0)).rolling(window=window).mean()
     rs = gain / loss
@@ -224,13 +224,13 @@ def generate_rsi_signals(df, overbought=70, oversold=30):
     df.loc[df['RSI'] > overbought, 'RSI_Signal'] = -1
     return df
 
-def calculate_bollinger_bands(df, window=20, num_std=2):
+def calculate_bollinger_bands(df, window=20, num_std=2, price_col='price'):
     """
     Calculate Bollinger Bands.
     """
     df = ensure_datetime_index(df)
-    df['BB_MA'] = df['price'].rolling(window=window).mean()
-    df['BB_STD'] = df['price'].rolling(window=window).std()
+    df['BB_MA'] = df[price_col].rolling(window=window).mean()
+    df['BB_STD'] = df[price_col].rolling(window=window).std()
     df['BB_Upper'] = df['BB_MA'] + (df['BB_STD'] * num_std)
     df['BB_Lower'] = df['BB_MA'] - (df['BB_STD'] * num_std)
     return df
@@ -244,13 +244,13 @@ def generate_bollinger_band_signals(df):
     df.loc[df['price'] > df['BB_Upper'], 'BB_Signal'] = -1  # Sell signal
     return df
 
-def calculate_macd(df, fast=12, slow=26, signal=9):
+def calculate_macd(df, fast=12, slow=26, signal=9, price_col='price'):
     """
     Calculate the Moving Average Convergence Divergence (MACD).
     """
     df = ensure_datetime_index(df)
-    df['MACD_Fast'] = df['price'].ewm(span=fast, adjust=False).mean()
-    df['MACD_Slow'] = df['price'].ewm(span=slow, adjust=False).mean()
+    df['MACD_Fast'] = df[price_col].ewm(span=fast, adjust=False).mean()
+    df['MACD_Slow'] = df[price_col].ewm(span=slow, adjust=False).mean()
     df['MACD'] = df['MACD_Fast'] - df['MACD_Slow']
     df['MACD_Signal_Line'] = df['MACD'].ewm(span=signal, adjust=False).mean()
     return df
