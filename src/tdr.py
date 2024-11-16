@@ -60,6 +60,7 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     """
     import json
     import pandas as pd
+    import time
     from datetime import datetime
 
     # First, count total lines for progress feedback
@@ -73,9 +74,13 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     valid_lines = 0
 
     # Prepare progress thresholds
-    progress_percentages = list(range(10, 101, 10))  # [10, 20, ..., 100]
+    progress_percentages = list(range(1, 101))  # [1, 2, ..., 100]
     progress_thresholds = [int(total_lines * p / 100) for p in progress_percentages]
     next_progress_idx = 0
+
+    # Time-based progress feedback
+    last_feedback_time = time.time()
+    feedback_interval = 5  # seconds
 
     # Create a dictionary to hold aggregated data
     minute_bars = {}
@@ -129,11 +134,18 @@ def parse_log_file(file_path, start_date=None, end_date=None):
             except (json.JSONDecodeError, ValueError, TypeError):
                 continue
 
-            # Progress feedback
+            # Progress feedback based on line count
             if next_progress_idx < len(progress_thresholds) and idx >= progress_thresholds[next_progress_idx]:
                 progress = progress_percentages[next_progress_idx]
                 print("Parsing log file: {}% completed.".format(progress), flush=True)
                 next_progress_idx += 1
+
+            # Time-based progress feedback every 'feedback_interval' seconds
+            current_time = time.time()
+            if current_time - last_feedback_time >= feedback_interval:
+                percent_complete = (idx / total_lines) * 100
+                print("Parsing log file: {:.2f}% completed.".format(percent_complete), flush=True)
+                last_feedback_time = current_time
 
     # Ensure 100% is printed
     if next_progress_idx < len(progress_thresholds):
@@ -591,6 +603,10 @@ class CryptoShell(cmd.Cmd):
         self.data_manager.add_candlestick_observer(self.candlestick_callback)
         self.data_manager.add_trade_observer(self.trade_callback)
 
+    def emptyline(self):
+        """Do nothing on empty input line."""
+        pass
+
     def do_example(self, arg):
         """Show an example of how to use a command: example <command>"""
         command = arg.strip().lower()
@@ -775,6 +791,10 @@ class CryptoShell(cmd.Cmd):
 
     def do_auto_trade(self, arg):
         """Start auto-trading using the best strategy: auto_trade <amount>"""
+        if self.auto_trader is not None and self.auto_trader.running:
+            print("Auto-trading is already running. Please stop it before starting a new one.")
+            return
+
         args = arg.split()
         if len(args) != 1:
             print("Usage: auto_trade <amount>")
