@@ -413,6 +413,7 @@ class MACrossoverStrategy:
         self.next_trigger = None
         self.current_trends = {}
         self.df_ma = pd.DataFrame()
+        self.strategy_start_time = datetime.now()  # Record the time when the strategy starts
 
     def start(self):
         self.running = True
@@ -465,7 +466,9 @@ class MACrossoverStrategy:
                         self.next_trigger = self.determine_next_trigger(df_ma)
                         self.current_trends = self.get_current_trends(df_ma)
                         self.df_ma = df_ma  # Store df_ma for status reporting
-                        self.check_for_signals(latest_signal, current_price, signal_time, signal_source)
+                        self.check_for_signals(latest_signal, current_price, signal_time)
+                    else:
+                        self.logger.debug("Not enough data to compute moving averages.")
                 except KeyError as e:
                     self.logger.error("Missing column during strategy loop: {}".format(e))
                 except Exception as e:
@@ -515,7 +518,7 @@ class MACrossoverStrategy:
         }
         return trend
 
-    def check_for_signals(self, latest_signal, current_price, signal_time, signal_source):
+    def check_for_signals(self, latest_signal, current_price, signal_time):
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         if self.last_signal_time == signal_time:
@@ -527,17 +530,23 @@ class MACrossoverStrategy:
             self.logger.info("Buy signal at price {}".format(current_price))
             self.position = 1
             self.last_trade_reason = "MA Crossover: Short MA crossed above Long MA."
-            self.execute_trade("buy", current_price, timestamp, signal_source, signal_time)
+            self.execute_trade("buy", current_price, timestamp, signal_time)
             self.last_signal_time = signal_time
         elif latest_signal == -1 and self.position >= 0:
             # Sell signal
             self.logger.info("Sell signal at price {}".format(current_price))
             self.position = -1
             self.last_trade_reason = "MA Crossover: Short MA crossed below Long MA."
-            self.execute_trade("sell", current_price, timestamp, signal_source, signal_time)
+            self.execute_trade("sell", current_price, timestamp, signal_time)
             self.last_signal_time = signal_time
 
-    def execute_trade(self, trade_type, price, timestamp, data_source, signal_timestamp):
+    def execute_trade(self, trade_type, price, timestamp, signal_timestamp):
+        # Determine if the signal is based on historical or live data
+        if signal_timestamp < self.strategy_start_time:
+            data_source = 'historical'
+        else:
+            data_source = 'live'
+
         trade_info = Trade(
             trade_type,
             self.symbol,
