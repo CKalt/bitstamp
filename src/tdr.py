@@ -245,10 +245,15 @@ class CryptoDataManager:
     def get_price_dataframe(self, symbol):
         # Combine historical data with live data
         df = self.data[symbol].copy()
+        if not df.empty:
+            df['source'] = 'historical'
+        else:
+            df['source'] = pd.Series(dtype=str)
         # Add live candlesticks
         if symbol in self.candlesticks:
             live_df = pd.DataFrame.from_dict(self.candlesticks[symbol], orient='index')
             live_df.sort_index(inplace=True)
+            live_df['source'] = 'live'
             df = pd.concat([df, live_df], ignore_index=True)
             df.drop_duplicates(subset='timestamp', keep='last', inplace=True)
             df.sort_values('timestamp', inplace=True)
@@ -259,13 +264,15 @@ class CryptoDataManager:
         return len(self.data[symbol])
 
 class Trade:
-    def __init__(self, trade_type, symbol, amount, price, timestamp, reason, live_trading=False, order_result=None):
+    def __init__(self, trade_type, symbol, amount, price, timestamp, reason, data_source, signal_timestamp, live_trading=False, order_result=None):
         self.type = trade_type
         self.symbol = symbol
         self.amount = amount
         self.price = price
-        self.timestamp = timestamp
+        self.timestamp = timestamp  # Time when the trade was executed
         self.reason = reason
+        self.data_source = data_source  # 'historical' or 'live'
+        self.signal_timestamp = signal_timestamp
         self.live_trading = live_trading
         self.order_result = order_result
 
@@ -276,6 +283,8 @@ class Trade:
             'amount': self.amount,
             'price': self.price,
             'timestamp': self.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            'signal_timestamp': self.signal_timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            'data_source': self.data_source,
             'live_trading': self.live_trading,
             'reason': self.reason
         }
@@ -399,8 +408,11 @@ class MACrossoverStrategy:
         self.trade_log_file = 'trades.json'
         self.last_signal_time = None  # To prevent duplicate signals
         self.last_trade_reason = None
+        self.last_trade_data_source = None
+        self.last_trade_signal_timestamp = None
         self.next_trigger = None
         self.current_trends = {}
+        self.df_ma = pd.DataFrame()
 
     def start(self):
         self.running = True
@@ -436,7 +448,8 @@ class MACrossoverStrategy:
                         'close': 'last',
                         'volume': 'sum',
                         'trades': 'sum',
-                        'timestamp': 'last'  # Retain the latest timestamp in the resampled period
+                        'timestamp': 'last',  # Retain the latest timestamp in the resampled period
+                        'source': 'last'  # Retain the source of the last data point in the resampled period
                     }).dropna()
 
                     if len(df_resampled) >= self.long_window:
@@ -448,9 +461,11 @@ class MACrossoverStrategy:
                         latest_signal = df_ma.iloc[-1]['MA_Signal']
                         signal_time = df_ma.index[-1]
                         current_price = df_ma.iloc[-1]['close']
+                        signal_source = df_ma.iloc[-1]['source']
                         self.next_trigger = self.determine_next_trigger(df_ma)
                         self.current_trends = self.get_current_trends(df_ma)
-                        self.check_for_signals(latest_signal, current_price, signal_time)
+                        self.df_ma = df_ma  # Store df_ma for status reporting
+                        self.check_for_signals(latest_signal, current_price, signal_time, signal_source)
                 except KeyError as e:
                     self.logger.error("Missing column during strategy loop: {}".format(e))
                 except Exception as e:
@@ -500,7 +515,7 @@ class MACrossoverStrategy:
         }
         return trend
 
-    def check_for_signals(self, latest_signal, current_price, signal_time):
+    def check_for_signals(self, latest_signal, current_price, signal_time, signal_source):
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         if self.last_signal_time == signal_time:
@@ -512,17 +527,17 @@ class MACrossoverStrategy:
             self.logger.info("Buy signal at price {}".format(current_price))
             self.position = 1
             self.last_trade_reason = "MA Crossover: Short MA crossed above Long MA."
-            self.execute_trade("buy", current_price, timestamp)
+            self.execute_trade("buy", current_price, timestamp, signal_source, signal_time)
             self.last_signal_time = signal_time
         elif latest_signal == -1 and self.position >= 0:
             # Sell signal
             self.logger.info("Sell signal at price {}".format(current_price))
             self.position = -1
             self.last_trade_reason = "MA Crossover: Short MA crossed below Long MA."
-            self.execute_trade("sell", current_price, timestamp)
+            self.execute_trade("sell", current_price, timestamp, signal_source, signal_time)
             self.last_signal_time = signal_time
 
-    def execute_trade(self, trade_type, price, timestamp):
+    def execute_trade(self, trade_type, price, timestamp, data_source, signal_timestamp):
         trade_info = Trade(
             trade_type,
             self.symbol,
@@ -530,8 +545,14 @@ class MACrossoverStrategy:
             price,
             datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S'),
             self.last_trade_reason,
+            data_source,
+            signal_timestamp,
             live_trading=self.live_trading
         )
+
+        # Store the last trade data source and signal timestamp
+        self.last_trade_data_source = data_source
+        self.last_trade_signal_timestamp = signal_timestamp
 
         if self.live_trading:
             result = self.order_placer.place_order(
@@ -559,13 +580,27 @@ class MACrossoverStrategy:
             'running': self.running,
             'position': self.position,
             'last_trade': None,
+            'last_trade_data_source': None,
+            'last_trade_signal_timestamp': None,
             'next_trigger': self.next_trigger,
-            'current_trends': self.current_trends.get(self.symbol, {})
+            'current_trends': self.current_trends,
+            'ma_difference': None,
+            'ma_slope_difference': None
         }
 
         if self.last_trade_reason:
             status['last_trade'] = self.last_trade_reason
+            status['last_trade_data_source'] = self.last_trade_data_source
+            status['last_trade_signal_timestamp'] = self.last_trade_signal_timestamp.strftime('%Y-%m-%d %H:%M:%S') if self.last_trade_signal_timestamp else None
 
+        # Calculate current MA difference
+        if hasattr(self, 'df_ma') and not self.df_ma.empty:
+            status['ma_difference'] = self.df_ma.iloc[-1]['Short_MA'] - self.df_ma.iloc[-1]['Long_MA']
+            # Calculate MA slopes
+            if len(self.df_ma) >= 2:
+                short_ma_slope = self.df_ma.iloc[-1]['Short_MA'] - self.df_ma.iloc[-2]['Short_MA']
+                long_ma_slope = self.df_ma.iloc[-1]['Long_MA'] - self.df_ma.iloc[-2]['Long_MA']
+                status['ma_slope_difference'] = short_ma_slope - long_ma_slope
         return status
 
 
@@ -861,12 +896,18 @@ class CryptoShell(cmd.Cmd):
             print("  Position: {}".format(position))
             if status['last_trade']:
                 print("  Last Trade Reason: {}".format(status['last_trade']))
+                print("  Last Trade Based On: {} Data".format(status['last_trade_data_source'].capitalize()))
+                print("  Signal Timestamp: {}".format(status['last_trade_signal_timestamp']))
             if status['next_trigger']:
                 print("  {}".format(status['next_trigger']))
             if status['current_trends']:
                 print("  Current Trends:")
                 for key, value in status['current_trends'].items():
                     print("    {}: {}".format(key, value))
+            if status['ma_difference'] is not None:
+                print("  Current MA Difference (Short MA - Long MA): {:.6f}".format(status['ma_difference']))
+            if status['ma_slope_difference'] is not None:
+                print("  Current MA Slope Difference (Short MA Slope - Long MA Slope): {:.6f}".format(status['ma_slope_difference']))
         else:
             print("Auto-trading is not running.")
 
