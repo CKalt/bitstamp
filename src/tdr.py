@@ -227,16 +227,15 @@ class CryptoDataManager:
                 'high': price,
                 'low': price,
                 'close': price,
-                'volume': 0.0,
-                'trades': 0
+                'volume': 0.0,  # Assuming 0 volume since we don't have 'amount'
+                'trades': 1
             }
-
-        candle = self.candlesticks[symbol][minute]
-        candle['high'] = max(candle['high'], price)
-        candle['low'] = min(candle['low'], price)
-        candle['close'] = price
-        candle['volume'] += 0.0  # We don't have 'amount' for live data here
-        candle['trades'] += 1
+        else:
+            candle = self.candlesticks[symbol][minute]
+            candle['high'] = max(candle['high'], price)
+            candle['low'] = min(candle['low'], price)
+            candle['close'] = price
+            candle['trades'] += 1
 
         self.last_price[symbol] = price
 
@@ -312,10 +311,10 @@ class Trade:
         return trade_info
 
 
-async def subscribe_to_websocket(url: str, symbol: str, data_manager):
+async def subscribe_to_websocket(url: str, symbol: str, data_manager, stop_event):
     channel = f"live_trades_{symbol}"
 
-    while True:  # Keep trying to reconnect
+    while not stop_event.is_set():
         try:
             data_manager.logger.info(
                 "{}: Attempting to connect to WebSocket...".format(symbol))
@@ -335,7 +334,8 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
                     "{}: Subscribed to channel: {}".format(symbol, channel))
 
                 # Receiving messages.
-                async for message in websocket:
+                while not stop_event.is_set():
+                    message = await websocket.recv()
                     data_manager.logger.debug("{}: {}".format(symbol, message))
                     data = json.loads(message)
                     if data.get('event') == 'trade':
@@ -345,10 +345,14 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
                             symbol, price, timestamp, trade_reason="Live Trade")
 
         except websockets.ConnectionClosed:
+            if stop_event.is_set():
+                break
             data_manager.logger.error(
                 "{}: Connection closed, trying to reconnect in 5 seconds...".format(symbol))
             await asyncio.sleep(5)
         except Exception as e:
+            if stop_event.is_set():
+                break
             data_manager.logger.error(
                 "{}: An error occurred: {}".format(symbol, str(e)))
             await asyncio.sleep(5)
@@ -448,7 +452,9 @@ class MACrossoverStrategy:
 
     def start(self):
         self.running = True
-        threading.Thread(target=self.run_strategy_loop, daemon=True).start()
+        self.strategy_thread = threading.Thread(
+            target=self.run_strategy_loop, daemon=True)
+        self.strategy_thread.start()
         self.logger.info("Strategy loop started.")
 
     def stop(self):
@@ -461,7 +467,7 @@ class MACrossoverStrategy:
                 file_path = os.path.abspath(self.trade_log_file)
                 with open(file_path, 'w') as f:
                     json.dump([trade.to_dict()
-                              for trade in self.trade_log], f, indent=2)
+                               for trade in self.trade_log], f, indent=2)
                 self.logger.info("Trades logged to '{}'".format(file_path))
             except Exception as e:
                 self.logger.error(
@@ -663,7 +669,7 @@ class CryptoShell(cmd.Cmd):
     intro = 'Welcome to the Crypto Shell. Type help or ? to list commands.\n'
     prompt = '(crypto) '
 
-    def __init__(self, data_manager, order_placer, logger, verbose=False, live_trading=False):
+    def __init__(self, data_manager, order_placer, logger, verbose=False, live_trading=False, stop_event=None):
         super().__init__()
         self.data_manager = data_manager
         self.order_placer = order_placer
@@ -674,6 +680,9 @@ class CryptoShell(cmd.Cmd):
         self.verbose = verbose
         self.live_trading = live_trading
         self.auto_trader = None  # Initialize to None
+        self.chart_thread = None
+        self.chart_app = None
+        self.stop_event = stop_event
         self.examples = {
             'price': 'price btcusd',
             'range': 'range btcusd 30',
@@ -1002,9 +1011,33 @@ class CryptoShell(cmd.Cmd):
     def do_quit(self, arg):
         """Quit the program"""
         print("Quitting...")
+        # Stop auto trader
         if self.auto_trader is not None and self.auto_trader.running:
             self.auto_trader.stop()
+        # Stop Dash app
+        if self.chart_thread is not None and self.chart_thread.is_alive():
+            self.stop_dash_app()
+        # Set the stop event to signal threads to stop
+        if self.stop_event:
+            self.stop_event.set()
         return True
+
+    def stop_dash_app(self):
+        # Dash app runs in a separate thread with its own server
+        # Since Dash doesn't provide a built-in way to stop the server,
+        # we can use the Flask server's shutdown function
+        from flask import request
+
+        func = request.environ.get('werkzeug.server.shutdown')
+        if func is None:
+            print('Not running with the Werkzeug Server')
+        else:
+            func()
+            print('Dash app has been shut down.')
+
+    def do_exit(self, arg):
+        """Exit the program"""
+        return self.do_quit(arg)
 
     def do_chart(self, arg):
         """Show a dynamically updating candlestick chart with moving averages and trade signals: chart [symbol] [bar_size]"""
@@ -1025,6 +1058,7 @@ class CryptoShell(cmd.Cmd):
             from dash.dependencies import Output, Input
             import plotly.graph_objs as go
             import threading
+            from flask import Flask
         except ImportError:
             print("Required libraries are not installed. Please install them using 'pip install dash plotly'.")
             return
@@ -1049,7 +1083,10 @@ class CryptoShell(cmd.Cmd):
                 return
 
         # Define the Dash app
-        app = dash.Dash(__name__)
+        server = Flask(__name__)
+        app = dash.Dash(__name__, server=server)
+        self.chart_app = app  # Store the app reference
+
         app.layout = html.Div(children=[
             html.H1(children='{} Real-time Candlestick Chart'.format(symbol.upper())),
             dcc.Graph(id='live-graph'),
@@ -1062,9 +1099,10 @@ class CryptoShell(cmd.Cmd):
 
         @app.callback(
             Output('live-graph', 'figure'),
-            Input('graph-update', 'n_intervals')
+            [Input('graph-update', 'n_intervals'),
+             Input('live-graph', 'relayoutData')]
         )
-        def update_graph_live(n):
+        def update_graph_live(n, relayout_data):
             df = self.data_manager.get_price_dataframe(symbol)
             if df.empty:
                 return {}
@@ -1099,6 +1137,31 @@ class CryptoShell(cmd.Cmd):
             # Create Buy/Sell signal price columns
             df_ma['Buy_Signal_Price'] = np.where(df_ma['MA_Signal'] == 1, df_ma['close'], np.nan)
             df_ma['Sell_Signal_Price'] = np.where(df_ma['MA_Signal'] == -1, df_ma['close'], np.nan)
+
+            # Determine the x-axis range from relayout_data
+            if relayout_data and 'xaxis.range[0]' in relayout_data and 'xaxis.range[1]' in relayout_data:
+                x_start = pd.to_datetime(relayout_data['xaxis.range[0]'])
+                x_end = pd.to_datetime(relayout_data['xaxis.range[1]'])
+            else:
+                # Default to last 7 days if no relayout data is available
+                x_end = df_ma.index.max()
+                x_start = x_end - pd.Timedelta(days=7)
+
+            # Filter data based on x-axis range
+            df_visible = df_ma[(df_ma.index >= x_start) & (df_ma.index <= x_end)]
+
+            if df_visible.empty:
+                # If no data is visible, use the entire data range
+                df_visible = df_ma
+
+            # Calculate min and max prices in the visible range
+            y_min = df_visible[['low', 'Short_MA', 'Long_MA', 'Buy_Signal_Price', 'Sell_Signal_Price']].min().min()
+            y_max = df_visible[['high', 'Short_MA', 'Long_MA', 'Buy_Signal_Price', 'Sell_Signal_Price']].max().max()
+
+            # Add some padding to y-axis limits
+            y_padding = (y_max - y_min) * 0.05  # 5% padding
+            y_min -= y_padding
+            y_max += y_padding
 
             # Create the candlestick chart
             candlestick = go.Candlestick(
@@ -1144,9 +1207,10 @@ class CryptoShell(cmd.Cmd):
 
             data = [candlestick, short_ma, long_ma, buy_signals, sell_signals]
 
+            # Update the layout to include the new y-axis range
             layout = go.Layout(
                 xaxis=dict(title='Time'),
-                yaxis=dict(title='Price ($)'),
+                yaxis=dict(title='Price ($)', range=[y_min, y_max]),
                 title='{} Candlestick Chart with Moving Averages and Trade Signals'.format(symbol.upper()),
                 height=600
             )
@@ -1157,21 +1221,24 @@ class CryptoShell(cmd.Cmd):
         def run_app():
             app.run_server(debug=False, use_reloader=False)
 
-        threading.Thread(target=run_app).start()
+        self.chart_thread = threading.Thread(target=run_app)
+        self.chart_thread.start()
         print("Dash app is running at http://127.0.0.1:8050/")
 
-    def do_exit(self, arg):
-        """Exit the program"""
-        return self.do_quit(arg)
+        # Wait a moment to ensure the server has started
+        time.sleep(1)
 
-
-def run_websocket(url, symbols, data_manager):
+def run_websocket(url, symbols, data_manager, stop_event):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    tasks = [subscribe_to_websocket(url, symbol, data_manager)
+    tasks = [subscribe_to_websocket(url, symbol, data_manager, stop_event)
              for symbol in symbols]
+
+    async def main():
+        await asyncio.gather(*tasks)
+
     try:
-        loop.run_until_complete(asyncio.gather(*tasks))
+        loop.run_until_complete(main())
     except Exception as e:
         data_manager.logger.error(
             "WebSocket thread encountered an error: {}".format(e))
@@ -1283,13 +1350,16 @@ def main():
     order_placer = OrderPlacer()
     data_manager.order_placer = order_placer  # Set order placer in data manager
 
+    # Create a stop event to signal threads to stop
+    stop_event = threading.Event()
+
     shell = CryptoShell(data_manager, order_placer, logger=logger,
-                        verbose=verbose_flag, live_trading=live_trading)
+                        verbose=verbose_flag, live_trading=live_trading, stop_event=stop_event)
 
     # Start WebSocket connections in a separate thread
     url = 'wss://ws.bitstamp.net'
     websocket_thread = threading.Thread(
-        target=run_websocket, args=(url, symbols, data_manager), daemon=True)
+        target=run_websocket, args=(url, symbols, data_manager, stop_event), daemon=True)
     websocket_thread.start()
     logger.debug("WebSocket thread started.")
 
@@ -1298,8 +1368,17 @@ def main():
         shell.cmdloop()
     except KeyboardInterrupt:
         print("\nInterrupted. Exiting...")
+        shell.do_quit(None)
+    finally:
+        # Ensure all threads are properly stopped
+        stop_event.set()
+        if websocket_thread.is_alive():
+            websocket_thread.join()
         if shell.auto_trader is not None and shell.auto_trader.running:
             shell.auto_trader.stop()
+        if shell.chart_thread is not None and shell.chart_thread.is_alive():
+            shell.stop_dash_app()
+            shell.chart_thread.join()
 
 
 if __name__ == '__main__':
