@@ -1,17 +1,6 @@
 #!/usr/bin/env python
 # src/tdr.py
 
-from indicators.technical_indicators import (
-    ensure_datetime_index,
-    add_moving_averages,
-    generate_ma_signals,
-    calculate_rsi,
-    generate_rsi_signals,
-    calculate_bollinger_bands,
-    generate_bollinger_band_signals,
-    calculate_macd,
-    generate_macd_signals,
-)
 import sys
 import os
 import pandas as pd
@@ -41,7 +30,6 @@ try:
 except ImportError:
     pass  # We will handle the ImportError in the do_chart method
 
-
 # Adjust sys.path to import modules from 'src' directory
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -49,8 +37,17 @@ sys.path.append(parent_dir)
 sys.path.append(current_dir)
 
 # Import necessary functions and modules from technical_indicators.py and other dependencies
-# Assuming there's a helper function print_strategy_results in utils.helpers
-# from utils.helpers import print_strategy_results  # Adjust if the path differs
+from indicators.technical_indicators import (
+    ensure_datetime_index,
+    add_moving_averages,
+    generate_ma_signals,
+    calculate_rsi,
+    generate_rsi_signals,
+    calculate_bollinger_bands,
+    generate_bollinger_band_signals,
+    calculate_macd,
+    generate_macd_signals,
+)
 
 # Import the same settings used in bktst.py
 HIGH_FREQUENCY = '1H'  # High-frequency resampling used in backtesting
@@ -396,10 +393,8 @@ class OrderPlacer:
             endpoint = "/api/v2/{}/{}".format(
                 'buy' if 'buy' in order_type else 'sell', currency_pair)
 
-        message = "BITSTAMP {}POSTwww.bitstamp.net{}{}{}v2{}".format(
-            self.api_key, endpoint, content_type, nonce, timestamp, urlencode(
-                payload)
-        )
+        message = 'BITSTAMP ' + self.api_key + 'POST' + 'www.bitstamp.net' + \
+            endpoint + content_type + nonce + timestamp + urlencode(payload)
         signature = hmac.new(self.api_secret, msg=message.encode(
             'utf-8'), digestmod=hashlib.sha256).hexdigest()
 
@@ -691,7 +686,8 @@ class CryptoShell(cmd.Cmd):
             'limit_sell': 'limit_sell btcusd 0.001 60000 ioc_order=true',
             'auto_trade': 'auto_trade 2',
             'stop_auto_trade': 'stop_auto_trade',
-            'status': 'status'
+            'status': 'status',
+            'chart': 'chart btcusd 1H'
         }
 
         # Register callbacks
@@ -1001,6 +997,7 @@ class CryptoShell(cmd.Cmd):
             print("  auto_trade       Start auto-trading using the best strategy")
             print("  stop_auto_trade  Stop auto-trading")
             print("  status           Show the status of auto-trading")
+            print("  chart            Show a live updating chart: chart [symbol] [bar_size]")
 
     def do_quit(self, arg):
         """Quit the program"""
@@ -1010,8 +1007,14 @@ class CryptoShell(cmd.Cmd):
         return True
 
     def do_chart(self, arg):
-        """Show a dynamically updating candlestick chart with moving averages and trade signals: chart [symbol]"""
-        symbol = arg.strip().lower() if arg.strip() else 'btcusd'
+        """Show a dynamically updating candlestick chart with moving averages and trade signals: chart [symbol] [bar_size]"""
+        args = arg.split()
+        symbol = 'btcusd'
+        bar_size = '1H'  # Default bar size is one hour
+        if len(args) >= 1:
+            symbol = args[0].strip().lower()
+        if len(args) >= 2:
+            bar_size = args[1].strip()
         if symbol not in self.data_manager.data:
             print("No data available for symbol '{}'.".format(symbol))
             return
@@ -1069,17 +1072,21 @@ class CryptoShell(cmd.Cmd):
             # Ensure datetime index
             df = ensure_datetime_index(df)
 
-            # Resample to hourly bars
-            df_resampled = df.resample('1H').agg({
-                'open': 'first',
-                'high': 'max',
-                'low': 'min',
-                'close': 'last',
-                'volume': 'sum',
-                'trades': 'sum',
-                'timestamp': 'last',
-                'source': 'last'
-            }).dropna()
+            try:
+                # Resample to the specified bar size
+                df_resampled = df.resample(bar_size).agg({
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum',
+                    'trades': 'sum',
+                    'timestamp': 'last',
+                    'source': 'last'
+                }).dropna()
+            except ValueError as e:
+                print(f"Invalid bar size '{bar_size}'. Please use a valid pandas resampling string like '1H', '15min', etc.")
+                return {}
 
             if len(df_resampled) < long_window:
                 return {}
@@ -1146,12 +1153,16 @@ class CryptoShell(cmd.Cmd):
 
             return {'data': data, 'layout': layout}
 
-    # Run the Dash app in a separate thread
-    def run_app():
-        app.run_server(debug=False, use_reloader=False)
+        # Run the Dash app in a separate thread
+        def run_app():
+            app.run_server(debug=False, use_reloader=False)
 
-    threading.Thread(target=run_app).start()
-    print("Dash app is running at http://127.0.0.1:8050/")
+        threading.Thread(target=run_app).start()
+        print("Dash app is running at http://127.0.0.1:8050/")
+
+    def do_exit(self, arg):
+        """Exit the program"""
+        return self.do_quit(arg)
 
 
 def run_websocket(url, symbols, data_manager):
