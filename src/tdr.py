@@ -19,7 +19,6 @@ import cmd
 import threading
 from datetime import datetime, timedelta
 import logging
-import threading
 
 # For the Plotly and Dash implementation
 try:
@@ -682,6 +681,7 @@ class CryptoShell(cmd.Cmd):
         self.auto_trader = None  # Initialize to None
         self.chart_thread = None
         self.chart_app = None
+        self.chart_process = None  # Add this line
         self.stop_event = stop_event
         self.examples = {
             'price': 'price btcusd',
@@ -1015,7 +1015,7 @@ class CryptoShell(cmd.Cmd):
         if self.auto_trader is not None and self.auto_trader.running:
             self.auto_trader.stop()
         # Stop Dash app
-        if self.chart_thread is not None and self.chart_thread.is_alive():
+        if self.chart_process is not None and self.chart_process.is_alive():
             self.stop_dash_app()
         # Set the stop event to signal threads to stop
         if self.stop_event:
@@ -1023,16 +1023,9 @@ class CryptoShell(cmd.Cmd):
         return True
 
     def stop_dash_app(self):
-        # Dash app runs in a separate thread with its own server
-        # Since Dash doesn't provide a built-in way to stop the server,
-        # we can use the Flask server's shutdown function
-        from flask import request
-
-        func = request.environ.get('werkzeug.server.shutdown')
-        if func is None:
-            print('Not running with the Werkzeug Server')
-        else:
-            func()
+        if self.chart_process and self.chart_process.is_alive():
+            self.chart_process.terminate()
+            self.chart_process.join()
             print('Dash app has been shut down.')
 
     def do_exit(self, arg):
@@ -1058,7 +1051,8 @@ class CryptoShell(cmd.Cmd):
             from dash.dependencies import Output, Input
             import plotly.graph_objs as go
             import threading
-            from flask import Flask
+            from flask import Flask, request
+            from multiprocessing import Process
         except ImportError:
             print("Required libraries are not installed. Please install them using 'pip install dash plotly'.")
             return
@@ -1089,7 +1083,10 @@ class CryptoShell(cmd.Cmd):
 
         app.layout = html.Div(children=[
             html.H1(children='{} Real-time Candlestick Chart'.format(symbol.upper())),
-            dcc.Graph(id='live-graph'),
+            dcc.Graph(
+                id='live-graph',
+                style={'width': '100%', 'height': '80vh'}  # Adjusts the graph size
+            ),
             dcc.Interval(
                 id='graph-update',
                 interval=60*1000,  # Update every minute
@@ -1143,7 +1140,7 @@ class CryptoShell(cmd.Cmd):
                 x_start = pd.to_datetime(relayout_data['xaxis.range[0]'])
                 x_end = pd.to_datetime(relayout_data['xaxis.range[1]'])
             else:
-                # Default to last 7 days if no relayout data is available
+                # Default to the current week if no relayout data is available
                 x_end = df_ma.index.max()
                 x_start = x_end - pd.Timedelta(days=7)
 
@@ -1165,41 +1162,41 @@ class CryptoShell(cmd.Cmd):
 
             # Create the candlestick chart
             candlestick = go.Candlestick(
-                x=df_ma.index,
-                open=df_ma['open'],
-                high=df_ma['high'],
-                low=df_ma['low'],
-                close=df_ma['close'],
+                x=df_visible.index,
+                open=df_visible['open'],
+                high=df_visible['high'],
+                low=df_visible['low'],
+                close=df_visible['close'],
                 name='Candlestick'
             )
 
             # Add moving averages
             short_ma = go.Scatter(
-                x=df_ma.index,
-                y=df_ma['Short_MA'],
+                x=df_visible.index,
+                y=df_visible['Short_MA'],
                 line=dict(color='blue', width=1),
                 name='Short MA ({})'.format(short_window)
             )
 
             long_ma = go.Scatter(
-                x=df_ma.index,
-                y=df_ma['Long_MA'],
+                x=df_visible.index,
+                y=df_visible['Long_MA'],
                 line=dict(color='red', width=1),
                 name='Long MA ({})'.format(long_window)
             )
 
             # Add buy/sell signals
             buy_signals = go.Scatter(
-                x=df_ma.index,
-                y=df_ma['Buy_Signal_Price'],
+                x=df_visible.index,
+                y=df_visible['Buy_Signal_Price'],
                 mode='markers',
                 marker=dict(symbol='triangle-up', color='green', size=12),
                 name='Buy Signal'
             )
 
             sell_signals = go.Scatter(
-                x=df_ma.index,
-                y=df_ma['Sell_Signal_Price'],
+                x=df_visible.index,
+                y=df_visible['Sell_Signal_Price'],
                 mode='markers',
                 marker=dict(symbol='triangle-down', color='red', size=12),
                 name='Sell Signal'
@@ -1207,26 +1204,27 @@ class CryptoShell(cmd.Cmd):
 
             data = [candlestick, short_ma, long_ma, buy_signals, sell_signals]
 
-            # Update the layout to include the new y-axis range
+            # Update the layout to include the new x-axis and y-axis ranges
             layout = go.Layout(
-                xaxis=dict(title='Time'),
+                xaxis=dict(title='Time', range=[x_start, x_end]),
                 yaxis=dict(title='Price ($)', range=[y_min, y_max]),
                 title='{} Candlestick Chart with Moving Averages and Trade Signals'.format(symbol.upper()),
-                height=600
+                height=800  # Adjust the height as needed
             )
 
             return {'data': data, 'layout': layout}
 
-        # Run the Dash app in a separate thread
+        # Run the Dash app in a separate process
         def run_app():
             app.run_server(debug=False, use_reloader=False)
 
-        self.chart_thread = threading.Thread(target=run_app)
-        self.chart_thread.start()
+        self.chart_process = Process(target=run_app)
+        self.chart_process.start()
         print("Dash app is running at http://127.0.0.1:8050/")
 
         # Wait a moment to ensure the server has started
         time.sleep(1)
+
 
 def run_websocket(url, symbols, data_manager, stop_event):
     loop = asyncio.new_event_loop()
@@ -1376,9 +1374,8 @@ def main():
             websocket_thread.join()
         if shell.auto_trader is not None and shell.auto_trader.running:
             shell.auto_trader.stop()
-        if shell.chart_thread is not None and shell.chart_thread.is_alive():
+        if shell.chart_process is not None and shell.chart_process.is_alive():
             shell.stop_dash_app()
-            shell.chart_thread.join()
 
 
 if __name__ == '__main__':
