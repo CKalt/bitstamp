@@ -19,6 +19,7 @@ import cmd
 import threading
 from datetime import datetime, timedelta
 import logging
+from multiprocessing import Process, Manager
 
 # For the Plotly and Dash implementation
 try:
@@ -176,7 +177,7 @@ def parse_log_file(file_path, start_date=None, end_date=None):
 class CryptoDataManager:
     def __init__(self, symbols, logger, verbose=False):
         self.data = {symbol: pd.DataFrame(columns=[
-                                          'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trades']) for symbol in symbols}
+            'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trades']) for symbol in symbols}
         self.candlesticks = {symbol: {} for symbol in symbols}
         self.candlestick_observers = []
         self.trade_observers = []
@@ -664,6 +665,172 @@ class MACrossoverStrategy:
         return status
 
 
+def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window):
+    # Since we cannot pass the data_manager object directly, we reconstruct it
+    # from the shared dictionary
+    import pandas as pd
+    import numpy as np
+    from flask import Flask, request
+    import threading
+
+    # Define the Dash app
+    server = Flask(__name__)
+    app = dash.Dash(__name__, server=server)
+
+    # Add a route to shut down the server
+    @server.route('/shutdown')
+    def shutdown():
+        func = request.environ.get('werkzeug.server.shutdown')
+        if func is None:
+            return 'Not running with the Werkzeug Server'
+        func()
+        return 'Server shutting down...'
+
+    app.layout = html.Div(children=[
+        html.H1(children='{} Real-time Candlestick Chart'.format(symbol.upper())),
+        dcc.Graph(
+            id='live-graph',
+            style={'width': '100%', 'height': '80vh'}  # Adjusts the graph size
+        ),
+        dcc.Interval(
+            id='graph-update',
+            interval=60*1000,  # Update every minute
+            n_intervals=0
+        )
+    ])
+
+    @app.callback(
+        Output('live-graph', 'figure'),
+        [Input('graph-update', 'n_intervals'),
+         Input('live-graph', 'relayoutData')]
+    )
+    def update_graph_live(n, relayout_data):
+        df = pd.DataFrame.from_dict(data_manager_dict[symbol])
+
+        if df.empty:
+            return {}
+
+        # Ensure datetime index
+        df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
+        df.set_index('datetime', inplace=True)
+
+        try:
+            # Resample to the specified bar size
+            df_resampled = df.resample(bar_size).agg({
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+                'volume': 'sum',
+                'trades': 'sum',
+                'timestamp': 'last',
+                'source': 'last'
+            }).dropna()
+        except ValueError as e:
+            print(f"Invalid bar size '{bar_size}'. Please use a valid pandas resampling string like '1H', '15min', etc.")
+            return {}
+
+        if len(df_resampled) < long_window:
+            return {}
+
+        # Compute moving averages
+        df_ma = add_moving_averages(df_resampled.copy(), short_window, long_window, price_col='close')
+        # Generate MA signals
+        df_ma = generate_ma_signals(df_ma)
+
+        # **Modification starts here**
+        # Identify points where the signal changes (crossovers)
+        df_ma['Signal_Change'] = df_ma['MA_Signal'].diff()
+
+        # Create Buy/Sell signal price columns only at the crossover points
+        df_ma['Buy_Signal_Price'] = np.where(
+            df_ma['Signal_Change'] == 2, df_ma['close'], np.nan)
+        df_ma['Sell_Signal_Price'] = np.where(
+            df_ma['Signal_Change'] == -2, df_ma['close'], np.nan)
+        # **Modification ends here**
+
+        # Determine the x-axis range from relayout_data
+        if relayout_data and 'xaxis.range[0]' in relayout_data and 'xaxis.range[1]' in relayout_data:
+            x_start = pd.to_datetime(relayout_data['xaxis.range[0]'])
+            x_end = pd.to_datetime(relayout_data['xaxis.range[1]'])
+        else:
+            # Default to the current week if no relayout data is available
+            x_end = df_ma.index.max()
+            x_start = x_end - pd.Timedelta(days=7)
+
+        # Filter data based on x-axis range
+        df_visible = df_ma[(df_ma.index >= x_start) & (df_ma.index <= x_end)]
+
+        if df_visible.empty:
+            # If no data is visible, use the entire data range
+            df_visible = df_ma
+
+        # Calculate min and max prices in the visible range
+        y_min = df_visible[['low', 'Short_MA', 'Long_MA', 'Buy_Signal_Price', 'Sell_Signal_Price']].min().min()
+        y_max = df_visible[['high', 'Short_MA', 'Long_MA', 'Buy_Signal_Price', 'Sell_Signal_Price']].max().max()
+
+        # Add some padding to y-axis limits
+        y_padding = (y_max - y_min) * 0.05  # 5% padding
+        y_min -= y_padding
+        y_max += y_padding
+
+        # Create the candlestick chart
+        candlestick = go.Candlestick(
+            x=df_visible.index,
+            open=df_visible['open'],
+            high=df_visible['high'],
+            low=df_visible['low'],
+            close=df_visible['close'],
+            name='Candlestick'
+        )
+
+        # Add moving averages
+        short_ma = go.Scatter(
+            x=df_visible.index,
+            y=df_visible['Short_MA'],
+            line=dict(color='blue', width=1),
+            name='Short MA ({})'.format(short_window)
+        )
+
+        long_ma = go.Scatter(
+            x=df_visible.index,
+            y=df_visible['Long_MA'],
+            line=dict(color='red', width=1),
+            name='Long MA ({})'.format(long_window)
+        )
+
+        # Add buy/sell signals
+        buy_signals = go.Scatter(
+            x=df_visible.index,
+            y=df_visible['Buy_Signal_Price'],
+            mode='markers',
+            marker=dict(symbol='triangle-up', color='green', size=12),
+            name='Buy Signal'
+        )
+
+        sell_signals = go.Scatter(
+            x=df_visible.index,
+            y=df_visible['Sell_Signal_Price'],
+            mode='markers',
+            marker=dict(symbol='triangle-down', color='red', size=12),
+            name='Sell Signal'
+        )
+
+        data = [candlestick, short_ma, long_ma, buy_signals, sell_signals]
+
+        # Update the layout to include the new x-axis and y-axis ranges
+        layout = go.Layout(
+            xaxis=dict(title='Time', range=[x_start, x_end]),
+            yaxis=dict(title='Price ($)', range=[y_min, y_max]),
+            title='{} Candlestick Chart with Moving Averages and Trade Signals'.format(symbol.upper()),
+            height=800  # Adjust the height as needed
+        )
+
+        return {'data': data, 'layout': layout}
+
+    app.run_server(debug=False, use_reloader=False)
+
+
 class CryptoShell(cmd.Cmd):
     intro = 'Welcome to the Crypto Shell. Type help or ? to list commands.\n'
     prompt = '(crypto) '
@@ -679,9 +846,7 @@ class CryptoShell(cmd.Cmd):
         self.verbose = verbose
         self.live_trading = live_trading
         self.auto_trader = None  # Initialize to None
-        self.chart_thread = None
-        self.chart_app = None
-        self.chart_process = None  # Add this line
+        self.chart_process = None
         self.stop_event = stop_event
         self.examples = {
             'price': 'price btcusd',
@@ -1024,9 +1189,13 @@ class CryptoShell(cmd.Cmd):
 
     def stop_dash_app(self):
         if self.chart_process and self.chart_process.is_alive():
-            self.chart_process.terminate()
-            self.chart_process.join()
-            print('Dash app has been shut down.')
+            import requests
+            try:
+                requests.get('http://127.0.0.1:8050/shutdown')
+                self.chart_process.join()
+                print('Dash app has been shut down.')
+            except Exception as e:
+                print('Failed to shut down Dash app:', e)
 
     def do_exit(self, arg):
         """Exit the program"""
@@ -1050,9 +1219,8 @@ class CryptoShell(cmd.Cmd):
             from dash import dcc, html
             from dash.dependencies import Output, Input
             import plotly.graph_objs as go
-            import threading
             from flask import Flask, request
-            from multiprocessing import Process
+            from multiprocessing import Process, Manager
         except ImportError:
             print("Required libraries are not installed. Please install them using 'pip install dash plotly'.")
             return
@@ -1076,149 +1244,21 @@ class CryptoShell(cmd.Cmd):
                 print("Could not determine moving average windows. Start auto_trading or provide best_strategy.json.")
                 return
 
-        # Define the Dash app
-        server = Flask(__name__)
-        app = dash.Dash(__name__, server=server)
-        self.chart_app = app  # Store the app reference
+        # Create a Manager dictionary to share data between processes
+        manager = Manager()
+        data_manager_dict = manager.dict()
+        data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
 
-        app.layout = html.Div(children=[
-            html.H1(children='{} Real-time Candlestick Chart'.format(symbol.upper())),
-            dcc.Graph(
-                id='live-graph',
-                style={'width': '100%', 'height': '80vh'}  # Adjusts the graph size
-            ),
-            dcc.Interval(
-                id='graph-update',
-                interval=60*1000,  # Update every minute
-                n_intervals=0
-            )
-        ])
+        # Update the data_manager_dict in a separate thread
+        def update_shared_data():
+            while True:
+                data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
+                time.sleep(60)
 
-        @app.callback(
-            Output('live-graph', 'figure'),
-            [Input('graph-update', 'n_intervals'),
-             Input('live-graph', 'relayoutData')]
-        )
-        def update_graph_live(n, relayout_data):
-            df = self.data_manager.get_price_dataframe(symbol)
-            if df.empty:
-                return {}
-
-            # Ensure datetime index
-            df = ensure_datetime_index(df)
-
-            try:
-                # Resample to the specified bar size
-                df_resampled = df.resample(bar_size).agg({
-                    'open': 'first',
-                    'high': 'max',
-                    'low': 'min',
-                    'close': 'last',
-                    'volume': 'sum',
-                    'trades': 'sum',
-                    'timestamp': 'last',
-                    'source': 'last'
-                }).dropna()
-            except ValueError as e:
-                print(f"Invalid bar size '{bar_size}'. Please use a valid pandas resampling string like '1H', '15min', etc.")
-                return {}
-
-            if len(df_resampled) < long_window:
-                return {}
-
-            # Compute moving averages
-            df_ma = add_moving_averages(df_resampled.copy(), short_window, long_window, price_col='close')
-            # Generate MA signals
-            df_ma = generate_ma_signals(df_ma)
-
-            # Create Buy/Sell signal price columns
-            df_ma['Buy_Signal_Price'] = np.where(df_ma['MA_Signal'] == 1, df_ma['close'], np.nan)
-            df_ma['Sell_Signal_Price'] = np.where(df_ma['MA_Signal'] == -1, df_ma['close'], np.nan)
-
-            # Determine the x-axis range from relayout_data
-            if relayout_data and 'xaxis.range[0]' in relayout_data and 'xaxis.range[1]' in relayout_data:
-                x_start = pd.to_datetime(relayout_data['xaxis.range[0]'])
-                x_end = pd.to_datetime(relayout_data['xaxis.range[1]'])
-            else:
-                # Default to the current week if no relayout data is available
-                x_end = df_ma.index.max()
-                x_start = x_end - pd.Timedelta(days=7)
-
-            # Filter data based on x-axis range
-            df_visible = df_ma[(df_ma.index >= x_start) & (df_ma.index <= x_end)]
-
-            if df_visible.empty:
-                # If no data is visible, use the entire data range
-                df_visible = df_ma
-
-            # Calculate min and max prices in the visible range
-            y_min = df_visible[['low', 'Short_MA', 'Long_MA', 'Buy_Signal_Price', 'Sell_Signal_Price']].min().min()
-            y_max = df_visible[['high', 'Short_MA', 'Long_MA', 'Buy_Signal_Price', 'Sell_Signal_Price']].max().max()
-
-            # Add some padding to y-axis limits
-            y_padding = (y_max - y_min) * 0.05  # 5% padding
-            y_min -= y_padding
-            y_max += y_padding
-
-            # Create the candlestick chart
-            candlestick = go.Candlestick(
-                x=df_visible.index,
-                open=df_visible['open'],
-                high=df_visible['high'],
-                low=df_visible['low'],
-                close=df_visible['close'],
-                name='Candlestick'
-            )
-
-            # Add moving averages
-            short_ma = go.Scatter(
-                x=df_visible.index,
-                y=df_visible['Short_MA'],
-                line=dict(color='blue', width=1),
-                name='Short MA ({})'.format(short_window)
-            )
-
-            long_ma = go.Scatter(
-                x=df_visible.index,
-                y=df_visible['Long_MA'],
-                line=dict(color='red', width=1),
-                name='Long MA ({})'.format(long_window)
-            )
-
-            # Add buy/sell signals
-            buy_signals = go.Scatter(
-                x=df_visible.index,
-                y=df_visible['Buy_Signal_Price'],
-                mode='markers',
-                marker=dict(symbol='triangle-up', color='green', size=12),
-                name='Buy Signal'
-            )
-
-            sell_signals = go.Scatter(
-                x=df_visible.index,
-                y=df_visible['Sell_Signal_Price'],
-                mode='markers',
-                marker=dict(symbol='triangle-down', color='red', size=12),
-                name='Sell Signal'
-            )
-
-            data = [candlestick, short_ma, long_ma, buy_signals, sell_signals]
-
-            # Update the layout to include the new x-axis and y-axis ranges
-            layout = go.Layout(
-                xaxis=dict(title='Time', range=[x_start, x_end]),
-                yaxis=dict(title='Price ($)', range=[y_min, y_max]),
-                title='{} Candlestick Chart with Moving Averages and Trade Signals'.format(symbol.upper()),
-                height=800  # Adjust the height as needed
-            )
-
-            return {'data': data, 'layout': layout}
+        threading.Thread(target=update_shared_data, daemon=True).start()
 
         # Run the Dash app in a separate process
-        def run_app():
-            app.run_server(debug=False, use_reloader=False)
-
-        self.chart_process = Process(target=run_app)
+        self.chart_process = Process(target=run_dash_app, args=(data_manager_dict, symbol, bar_size, short_window, long_window))
         self.chart_process.start()
         print("Dash app is running at http://127.0.0.1:8050/")
 
@@ -1379,4 +1419,7 @@ def main():
 
 
 if __name__ == '__main__':
+    # Set the start method to 'spawn' to avoid issues on macOS
+    from multiprocessing import set_start_method
+    set_start_method('spawn')
     main()
