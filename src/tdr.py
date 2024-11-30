@@ -1,6 +1,17 @@
 #!/usr/bin/env python
 # src/tdr.py
 
+from indicators.technical_indicators import (
+    ensure_datetime_index,
+    add_moving_averages,
+    generate_ma_signals,
+    calculate_rsi,
+    generate_rsi_signals,
+    calculate_bollinger_bands,
+    generate_bollinger_band_signals,
+    calculate_macd,
+    generate_macd_signals,
+)
 import sys
 import os
 import pandas as pd
@@ -19,6 +30,17 @@ import cmd
 import threading
 from datetime import datetime, timedelta
 import logging
+import threading
+
+# For the Plotly and Dash implementation
+try:
+    import dash
+    from dash import dcc, html
+    from dash.dependencies import Output, Input
+    import plotly.graph_objs as go
+except ImportError:
+    pass  # We will handle the ImportError in the do_chart method
+
 
 # Adjust sys.path to import modules from 'src' directory
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -27,22 +49,12 @@ sys.path.append(parent_dir)
 sys.path.append(current_dir)
 
 # Import necessary functions and modules from technical_indicators.py and other dependencies
-from indicators.technical_indicators import (
-    ensure_datetime_index,
-    add_moving_averages,
-    generate_ma_signals,
-    calculate_rsi,
-    generate_rsi_signals,
-    calculate_bollinger_bands,
-    generate_bollinger_band_signals,
-    calculate_macd,
-    generate_macd_signals,
-)
 # Assuming there's a helper function print_strategy_results in utils.helpers
 # from utils.helpers import print_strategy_results  # Adjust if the path differs
 
 # Import the same settings used in bktst.py
 HIGH_FREQUENCY = '1H'  # High-frequency resampling used in backtesting
+
 
 def parse_log_file(file_path, start_date=None, end_date=None):
     """
@@ -75,7 +87,8 @@ def parse_log_file(file_path, start_date=None, end_date=None):
 
     # Prepare progress thresholds
     progress_percentages = list(range(1, 101))  # [1, 2, ..., 100]
-    progress_thresholds = [int(total_lines * p / 100) for p in progress_percentages]
+    progress_thresholds = [int(total_lines * p / 100)
+                           for p in progress_percentages]
     next_progress_idx = 0
 
     # Time-based progress feedback
@@ -137,21 +150,24 @@ def parse_log_file(file_path, start_date=None, end_date=None):
             # Progress feedback based on line count
             if next_progress_idx < len(progress_thresholds) and idx >= progress_thresholds[next_progress_idx]:
                 progress = progress_percentages[next_progress_idx]
-                print("Parsing log file: {}% completed.".format(progress), flush=True)
+                print("Parsing log file: {}% completed.".format(
+                    progress), flush=True)
                 next_progress_idx += 1
 
             # Time-based progress feedback every 'feedback_interval' seconds
             current_time = time.time()
             if current_time - last_feedback_time >= feedback_interval:
                 percent_complete = (idx / total_lines) * 100
-                print("Parsing log file: {:.2f}% completed.".format(percent_complete), flush=True)
+                print("Parsing log file: {:.2f}% completed.".format(
+                    percent_complete), flush=True)
                 last_feedback_time = current_time
 
     # Ensure 100% is printed
     if next_progress_idx < len(progress_thresholds):
         print("Parsing log file: 100% completed.", flush=True)
 
-    print("Finished parsing log file. Total lines: {}, Valid trades: {}".format(total_lines, valid_lines))
+    print("Finished parsing log file. Total lines: {}, Valid trades: {}".format(
+        total_lines, valid_lines))
 
     # Convert minute_bars to DataFrame
     df = pd.DataFrame.from_dict(minute_bars, orient='index')
@@ -160,9 +176,11 @@ def parse_log_file(file_path, start_date=None, end_date=None):
 
     return df
 
+
 class CryptoDataManager:
     def __init__(self, symbols, logger, verbose=False):
-        self.data = {symbol: pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'trades']) for symbol in symbols}
+        self.data = {symbol: pd.DataFrame(columns=[
+                                          'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trades']) for symbol in symbols}
         self.candlesticks = {symbol: {} for symbol in symbols}
         self.candlestick_observers = []
         self.trade_observers = []
@@ -182,8 +200,10 @@ class CryptoDataManager:
             self.data[symbol] = df.reset_index(drop=True)
             if not df.empty:
                 self.last_price[symbol] = df.iloc[-1]['close']
-                self.logger.debug("Loaded historical data for {}, last price: {}".format(symbol, self.last_price[symbol]))
-            print("Loaded historical data for {} ({}/{})".format(symbol, idx, total_symbols))
+                self.logger.debug("Loaded historical data for {}, last price: {}".format(
+                    symbol, self.last_price[symbol]))
+            print(
+                "Loaded historical data for {} ({}/{})".format(symbol, idx, total_symbols))
 
     def add_candlestick_observer(self, callback):
         self.candlestick_observers.append(callback)
@@ -251,7 +271,8 @@ class CryptoDataManager:
             df['source'] = pd.Series(dtype=str)
         # Add live candlesticks
         if symbol in self.candlesticks:
-            live_df = pd.DataFrame.from_dict(self.candlesticks[symbol], orient='index')
+            live_df = pd.DataFrame.from_dict(
+                self.candlesticks[symbol], orient='index')
             live_df.sort_index(inplace=True)
             live_df['source'] = 'live'
             df = pd.concat([df, live_df], ignore_index=True)
@@ -262,6 +283,7 @@ class CryptoDataManager:
 
     def get_data_point_count(self, symbol):
         return len(self.data[symbol])
+
 
 class Trade:
     def __init__(self, trade_type, symbol, amount, price, timestamp, reason, data_source, signal_timestamp, live_trading=False, order_result=None):
@@ -292,14 +314,17 @@ class Trade:
             trade_info['order_result'] = self.order_result
         return trade_info
 
+
 async def subscribe_to_websocket(url: str, symbol: str, data_manager):
     channel = f"live_trades_{symbol}"
 
     while True:  # Keep trying to reconnect
         try:
-            data_manager.logger.info("{}: Attempting to connect to WebSocket...".format(symbol))
+            data_manager.logger.info(
+                "{}: Attempting to connect to WebSocket...".format(symbol))
             async with websockets.connect(url) as websocket:
-                data_manager.logger.info("{}: Connected to WebSocket.".format(symbol))
+                data_manager.logger.info(
+                    "{}: Connected to WebSocket.".format(symbol))
 
                 # Subscribing to the channel.
                 subscribe_message = {
@@ -309,7 +334,8 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
                     }
                 }
                 await websocket.send(json.dumps(subscribe_message))
-                data_manager.logger.info("{}: Subscribed to channel: {}".format(symbol, channel))
+                data_manager.logger.info(
+                    "{}: Subscribed to channel: {}".format(symbol, channel))
 
                 # Receiving messages.
                 async for message in websocket:
@@ -318,13 +344,16 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager):
                     if data.get('event') == 'trade':
                         price = data['data']['price']
                         timestamp = int(float(data['data']['timestamp']))
-                        data_manager.add_trade(symbol, price, timestamp, trade_reason="Live Trade")
+                        data_manager.add_trade(
+                            symbol, price, timestamp, trade_reason="Live Trade")
 
         except websockets.ConnectionClosed:
-            data_manager.logger.error("{}: Connection closed, trying to reconnect in 5 seconds...".format(symbol))
+            data_manager.logger.error(
+                "{}: Connection closed, trying to reconnect in 5 seconds...".format(symbol))
             await asyncio.sleep(5)
         except Exception as e:
-            data_manager.logger.error("{}: An error occurred: {}".format(symbol, str(e)))
+            data_manager.logger.error(
+                "{}: An error occurred: {}".format(symbol, str(e)))
             await asyncio.sleep(5)
 
 
@@ -342,7 +371,8 @@ class OrderPlacer:
             with open(file_path, 'r') as f:
                 return json.load(f)
         except Exception as e:
-            raise Exception("Failed to read config file '{}': {}".format(file_name, e))
+            raise Exception(
+                "Failed to read config file '{}': {}".format(file_name, e))
 
     def place_order(self, order_type, currency_pair, amount, price=None, **kwargs):
         timestamp = str(int(round(time.time() * 1000)))
@@ -356,17 +386,22 @@ class OrderPlacer:
         # Add additional parameters for limit orders
         for key, value in kwargs.items():
             if value is not None:
-                payload[key] = str(value).lower() if isinstance(value, bool) else str(value)
+                payload[key] = str(value).lower() if isinstance(
+                    value, bool) else str(value)
 
         if 'market' in order_type:
-            endpoint = "/api/v2/{}/market/{}/".format('buy' if 'buy' in order_type else 'sell', currency_pair)
+            endpoint = "/api/v2/{}/market/{}/".format(
+                'buy' if 'buy' in order_type else 'sell', currency_pair)
         else:
-            endpoint = "/api/v2/{}/{}".format('buy' if 'buy' in order_type else 'sell', currency_pair)
+            endpoint = "/api/v2/{}/{}".format(
+                'buy' if 'buy' in order_type else 'sell', currency_pair)
 
         message = "BITSTAMP {}POSTwww.bitstamp.net{}{}{}v2{}".format(
-            self.api_key, endpoint, content_type, nonce, timestamp, urlencode(payload)
+            self.api_key, endpoint, content_type, nonce, timestamp, urlencode(
+                payload)
         )
-        signature = hmac.new(self.api_secret, msg=message.encode('utf-8'), digestmod=hashlib.sha256).hexdigest()
+        signature = hmac.new(self.api_secret, msg=message.encode(
+            'utf-8'), digestmod=hashlib.sha256).hexdigest()
 
         headers = {
             'X-Auth': "BITSTAMP {}".format(self.api_key),
@@ -413,7 +448,8 @@ class MACrossoverStrategy:
         self.next_trigger = None
         self.current_trends = {}
         self.df_ma = pd.DataFrame()
-        self.strategy_start_time = datetime.now()  # Record the time when the strategy starts
+        # Record the time when the strategy starts
+        self.strategy_start_time = datetime.now()
 
     def start(self):
         self.running = True
@@ -429,10 +465,12 @@ class MACrossoverStrategy:
                 # Use current working directory
                 file_path = os.path.abspath(self.trade_log_file)
                 with open(file_path, 'w') as f:
-                    json.dump([trade.to_dict() for trade in self.trade_log], f, indent=2)
+                    json.dump([trade.to_dict()
+                              for trade in self.trade_log], f, indent=2)
                 self.logger.info("Trades logged to '{}'".format(file_path))
             except Exception as e:
-                self.logger.error("Failed to write trades to '{}': {}".format(self.trade_log_file, e))
+                self.logger.error(
+                    "Failed to write trades to '{}': {}".format(self.trade_log_file, e))
 
     def run_strategy_loop(self):
         while self.running:
@@ -455,7 +493,8 @@ class MACrossoverStrategy:
 
                     if len(df_resampled) >= self.long_window:
                         # Calculate moving averages with 'close' as the price column
-                        df_ma = add_moving_averages(df_resampled.copy(), self.short_window, self.long_window, price_col='close')
+                        df_ma = add_moving_averages(
+                            df_resampled.copy(), self.short_window, self.long_window, price_col='close')
                         # Generate MA signals
                         df_ma = generate_ma_signals(df_ma)
                         # Get the latest signal
@@ -466,15 +505,20 @@ class MACrossoverStrategy:
                         self.next_trigger = self.determine_next_trigger(df_ma)
                         self.current_trends = self.get_current_trends(df_ma)
                         self.df_ma = df_ma  # Store df_ma for status reporting
-                        self.check_for_signals(latest_signal, current_price, signal_time)
+                        self.check_for_signals(
+                            latest_signal, current_price, signal_time)
                     else:
-                        self.logger.debug("Not enough data to compute moving averages.")
+                        self.logger.debug(
+                            "Not enough data to compute moving averages.")
                 except KeyError as e:
-                    self.logger.error("Missing column during strategy loop: {}".format(e))
+                    self.logger.error(
+                        "Missing column during strategy loop: {}".format(e))
                 except Exception as e:
-                    self.logger.error("Error during strategy loop: {}".format(e))
+                    self.logger.error(
+                        "Error during strategy loop: {}".format(e))
             else:
-                self.logger.debug("No data available for {} to run strategy.".format(self.symbol))
+                self.logger.debug(
+                    "No data available for {} to run strategy.".format(self.symbol))
             time.sleep(60)  # Check every minute
 
     def determine_next_trigger(self, df_ma):
@@ -567,10 +611,12 @@ class MACrossoverStrategy:
             result = self.order_placer.place_order(
                 "market-{}".format(trade_type), self.symbol, self.amount
             )
-            self.logger.info("Executed live {} order: {}".format(trade_type, result))
+            self.logger.info(
+                "Executed live {} order: {}".format(trade_type, result))
             trade_info.order_result = result
         else:
-            self.logger.info("Executed dry run {} order: {}".format(trade_type, trade_info.to_dict()))
+            self.logger.info("Executed dry run {} order: {}".format(
+                trade_type, trade_info.to_dict()))
             self.trade_log.append(trade_info)
 
         # Write the trade_info to the trade log file
@@ -581,7 +627,8 @@ class MACrossoverStrategy:
                 f.write(json.dumps(trade_info.to_dict()) + '\n')
             self.logger.debug("Trade info written to '{}'".format(file_path))
         except Exception as e:
-            self.logger.error("Failed to write trade to log file: {}".format(e))
+            self.logger.error(
+                "Failed to write trade to log file: {}".format(e))
 
     def get_status(self):
         """Return the current status of the strategy."""
@@ -600,15 +647,19 @@ class MACrossoverStrategy:
         if self.last_trade_reason:
             status['last_trade'] = self.last_trade_reason
             status['last_trade_data_source'] = self.last_trade_data_source
-            status['last_trade_signal_timestamp'] = self.last_trade_signal_timestamp.strftime('%Y-%m-%d %H:%M:%S') if self.last_trade_signal_timestamp else None
+            status['last_trade_signal_timestamp'] = self.last_trade_signal_timestamp.strftime(
+                '%Y-%m-%d %H:%M:%S') if self.last_trade_signal_timestamp else None
 
         # Calculate current MA difference
         if hasattr(self, 'df_ma') and not self.df_ma.empty:
-            status['ma_difference'] = self.df_ma.iloc[-1]['Short_MA'] - self.df_ma.iloc[-1]['Long_MA']
+            status['ma_difference'] = self.df_ma.iloc[-1]['Short_MA'] - \
+                self.df_ma.iloc[-1]['Long_MA']
             # Calculate MA slopes
             if len(self.df_ma) >= 2:
-                short_ma_slope = self.df_ma.iloc[-1]['Short_MA'] - self.df_ma.iloc[-2]['Short_MA']
-                long_ma_slope = self.df_ma.iloc[-1]['Long_MA'] - self.df_ma.iloc[-2]['Long_MA']
+                short_ma_slope = self.df_ma.iloc[-1]['Short_MA'] - \
+                    self.df_ma.iloc[-2]['Short_MA']
+                long_ma_slope = self.df_ma.iloc[-1]['Long_MA'] - \
+                    self.df_ma.iloc[-2]['Long_MA']
                 status['ma_slope_difference'] = short_ma_slope - long_ma_slope
         return status
 
@@ -658,7 +709,8 @@ class CryptoShell(cmd.Cmd):
             print("Example usage of '{}':".format(command))
             print("  {}".format(self.examples[command]))
         else:
-            print("No example available for '{}'. Available commands are:".format(command))
+            print(
+                "No example available for '{}'. Available commands are:".format(command))
             print(", ".join(self.examples.keys()))
 
     def do_price(self, arg):
@@ -680,12 +732,14 @@ class CryptoShell(cmd.Cmd):
             print("Usage: range <symbol> <minutes>")
             return
         symbol, minutes = args[0].lower(), int(args[1])
-        min_price, max_price = self.data_manager.get_price_range(symbol, minutes)
+        min_price, max_price = self.data_manager.get_price_range(
+            symbol, minutes)
         if min_price is not None and max_price is not None:
             print("Price range for {} in last {} minutes:".format(symbol, minutes))
             print("Min: ${:.2f}, Max: ${:.2f}".format(min_price, max_price))
         else:
-            print("No data available for {} in the last {} minutes".format(symbol, minutes))
+            print("No data available for {} in the last {} minutes".format(
+                symbol, minutes))
 
     def do_buy(self, arg):
         """Place a market buy order: buy <symbol> <amount>"""
@@ -735,15 +789,18 @@ class CryptoShell(cmd.Cmd):
 
     def candlestick_callback(self, symbol, minute, candle):
         if symbol in self.candlestick_output:
-            timestamp = datetime.fromtimestamp(candle['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+            timestamp = datetime.fromtimestamp(
+                candle['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
             print("{} - {}: Open: ${:.2f}, High: ${:.2f}, Low: ${:.2f}, Close: ${:.2f}, Volume: {}, Trades: {}".format(
-                symbol, timestamp, candle['open'], candle['high'], candle['low'], candle['close'], candle['volume'], candle['trades']
+                symbol, timestamp, candle['open'], candle['high'], candle[
+                    'low'], candle['close'], candle['volume'], candle['trades']
             ))
 
     def trade_callback(self, symbol, price, timestamp, trade_reason):
         if symbol in self.ticker_output:
             # Convert UNIX timestamp to readable format
-            time_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+            time_str = datetime.fromtimestamp(
+                timestamp).strftime('%Y-%m-%d %H:%M:%S')
             print("{} - {}: Price: ${:.2f}".format(symbol, time_str, price))
 
     def do_verbose(self, arg):
@@ -761,7 +818,8 @@ class CryptoShell(cmd.Cmd):
                 if not debug_handlers:
                     debug_stream_handler = logging.StreamHandler(sys.stderr)
                     debug_stream_handler.setLevel(logging.DEBUG)
-                    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+                    formatter = logging.Formatter(
+                        '%(asctime)s - %(levelname)s - %(message)s')
                     debug_stream_handler.setFormatter(formatter)
                     self.logger.addHandler(debug_stream_handler)
                 self.data_manager.set_verbose(True)
@@ -781,12 +839,14 @@ class CryptoShell(cmd.Cmd):
                 log_file_path = os.path.abspath(log_file)
                 file_handler = logging.FileHandler(log_file_path)
                 file_handler.setLevel(logging.DEBUG)
-                formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+                formatter = logging.Formatter(
+                    '%(asctime)s - %(levelname)s - %(message)s')
                 file_handler.setFormatter(formatter)
                 self.logger.addHandler(file_handler)
                 self.data_manager.set_verbose(True)
                 self.verbose = True
-                print("Verbose mode enabled. Logs are being written to {}.".format(log_file_path))
+                print("Verbose mode enabled. Logs are being written to {}.".format(
+                    log_file_path))
             except Exception as e:
                 print("Failed to open log file {}: {}".format(log_file, e))
 
@@ -798,7 +858,8 @@ class CryptoShell(cmd.Cmd):
             return
         symbol, amount, price = args[0].lower(), float(args[1]), float(args[2])
         options = self.parse_order_options(args[3:])
-        result = self.order_placer.place_limit_buy_order(symbol, amount, price, **options)
+        result = self.order_placer.place_limit_buy_order(
+            symbol, amount, price, **options)
         print(json.dumps(result, indent=2))
 
     def do_limit_sell(self, arg):
@@ -809,7 +870,8 @@ class CryptoShell(cmd.Cmd):
             return
         symbol, amount, price = args[0].lower(), float(args[1]), float(args[2])
         options = self.parse_order_options(args[3:])
-        result = self.order_placer.place_limit_sell_order(symbol, amount, price, **options)
+        result = self.order_placer.place_limit_sell_order(
+            symbol, amount, price, **options)
         print(json.dumps(result, indent=2))
 
     def parse_order_options(self, args):
@@ -823,20 +885,23 @@ class CryptoShell(cmd.Cmd):
                     try:
                         options[key] = int(value)
                     except ValueError:
-                        print("Invalid value for {}: {}. It should be an integer.".format(key, value))
+                        print(
+                            "Invalid value for {}: {}. It should be an integer.".format(key, value))
                 elif key == 'client_order_id':
                     options[key] = value
                 elif key == 'limit_price':
                     try:
                         options[key] = float(value)
                     except ValueError:
-                        print("Invalid value for {}: {}. It should be a float.".format(key, value))
+                        print(
+                            "Invalid value for {}: {}. It should be a float.".format(key, value))
         return options
 
     def do_auto_trade(self, arg):
         """Start auto-trading using the best strategy: auto_trade <amount>"""
         if self.auto_trader is not None and self.auto_trader.running:
-            print("Auto-trading is already running. Please stop it before starting a new one.")
+            print(
+                "Auto-trading is already running. Please stop it before starting a new one.")
             return
 
         args = arg.split()
@@ -862,12 +927,14 @@ class CryptoShell(cmd.Cmd):
             print("Best strategy parameters file '{}' not found.".format(file_path))
             return
         except json.JSONDecodeError:
-            print("Best strategy parameters file '{}' is not a valid JSON.".format(file_path))
+            print(
+                "Best strategy parameters file '{}' is not a valid JSON.".format(file_path))
             return
 
         strategy_name = best_strategy_params.get('Strategy')
         if strategy_name != 'MA':
-            print("The best strategy is not MA Crossover. It's {}.".format(strategy_name))
+            print("The best strategy is not MA Crossover. It's {}.".format(
+                strategy_name))
             return
 
         try:
@@ -883,7 +950,8 @@ class CryptoShell(cmd.Cmd):
             self.data_manager, short_window, long_window, amount, symbol, self.logger, live_trading=self.live_trading)
         self.auto_trader.start()
         print("Auto-trading started with amount {} using MA Crossover strategy.".format(amount))
-        print("Trades will be logged to '{}'.".format(self.auto_trader.trade_log_file))
+        print("Trades will be logged to '{}'.".format(
+            self.auto_trader.trade_log_file))
         if not self.live_trading:
             print("Running in dry run mode.")
 
@@ -899,14 +967,17 @@ class CryptoShell(cmd.Cmd):
         """Show the status of auto-trading."""
         if self.auto_trader is not None and self.auto_trader.running:
             status = self.auto_trader.get_status()
-            position = {1: 'Long', -1: 'Short', 0: 'Neutral'}.get(status['position'], 'Unknown')
+            position = {1: 'Long', -1: 'Short',
+                        0: 'Neutral'}.get(status['position'], 'Unknown')
             print("Auto-Trading Status:")
             print("  Running: {}".format(status['running']))
             print("  Position: {}".format(position))
             if status['last_trade']:
                 print("  Last Trade Reason: {}".format(status['last_trade']))
-                print("  Last Trade Based On: {} Data".format(status['last_trade_data_source'].capitalize()))
-                print("  Signal Timestamp: {}".format(status['last_trade_signal_timestamp']))
+                print("  Last Trade Based On: {} Data".format(
+                    status['last_trade_data_source'].capitalize()))
+                print("  Signal Timestamp: {}".format(
+                    status['last_trade_signal_timestamp']))
             if status['next_trigger']:
                 print("  {}".format(status['next_trigger']))
             if status['current_trends']:
@@ -914,9 +985,11 @@ class CryptoShell(cmd.Cmd):
                 for key, value in status['current_trends'].items():
                     print("    {}: {}".format(key, value))
             if status['ma_difference'] is not None:
-                print("  Current MA Difference (Short MA - Long MA): {:.6f}".format(status['ma_difference']))
+                print(
+                    "  Current MA Difference (Short MA - Long MA): {:.6f}".format(status['ma_difference']))
             if status['ma_slope_difference'] is not None:
-                print("  Current MA Slope Difference (Short MA Slope - Long MA Slope): {:.6f}".format(status['ma_slope_difference']))
+                print("  Current MA Slope Difference (Short MA Slope - Long MA Slope): {:.6f}".format(
+                    status['ma_slope_difference']))
         else:
             print("Auto-trading is not running.")
 
@@ -936,15 +1009,161 @@ class CryptoShell(cmd.Cmd):
             self.auto_trader.stop()
         return True
 
+    def do_chart(self, arg):
+        """Show a dynamically updating candlestick chart with moving averages and trade signals: chart [symbol]"""
+        symbol = arg.strip().lower() if arg.strip() else 'btcusd'
+        if symbol not in self.data_manager.data:
+            print("No data available for symbol '{}'.".format(symbol))
+            return
+
+        try:
+            import dash
+            from dash import dcc, html
+            from dash.dependencies import Output, Input
+            import plotly.graph_objs as go
+            import threading
+        except ImportError:
+            print("Required libraries are not installed. Please install them using 'pip install dash plotly'.")
+            return
+
+        # Determine moving average windows
+        if self.auto_trader and isinstance(self.auto_trader, MACrossoverStrategy):
+            short_window = self.auto_trader.short_window
+            long_window = self.auto_trader.long_window
+        else:
+            # Try to read from best_strategy.json
+            try:
+                with open('best_strategy.json', 'r') as f:
+                    best_strategy_params = json.load(f)
+                    if best_strategy_params.get('Strategy') == 'MA':
+                        short_window = int(best_strategy_params['Short_Window'])
+                        long_window = int(best_strategy_params['Long_Window'])
+                    else:
+                        print("Best strategy is not MA Crossover.")
+                        return
+            except Exception as e:
+                print("Could not determine moving average windows. Start auto_trading or provide best_strategy.json.")
+                return
+
+        # Define the Dash app
+        app = dash.Dash(__name__)
+        app.layout = html.Div(children=[
+            html.H1(children='{} Real-time Candlestick Chart'.format(symbol.upper())),
+            dcc.Graph(id='live-graph'),
+            dcc.Interval(
+                id='graph-update',
+                interval=60*1000,  # Update every minute
+                n_intervals=0
+            )
+        ])
+
+        @app.callback(
+            Output('live-graph', 'figure'),
+            Input('graph-update', 'n_intervals')
+        )
+        def update_graph_live(n):
+            df = self.data_manager.get_price_dataframe(symbol)
+            if df.empty:
+                return {}
+
+            # Ensure datetime index
+            df = ensure_datetime_index(df)
+
+            # Resample to hourly bars
+            df_resampled = df.resample('1H').agg({
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+                'volume': 'sum',
+                'trades': 'sum',
+                'timestamp': 'last',
+                'source': 'last'
+            }).dropna()
+
+            if len(df_resampled) < long_window:
+                return {}
+
+            # Compute moving averages
+            df_ma = add_moving_averages(df_resampled.copy(), short_window, long_window, price_col='close')
+            # Generate MA signals
+            df_ma = generate_ma_signals(df_ma)
+
+            # Create Buy/Sell signal price columns
+            df_ma['Buy_Signal_Price'] = np.where(df_ma['MA_Signal'] == 1, df_ma['close'], np.nan)
+            df_ma['Sell_Signal_Price'] = np.where(df_ma['MA_Signal'] == -1, df_ma['close'], np.nan)
+
+            # Create the candlestick chart
+            candlestick = go.Candlestick(
+                x=df_ma.index,
+                open=df_ma['open'],
+                high=df_ma['high'],
+                low=df_ma['low'],
+                close=df_ma['close'],
+                name='Candlestick'
+            )
+
+            # Add moving averages
+            short_ma = go.Scatter(
+                x=df_ma.index,
+                y=df_ma['Short_MA'],
+                line=dict(color='blue', width=1),
+                name='Short MA ({})'.format(short_window)
+            )
+
+            long_ma = go.Scatter(
+                x=df_ma.index,
+                y=df_ma['Long_MA'],
+                line=dict(color='red', width=1),
+                name='Long MA ({})'.format(long_window)
+            )
+
+            # Add buy/sell signals
+            buy_signals = go.Scatter(
+                x=df_ma.index,
+                y=df_ma['Buy_Signal_Price'],
+                mode='markers',
+                marker=dict(symbol='triangle-up', color='green', size=12),
+                name='Buy Signal'
+            )
+
+            sell_signals = go.Scatter(
+                x=df_ma.index,
+                y=df_ma['Sell_Signal_Price'],
+                mode='markers',
+                marker=dict(symbol='triangle-down', color='red', size=12),
+                name='Sell Signal'
+            )
+
+            data = [candlestick, short_ma, long_ma, buy_signals, sell_signals]
+
+            layout = go.Layout(
+                xaxis=dict(title='Time'),
+                yaxis=dict(title='Price ($)'),
+                title='{} Candlestick Chart with Moving Averages and Trade Signals'.format(symbol.upper()),
+                height=600
+            )
+
+            return {'data': data, 'layout': layout}
+
+    # Run the Dash app in a separate thread
+    def run_app():
+        app.run_server(debug=False, use_reloader=False)
+
+    threading.Thread(target=run_app).start()
+    print("Dash app is running at http://127.0.0.1:8050/")
+
 
 def run_websocket(url, symbols, data_manager):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    tasks = [subscribe_to_websocket(url, symbol, data_manager) for symbol in symbols]
+    tasks = [subscribe_to_websocket(url, symbol, data_manager)
+             for symbol in symbols]
     try:
         loop.run_until_complete(asyncio.gather(*tasks))
     except Exception as e:
-        data_manager.logger.error("WebSocket thread encountered an error: {}".format(e))
+        data_manager.logger.error(
+            "WebSocket thread encountered an error: {}".format(e))
     finally:
         loop.close()
 
@@ -978,7 +1197,8 @@ def main():
     parser = argparse.ArgumentParser(description="Crypto trading shell")
     parser.add_argument('-v', '--verbose', nargs='?', const=True, default=False,
                         help="Enable verbose output and optionally specify a log file (e.g., --verbose logfile.log)")
-    parser.add_argument('--do-live-trades', action='store_true', help="Enable live trading (default is dry run)")
+    parser.add_argument('--do-live-trades', action='store_true',
+                        help="Enable live trading (default is dry run)")
     args = parser.parse_args()
 
     # Setup logging based on verbose argument
@@ -1000,11 +1220,13 @@ def main():
         print("Live trading is DISABLED. Running in dry run mode.")
 
     symbols = ["btcusd"]  # Adjust as needed
-    data_manager = CryptoDataManager(symbols, logger=logger, verbose=verbose_flag)
+    data_manager = CryptoDataManager(
+        symbols, logger=logger, verbose=verbose_flag)
 
     # Read historical data
     # Use the directory from which the command is issued
-    file_path = os.path.abspath('btcusd.log')  # Ensure this is the correct path to your log file
+    # Ensure this is the correct path to your log file
+    file_path = os.path.abspath('btcusd.log')
 
     print("Current working directory: {}".format(os.getcwd()))
 
@@ -1020,13 +1242,15 @@ def main():
         sys.exit(1)
 
     if df.empty:
-        print("No historical data found in '{}' for the specified date range. Exiting.".format(file_path))
+        print("No historical data found in '{}' for the specified date range. Exiting.".format(
+            file_path))
         sys.exit(1)
 
     try:
         # Retain 'timestamp' as UNIX epoch seconds
         if 'timestamp' not in df.columns:
-            print("Missing 'timestamp' column in log file '{}'. Exiting.".format(file_path))
+            print(
+                "Missing 'timestamp' column in log file '{}'. Exiting.".format(file_path))
             sys.exit(1)
         # Ensure 'timestamp' is integer seconds
         df['timestamp'] = df['timestamp'].astype(int)
@@ -1048,7 +1272,8 @@ def main():
     order_placer = OrderPlacer()
     data_manager.order_placer = order_placer  # Set order placer in data manager
 
-    shell = CryptoShell(data_manager, order_placer, logger=logger, verbose=verbose_flag, live_trading=live_trading)
+    shell = CryptoShell(data_manager, order_placer, logger=logger,
+                        verbose=verbose_flag, live_trading=live_trading)
 
     # Start WebSocket connections in a separate thread
     url = 'wss://ws.bitstamp.net'
