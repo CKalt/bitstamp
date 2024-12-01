@@ -19,7 +19,7 @@ import cmd
 import threading
 from datetime import datetime, timedelta
 import logging
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Manager, set_start_method
 
 # For the Plotly and Dash implementation
 try:
@@ -738,7 +738,6 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
         # Generate MA signals
         df_ma = generate_ma_signals(df_ma)
 
-        # **Modification starts here**
         # Identify points where the signal changes (crossovers)
         df_ma['Signal_Change'] = df_ma['MA_Signal'].diff()
 
@@ -747,7 +746,6 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
             df_ma['Signal_Change'] == 2, df_ma['close'], np.nan)
         df_ma['Sell_Signal_Price'] = np.where(
             df_ma['Signal_Change'] == -2, df_ma['close'], np.nan)
-        # **Modification ends here**
 
         # Determine the x-axis range from relayout_data
         if relayout_data and 'xaxis.range[0]' in relayout_data and 'xaxis.range[1]' in relayout_data:
@@ -848,6 +846,9 @@ class CryptoShell(cmd.Cmd):
         self.auto_trader = None  # Initialize to None
         self.chart_process = None
         self.stop_event = stop_event
+        self.manager = Manager()
+        self.data_manager_dict = self.manager.dict()
+
         self.examples = {
             'price': 'price btcusd',
             'range': 'range btcusd 30',
@@ -1220,7 +1221,7 @@ class CryptoShell(cmd.Cmd):
             from dash.dependencies import Output, Input
             import plotly.graph_objs as go
             from flask import Flask, request
-            from multiprocessing import Process, Manager
+            from multiprocessing import Process
         except ImportError:
             print("Required libraries are not installed. Please install them using 'pip install dash plotly'.")
             return
@@ -1244,21 +1245,20 @@ class CryptoShell(cmd.Cmd):
                 print("Could not determine moving average windows. Start auto_trading or provide best_strategy.json.")
                 return
 
-        # Create a Manager dictionary to share data between processes
-        manager = Manager()
-        data_manager_dict = manager.dict()
-        data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
+        # Share data using Manager dictionary
+        self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
 
         # Update the data_manager_dict in a separate thread
         def update_shared_data():
-            while True:
-                data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
+            while not self.stop_event.is_set():
+                self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
                 time.sleep(60)
 
         threading.Thread(target=update_shared_data, daemon=True).start()
 
         # Run the Dash app in a separate process
-        self.chart_process = Process(target=run_dash_app, args=(data_manager_dict, symbol, bar_size, short_window, long_window))
+        self.chart_process = Process(target=run_dash_app, args=(
+            self.data_manager_dict, symbol, bar_size, short_window, long_window))
         self.chart_process.start()
         print("Dash app is running at http://127.0.0.1:8050/")
 
@@ -1419,7 +1419,6 @@ def main():
 
 
 if __name__ == '__main__':
-    # Set the start method to 'spawn' to avoid issues on macOS
-    from multiprocessing import set_start_method
+    # Set the start method to 'spawn' for cross-platform compatibility
     set_start_method('spawn')
     main()
