@@ -460,9 +460,6 @@ class MACrossoverStrategy:
         self.df_ma = pd.DataFrame()
         # Record the time when the strategy starts
         self.strategy_start_time = datetime.now()
-        self.trade_limit = trade_limit  # Daily trade limit
-        self.trades_today = 0  # Counter for trades made today
-        self.last_trade_date = None  # Track the date of last trade
 
     def start(self):
         self.running = True
@@ -600,12 +597,6 @@ class MACrossoverStrategy:
             self.last_signal_time = signal_time
 
     def execute_trade(self, trade_type, price, timestamp, signal_timestamp):
-        # Check trade limit before executing live trades
-        if self.live_trading and not self.check_trade_limit():
-            self.logger.info(
-                f"Daily trade limit of {self.trade_limit} reached, skipping trade")
-            return
-
         # Determine if the signal is based on historical or live data
         if signal_timestamp < self.strategy_start_time:
             data_source = 'historical'
@@ -683,20 +674,6 @@ class MACrossoverStrategy:
                     self.df_ma.iloc[-2]['Long_MA']
                 status['ma_slope_difference'] = short_ma_slope - long_ma_slope
         return status
-
-    def check_trade_limit(self):
-        """Check if we've hit the daily trade limit"""
-        if not self.live_trading:
-            return True  # No limits in dry run mode
-
-    current_date = datetime.now().date()
-
-    # Reset counter if it's a new day
-    if self.last_trade_date != current_date:
-        self.trades_today = 0
-        self.last_trade_date = current_date
-
-    return self.trades_today < self.trade_limit
 
 
 def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window):
@@ -1467,92 +1444,3 @@ if __name__ == '__main__':
     # Set the start method to 'spawn' for cross-platform compatibility
     set_start_method('spawn')
     main()
-
------------------------------------------
-
-
-# In MACrossoverStrategy class in tdr.py, add these new attributes to __init__:
-
-# Add this new method to MACrossoverStrategy class:
-
-# Modify execute_trade method in MACrossoverStrategy:
-
-
-def execute_trade(self, trade_type, price, timestamp, signal_timestamp):
-    # Check trade limit before executing live trades
-    if self.live_trading and not self.check_trade_limit():
-        self.logger.info(
-            f"Daily trade limit of {self.trade_limit} reached, skipping trade")
-        return
-
-    # Rest of existing execute_trade code...
-    trade_info = Trade(
-        trade_type,
-        self.symbol,
-        self.amount,
-        price,
-        datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S'),
-        self.last_trade_reason,
-        data_source,
-        signal_timestamp,
-        live_trading=self.live_trading
-    )
-
-    if self.live_trading:
-        result = self.order_placer.place_order(
-            "market-{}".format(trade_type), self.symbol, self.amount
-        )
-        self.logger.info(
-            "Executed live {} order: {}".format(trade_type, result))
-        trade_info.order_result = result
-        # Increment trade counter after successful execution
-        self.trades_today += 1
-        self.last_trade_date = datetime.now().date()
-    else:
-        self.logger.info("Executed dry run {} order: {}".format(
-            trade_type, trade_info.to_dict()))
-        self.trade_log.append(trade_info)
-
-# Modify main() function argument parser:
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Crypto trading shell")
-    parser.add_argument('-v', '--verbose', nargs='?', const=True, default=False,
-                        help="Enable verbose output and optionally specify a log file (e.g., --verbose logfile.log)")
-    parser.add_argument('--do-live-trades', action='store_true',
-                        help="Enable live trading (default is dry run)")
-    parser.add_argument('--trade-limit', type=int, default=5,
-                        help="Maximum number of trades per day in live trading mode (default: 5)")
-    args = parser.parse_args()
-
-# Modify CryptoShell.do_auto_trade():
-
-
-def do_auto_trade(self, arg):
-    # Existing code...
-    self.auto_trader = MACrossoverStrategy(
-        self.data_manager,
-        short_window,
-        long_window,
-        amount,
-        symbol,
-        self.logger,
-        live_trading=self.live_trading,
-        trade_limit=self.trade_limit if hasattr(self, 'trade_limit') else 5
-    )
-    # Rest of existing code...
-
-# In CryptoShell.__init__(), add:
-    self.trade_limit = kwargs.get('trade_limit', 5)
-
-# In main(), modify shell initialization:
-    shell = CryptoShell(
-        data_manager,
-        order_placer,
-        logger=logger,
-        verbose=verbose_flag,
-        live_trading=live_trading,
-        stop_event=stop_event,
-        trade_limit=args.trade_limit
-    )
