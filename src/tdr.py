@@ -1,6 +1,17 @@
 #!/usr/bin/env python
 # src/tdr.py
 
+from indicators.technical_indicators import (
+    ensure_datetime_index,
+    add_moving_averages,
+    generate_ma_signals,
+    calculate_rsi,
+    generate_rsi_signals,
+    calculate_bollinger_bands,
+    generate_bollinger_band_signals,
+    calculate_macd,
+    generate_macd_signals,
+)
 import sys
 import os
 import pandas as pd
@@ -37,17 +48,6 @@ sys.path.append(parent_dir)
 sys.path.append(current_dir)
 
 # Import necessary functions and modules from technical_indicators.py and other dependencies
-from indicators.technical_indicators import (
-    ensure_datetime_index,
-    add_moving_averages,
-    generate_ma_signals,
-    calculate_rsi,
-    generate_rsi_signals,
-    calculate_bollinger_bands,
-    generate_bollinger_band_signals,
-    calculate_macd,
-    generate_macd_signals,
-)
 
 # Import the same settings used in bktst.py
 HIGH_FREQUENCY = '1H'  # High-frequency resampling used in backtesting
@@ -380,30 +380,32 @@ class OrderPlacer:
         nonce = str(uuid.uuid4())
         content_type = 'application/x-www-form-urlencoded'
 
+        # Construct the payload
         payload = {'amount': str(amount)}
         if price:
             payload['price'] = str(price)
 
-        # Add additional parameters for limit orders
+        # Add additional parameters
         for key, value in kwargs.items():
             if value is not None:
                 payload[key] = str(value).lower() if isinstance(
                     value, bool) else str(value)
 
+        # Determine endpoint
         if 'market' in order_type:
-            endpoint = "/api/v2/{}/market/{}/".format(
-                'buy' if 'buy' in order_type else 'sell', currency_pair)
+            endpoint = f"/api/v2/{'buy' if 'buy' in order_type else 'sell'}/market/{currency_pair}/"
         else:
-            endpoint = "/api/v2/{}/{}".format(
-                'buy' if 'buy' in order_type else 'sell', currency_pair)
+            endpoint = f"/api/v2/{'buy' if 'buy' in order_type else 'sell'}/{currency_pair}/"
 
-        message = 'BITSTAMP ' + self.api_key + 'POST' + 'www.bitstamp.net' + \
-            endpoint + content_type + nonce + timestamp + urlencode(payload)
+        # Correct message construction
+        payload_string = urlencode(payload)
+        message = f"BITSTAMP {self.api_key}POSTwww.bitstamp.net{endpoint}{content_type}{nonce}{timestamp}v2{payload_string}"
         signature = hmac.new(self.api_secret, msg=message.encode(
             'utf-8'), digestmod=hashlib.sha256).hexdigest()
 
+        # Set headers
         headers = {
-            'X-Auth': "BITSTAMP {}".format(self.api_key),
+            'X-Auth': f'BITSTAMP {self.api_key}',
             'X-Auth-Signature': signature,
             'X-Auth-Nonce': nonce,
             'X-Auth-Timestamp': timestamp,
@@ -411,13 +413,22 @@ class OrderPlacer:
             'Content-Type': content_type
         }
 
-        url = "https://www.bitstamp.net{}".format(endpoint)
-        r = requests.post(url, headers=headers, data=urlencode(payload))
+        # Verbose logging: Add logging before making the API request
+        logging.info(f"Request Method: POST")
+        logging.info(f"Request URL: https://www.bitstamp.net{endpoint}")
+        logging.info(f"Request Headers: {headers}")
+        logging.info(f"Request Payload: {payload_string}")
 
+        # Make the request
+        url = f"https://www.bitstamp.net{endpoint}"
+        r = requests.post(url, headers=headers, data=payload_string)
+
+        # Handle response
         if r.status_code == 200:
             return json.loads(r.content.decode('utf-8'))
         else:
-            return "Error: {} - {}".format(r.status_code, r.text)
+            logging.error(f"Error: {r.status_code} - {r.text}")
+            return {"status": "error", "reason": r.text, "code": "API_FAILURE"}
 
     def place_limit_buy_order(self, currency_pair, amount, price, **kwargs):
         return self.place_order('buy', currency_pair, amount, price, **kwargs)
@@ -727,14 +738,16 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
                 'source': 'last'
             }).dropna()
         except ValueError as e:
-            print(f"Invalid bar size '{bar_size}'. Please use a valid pandas resampling string like '1H', '15min', etc.")
+            print(
+                f"Invalid bar size '{bar_size}'. Please use a valid pandas resampling string like '1H', '15min', etc.")
             return {}
 
         if len(df_resampled) < long_window:
             return {}
 
         # Compute moving averages
-        df_ma = add_moving_averages(df_resampled.copy(), short_window, long_window, price_col='close')
+        df_ma = add_moving_averages(
+            df_resampled.copy(), short_window, long_window, price_col='close')
         # Generate MA signals
         df_ma = generate_ma_signals(df_ma)
 
@@ -764,8 +777,10 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
             df_visible = df_ma
 
         # Calculate min and max prices in the visible range
-        y_min = df_visible[['low', 'Short_MA', 'Long_MA', 'Buy_Signal_Price', 'Sell_Signal_Price']].min().min()
-        y_max = df_visible[['high', 'Short_MA', 'Long_MA', 'Buy_Signal_Price', 'Sell_Signal_Price']].max().max()
+        y_min = df_visible[['low', 'Short_MA', 'Long_MA',
+                            'Buy_Signal_Price', 'Sell_Signal_Price']].min().min()
+        y_max = df_visible[['high', 'Short_MA', 'Long_MA',
+                            'Buy_Signal_Price', 'Sell_Signal_Price']].max().max()
 
         # Add some padding to y-axis limits
         y_padding = (y_max - y_min) * 0.05  # 5% padding
@@ -820,7 +835,8 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
         layout = go.Layout(
             xaxis=dict(title='Time', range=[x_start, x_end]),
             yaxis=dict(title='Price ($)', range=[y_min, y_max]),
-            title='{} Candlestick Chart with Moving Averages and Trade Signals'.format(symbol.upper()),
+            title='{} Candlestick Chart with Moving Averages and Trade Signals'.format(
+                symbol.upper()),
             height=800  # Adjust the height as needed
         )
 
@@ -1172,7 +1188,8 @@ class CryptoShell(cmd.Cmd):
             print("  auto_trade       Start auto-trading using the best strategy")
             print("  stop_auto_trade  Stop auto-trading")
             print("  status           Show the status of auto-trading")
-            print("  chart            Show a live updating chart: chart [symbol] [bar_size]")
+            print(
+                "  chart            Show a live updating chart: chart [symbol] [bar_size]")
 
     def do_quit(self, arg):
         """Quit the program"""
@@ -1223,7 +1240,8 @@ class CryptoShell(cmd.Cmd):
             from flask import Flask, request
             from multiprocessing import Process
         except ImportError:
-            print("Required libraries are not installed. Please install them using 'pip install dash plotly'.")
+            print(
+                "Required libraries are not installed. Please install them using 'pip install dash plotly'.")
             return
 
         # Determine moving average windows
@@ -1236,22 +1254,26 @@ class CryptoShell(cmd.Cmd):
                 with open('best_strategy.json', 'r') as f:
                     best_strategy_params = json.load(f)
                     if best_strategy_params.get('Strategy') == 'MA':
-                        short_window = int(best_strategy_params['Short_Window'])
+                        short_window = int(
+                            best_strategy_params['Short_Window'])
                         long_window = int(best_strategy_params['Long_Window'])
                     else:
                         print("Best strategy is not MA Crossover.")
                         return
             except Exception as e:
-                print("Could not determine moving average windows. Start auto_trading or provide best_strategy.json.")
+                print(
+                    "Could not determine moving average windows. Start auto_trading or provide best_strategy.json.")
                 return
 
         # Share data using Manager dictionary
-        self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
+        self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(
+            symbol).to_dict('list')
 
         # Update the data_manager_dict in a separate thread
         def update_shared_data():
             while not self.stop_event.is_set():
-                self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
+                self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(
+                    symbol).to_dict('list')
                 time.sleep(60)
 
         threading.Thread(target=update_shared_data, daemon=True).start()
