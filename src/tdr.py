@@ -437,13 +437,28 @@ class OrderPlacer:
         return self.place_order('sell', currency_pair, amount, price, **kwargs)
 
 
+
 class MACrossoverStrategy:
     def __init__(self, data_manager, short_window, long_window, amount, symbol, logger, live_trading=False, max_trades_per_day=5):
+        """
+        Initialize the MA Crossover Strategy with balance tracking.
+        
+        Args:
+            data_manager: DataManager instance for price data and order management
+            short_window: Period for short moving average
+            long_window: Period for long moving average
+            amount: Initial trading amount
+            symbol: Trading symbol (e.g., 'btcusd')
+            logger: Logger instance
+            live_trading: Boolean flag for live/dry run mode
+            max_trades_per_day: Maximum number of trades allowed per day
+        """
         self.data_manager = data_manager
         self.order_placer = data_manager.order_placer
         self.short_window = short_window
         self.long_window = long_window
-        self.amount = amount
+        self.initial_amount = amount  # Store initial amount separately
+        self.current_amount = amount  # Current trade amount that will be adjusted
         self.symbol = symbol
         self.logger = logger
         self.position = 0  # 1 for long, -1 for short, 0 for neutral
@@ -458,39 +473,101 @@ class MACrossoverStrategy:
         self.next_trigger = None
         self.current_trends = {}
         self.df_ma = pd.DataFrame()
-        # Record the time when the strategy starts
         self.strategy_start_time = datetime.now()
 
+        # Balance tracking attributes
+        self.initial_balance = amount  # Starting balance
+        self.current_balance = amount  # Current balance after trades
+        self.fee_percentage = 0.0012   # 0.12% trading fee
+        self.last_trade_price = None   # To calculate P&L
+        self.total_fees_paid = 0       # Track total fees paid
+        self.trades_executed = 0       # Count of executed trades
+        self.profitable_trades = 0     # Count of profitable trades
+        self.total_profit_loss = 0     # Running total of P&L
+
+        # Daily trade limits
         self.max_trades_per_day = max_trades_per_day
         self.trade_count_today = 0
         self.current_day = datetime.utcnow().date()
-        self.logger.debug(
-            f"Trade limit set to {self.max_trades_per_day} trades per day.")
+        self.logger.debug(f"Trade limit set to {self.max_trades_per_day} trades per day.")
 
     def start(self):
+        """Start the strategy execution."""
         self.running = True
-        self.strategy_thread = threading.Thread(
-            target=self.run_strategy_loop, daemon=True)
+        self.strategy_thread = threading.Thread(target=self.run_strategy_loop, daemon=True)
         self.strategy_thread.start()
         self.logger.info("Strategy loop started.")
 
     def stop(self):
+        """Stop the strategy execution and save trade log."""
         self.running = False
         self.logger.info("Strategy loop stopped.")
-        # Save trades to trades.json if dry run
         if self.trade_log and not self.live_trading:
             try:
-                # Use current working directory
                 file_path = os.path.abspath(self.trade_log_file)
                 with open(file_path, 'w') as f:
-                    json.dump([trade.to_dict()
-                               for trade in self.trade_log], f, indent=2)
-                self.logger.info("Trades logged to '{}'".format(file_path))
+                    json.dump([trade.to_dict() for trade in self.trade_log], f, indent=2)
+                self.logger.info(f"Trades logged to '{file_path}'")
             except Exception as e:
-                self.logger.error(
-                    "Failed to write trades to '{}': {}".format(self.trade_log_file, e))
+                self.logger.error(f"Failed to write trades to '{self.trade_log_file}': {e}")
+
+    def calculate_fee(self, trade_amount, price):
+        """
+        Calculate trading fee for a given trade.
+        
+        Args:
+            trade_amount: Amount of asset being traded
+            price: Current price of the asset
+            
+        Returns:
+            float: Fee amount in quote currency
+        """
+        trade_value = trade_amount * price
+        return trade_value * self.fee_percentage
+
+    def update_balance(self, trade_type, price, amount):
+        """
+        Update balance after a trade including fees and P&L calculation.
+        
+        Args:
+            trade_type: Type of trade ('buy' or 'sell')
+            price: Execution price
+            amount: Trade amount
+        """
+        fee = self.calculate_fee(amount, price)
+        self.total_fees_paid += fee
+        
+        if self.last_trade_price is not None:
+            # Calculate P&L
+            if trade_type == "sell" and self.position == 1:  # Closing long position
+                profit = amount * (price - self.last_trade_price) - fee
+                self.current_balance += profit
+                self.total_profit_loss += profit
+                if profit > 0:
+                    self.profitable_trades += 1
+            elif trade_type == "buy" and self.position == -1:  # Closing short position
+                profit = amount * (self.last_trade_price - price) - fee
+                self.current_balance += profit
+                self.total_profit_loss += profit
+                if profit > 0:
+                    self.profitable_trades += 1
+        
+        # Update last trade price and adjust current amount based on new balance
+        self.last_trade_price = price
+        self.trades_executed += 1
+        
+        # Adjust trading amount based on current balance
+        balance_ratio = self.current_balance / self.initial_balance
+        self.current_amount = self.initial_amount * balance_ratio
+        
+        self.logger.info(
+            f"Trade completed - Balance: ${self.current_balance:.2f}, "
+            f"Fees paid: ${fee:.2f}, New trade amount: {self.current_amount:.8f}, "
+            f"Total P&L: ${self.total_profit_loss:.2f}"
+        )
 
     def run_strategy_loop(self):
+        """Main strategy loop for processing price data and generating signals."""
         while self.running:
             df = self.data_manager.get_price_dataframe(self.symbol)
             if not df.empty:
@@ -505,8 +582,8 @@ class MACrossoverStrategy:
                         'close': 'last',
                         'volume': 'sum',
                         'trades': 'sum',
-                        'timestamp': 'last',  # Retain the latest timestamp in the resampled period
-                        'source': 'last'  # Retain the source of the last data point in the resampled period
+                        'timestamp': 'last',
+                        'source': 'last'
                     }).dropna()
 
                     if len(df_resampled) >= self.long_window:
@@ -523,33 +600,33 @@ class MACrossoverStrategy:
                         self.next_trigger = self.determine_next_trigger(df_ma)
                         self.current_trends = self.get_current_trends(df_ma)
                         self.df_ma = df_ma  # Store df_ma for status reporting
-                        self.check_for_signals(
-                            latest_signal, current_price, signal_time)
+                        self.check_for_signals(latest_signal, current_price, signal_time)
                     else:
-                        self.logger.debug(
-                            "Not enough data to compute moving averages.")
+                        self.logger.debug("Not enough data to compute moving averages.")
                 except KeyError as e:
-                    self.logger.error(
-                        "Missing column during strategy loop: {}".format(e))
+                    self.logger.error(f"Missing column during strategy loop: {e}")
                 except Exception as e:
-                    self.logger.error(
-                        "Error during strategy loop: {}".format(e))
+                    self.logger.error(f"Error during strategy loop: {e}")
             else:
-                self.logger.debug(
-                    "No data available for {} to run strategy.".format(self.symbol))
+                self.logger.debug(f"No data available for {self.symbol} to run strategy.")
             time.sleep(60)  # Check every minute
 
     def determine_next_trigger(self, df_ma):
         """
-        Determines the next trigger based on the moving averages.
+        Determines the next potential trading trigger based on current MA positions.
+        
+        Args:
+            df_ma: DataFrame with moving average data
+            
+        Returns:
+            str: Description of next potential trigger
         """
-        # Placeholder for actual logic to determine the next trigger
-        # This can be based on upcoming crossovers or other indicators
-        # For simplicity, we'll return the last signal time and its direction
         if len(df_ma) < 2:
             return None
+            
         last_signal = df_ma.iloc[-1]['MA_Signal']
         previous_signal = df_ma.iloc[-2]['MA_Signal']
+        
         if last_signal != previous_signal:
             if last_signal == 1:
                 return "Next trigger: Potential sell signal when short MA crosses below long MA."
@@ -559,13 +636,17 @@ class MACrossoverStrategy:
 
     def get_current_trends(self, df_ma):
         """
-        Analyzes current trends towards the next trigger.
+        Analyze current market trends based on moving averages.
+        
+        Args:
+            df_ma: DataFrame with moving average data
+            
+        Returns:
+            dict: Current trend information
         """
-        # Placeholder for trend analysis
-        # This can involve analyzing recent price movements, moving average slopes, etc.
-        # For simplicity, we'll return a basic trend description
         if len(df_ma) < 2:
             return {}
+            
         short_ma_current = df_ma.iloc[-1]['Short_MA']
         short_ma_prev = df_ma.iloc[-2]['Short_MA']
         long_ma_current = df_ma.iloc[-1]['Long_MA']
@@ -576,33 +657,51 @@ class MACrossoverStrategy:
 
         trend = {
             'Short_MA_Slope': 'Upwards' if short_ma_slope > 0 else 'Downwards',
-            'Long_MA_Slope': 'Upwards' if long_ma_slope > 0 else 'Downwards'
+            'Long_MA_Slope': 'Upwards' if long_ma_slope > 0 else 'Downwards',
+            'Price_Trend': 'Bullish' if short_ma_current > long_ma_current else 'Bearish',
+            'Trend_Strength': abs(short_ma_current - long_ma_current) / long_ma_current * 100
         }
         return trend
 
     def check_for_signals(self, latest_signal, current_price, signal_time):
+        """
+        Check for and process trading signals.
+        
+        Args:
+            latest_signal: Current signal value
+            current_price: Current asset price
+            signal_time: Time of the signal
+        """
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         if self.last_signal_time == signal_time:
-            # Signal already processed
-            return
+            return  # Signal already processed
 
         if latest_signal == 1 and self.position <= 0:
             # Buy signal
-            self.logger.info("Buy signal at price {}".format(current_price))
+            self.logger.info(f"Buy signal at price {current_price}")
             self.position = 1
             self.last_trade_reason = "MA Crossover: Short MA crossed above Long MA."
             self.execute_trade("buy", current_price, timestamp, signal_time)
             self.last_signal_time = signal_time
         elif latest_signal == -1 and self.position >= 0:
             # Sell signal
-            self.logger.info("Sell signal at price {}".format(current_price))
+            self.logger.info(f"Sell signal at price {current_price}")
             self.position = -1
             self.last_trade_reason = "MA Crossover: Short MA crossed below Long MA."
             self.execute_trade("sell", current_price, timestamp, signal_time)
             self.last_signal_time = signal_time
 
     def execute_trade(self, trade_type, price, timestamp, signal_timestamp):
+        """
+        Execute a trade based on the signal.
+        
+        Args:
+            trade_type: Type of trade ('buy' or 'sell')
+            price: Execution price
+            timestamp: Current timestamp
+            signal_timestamp: Time when the signal was generated
+        """
         today = datetime.utcnow().date()
         if today != self.current_day:
             self.current_day = today
@@ -610,20 +709,15 @@ class MACrossoverStrategy:
             self.logger.debug("New day detected. Trade count reset.")
 
         if self.trade_count_today >= self.max_trades_per_day:
-            self.logger.info(
-                f"Trade limit of {self.max_trades_per_day} trades per day reached. Skipping trade.")
+            self.logger.info(f"Trade limit of {self.max_trades_per_day} trades per day reached. Skipping trade.")
             return
 
-        # Determine if the signal is based on historical or live data
-        if signal_timestamp < self.strategy_start_time:
-            data_source = 'historical'
-        else:
-            data_source = 'live'
+        data_source = 'historical' if signal_timestamp < self.strategy_start_time else 'live'
 
         trade_info = Trade(
             trade_type,
             self.symbol,
-            self.amount,
+            self.current_amount,
             price,
             datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S'),
             self.last_trade_reason,
@@ -632,38 +726,38 @@ class MACrossoverStrategy:
             live_trading=self.live_trading
         )
 
-        # Store the last trade data source and signal timestamp
         self.last_trade_data_source = data_source
         self.last_trade_signal_timestamp = signal_timestamp
 
         if self.live_trading:
             result = self.order_placer.place_order(
-                "market-{}".format(trade_type), self.symbol, self.amount
+                f"market-{trade_type}", self.symbol, self.current_amount
             )
-            self.logger.info(
-                "Executed live {} order: {}".format(trade_type, result))
+            self.logger.info(f"Executed live {trade_type} order: {result}")
             trade_info.order_result = result
             self.trade_count_today += 1
-            self.logger.debug(
-                f"Trade count for {self.current_day}: {self.trade_count_today}/{self.max_trades_per_day}")
+            self.logger.debug(f"Trade count for {self.current_day}: {self.trade_count_today}/{self.max_trades_per_day}")
+            self.update_balance(trade_type, price, self.current_amount)
         else:
-            self.logger.info("Executed dry run {} order: {}".format(
-                trade_type, trade_info.to_dict()))
+            self.logger.info(f"Executed dry run {trade_type} order: {trade_info.to_dict()}")
             self.trade_log.append(trade_info)
+            self.update_balance(trade_type, price, self.current_amount)
 
-        # Write the trade_info to the trade log file
         try:
-            # Use current working directory
             file_path = os.path.abspath(self.trade_log_file)
             with open(file_path, 'a') as f:
                 f.write(json.dumps(trade_info.to_dict()) + '\n')
-            self.logger.debug("Trade info written to '{}'".format(file_path))
+            self.logger.debug(f"Trade info written to '{file_path}'")
         except Exception as e:
-            self.logger.error(
-                "Failed to write trade to log file: {}".format(e))
+            self.logger.error(f"Failed to write trade to log file: {e}")
 
     def get_status(self):
-        """Return the current status of the strategy."""
+        """
+        Get current strategy status including performance metrics.
+        
+        Returns:
+            dict: Comprehensive strategy status information
+        """
         status = {
             'running': self.running,
             'position': self.position,
@@ -673,7 +767,21 @@ class MACrossoverStrategy:
             'next_trigger': self.next_trigger,
             'current_trends': self.current_trends,
             'ma_difference': None,
-            'ma_slope_difference': None
+            'ma_slope_difference': None,
+            
+            # Balance and performance metrics
+            'initial_balance': self.initial_balance,
+            'current_balance': self.current_balance,
+            'total_return_pct': ((self.current_balance / self.initial_balance) - 1) * 100,
+            'total_fees_paid': self.total_fees_paid,
+            'trades_executed': self.trades_executed,
+            'profitable_trades': self.profitable_trades,
+            'win_rate': (self.profitable_trades / self.trades_executed * 100) if self.trades_executed > 0 else 0,
+            'current_trade_amount': self.current_amount,
+            'total_profit_loss': self.total_profit_loss,
+            'average_profit_per_trade': (self.total_profit_loss / self.trades_executed) if self.trades_executed > 0 else 0,
+            'trade_count_today': self.trade_count_today,
+            'remaining_trades_today': max(0, self.max_trades_per_day - self.trade_count_today)
         }
 
         if self.last_trade_reason:
@@ -682,19 +790,28 @@ class MACrossoverStrategy:
             status['last_trade_signal_timestamp'] = self.last_trade_signal_timestamp.strftime(
                 '%Y-%m-%d %H:%M:%S') if self.last_trade_signal_timestamp else None
 
-        # Calculate current MA difference
         if hasattr(self, 'df_ma') and not self.df_ma.empty:
-            status['ma_difference'] = self.df_ma.iloc[-1]['Short_MA'] - \
-                self.df_ma.iloc[-1]['Long_MA']
-            # Calculate MA slopes
+            status['ma_difference'] = self.df_ma.iloc[-1]['Short_MA'] - self.df_ma.iloc[-1]['Long_MA']
             if len(self.df_ma) >= 2:
-                short_ma_slope = self.df_ma.iloc[-1]['Short_MA'] - \
-                    self.df_ma.iloc[-2]['Short_MA']
-                long_ma_slope = self.df_ma.iloc[-1]['Long_MA'] - \
-                    self.df_ma.iloc[-2]['Long_MA']
+                short_ma_slope = self.df_ma.iloc[-1]['Short_MA'] - self.df_ma.iloc[-2]['Short_MA']
+                long_ma_slope = self.df_ma.iloc[-1]['Long_MA'] - self.df_ma.iloc[-2]['Long_MA']
                 status['ma_slope_difference'] = short_ma_slope - long_ma_slope
-        return status
+                
+                # Add momentum indicators
+                status['short_ma_momentum'] = 'Increasing' if short_ma_slope > 0 else 'Decreasing'
+                status['long_ma_momentum'] = 'Increasing' if long_ma_slope > 0 else 'Decreasing'
+                status['momentum_alignment'] = (
+                    'Aligned' if (short_ma_slope > 0 and long_ma_slope > 0) or 
+                                (short_ma_slope < 0 and long_ma_slope < 0) 
+                    else 'Diverging'
+                )
 
+        # Add risk metrics
+        if self.trades_executed > 0:
+            status['average_fee_per_trade'] = self.total_fees_paid / self.trades_executed
+            status['risk_reward_ratio'] = abs(self.total_profit_loss / self.total_fees_paid) if self.total_fees_paid > 0 else 0
+
+        return status
 
 def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window):
     # Since we cannot pass the data_manager object directly, we reconstruct it
@@ -1173,46 +1290,111 @@ class CryptoShell(cmd.Cmd):
         else:
             print("Auto-trading is not running.")
 
+
     def do_status(self, arg):
-        """Show the status of auto-trading."""
+        """Show the status of auto-trading including balance and performance metrics."""
         if self.auto_trader is not None and self.auto_trader.running:
             status = self.auto_trader.get_status()
-            position = {1: 'Long', -1: 'Short',
-                        0: 'Neutral'}.get(status['position'], 'Unknown')
-            print("Auto-Trading Status:")
-            print("  Running: {}".format(status['running']))
-            print("  Position: {}".format(position))
+            position = {1: 'Long', -1: 'Short', 0: 'Neutral'}.get(status['position'], 'Unknown')
+            
+            print("\nAuto-Trading Status:")
+            print("━" * 50)
+            
+            # Basic status information
+            print("Running Status:")
+            print(f"  • Active: {status['running']}")
+            print(f"  • Position: {position}")
+            print(f"  • Daily Trades: {status['trade_count_today']}/{self.auto_trader.max_trades_per_day}")
+            print(f"  • Remaining Trades Today: {status['remaining_trades_today']}")
+            
+            # Balance and Performance
+            print("\nBalance and Performance:")
+            print(f"  • Initial Balance: ${status['initial_balance']:.2f}")
+            print(f"  • Current Balance: ${status['current_balance']:.2f}")
+            print(f"  • Total Return: {status['total_return_pct']:.2f}%")
+            print(f"  • Total P&L: ${status['total_profit_loss']:.2f}")
+            print(f"  • Current Trade Amount: {status['current_trade_amount']:.8f}")
+            print(f"  • Total Fees Paid: ${status['total_fees_paid']:.2f}")
+            
+            # Trading Statistics
+            print("\nTrading Statistics:")
+            print(f"  • Total Trades: {status['trades_executed']}")
+            print(f"  • Profitable Trades: {status['profitable_trades']}")
+            print(f"  • Win Rate: {status['win_rate']:.1f}%")
+            if status['trades_executed'] > 0:
+                print(f"  • Average Profit per Trade: ${status['average_profit_per_trade']:.2f}")
+                print(f"  • Average Fee per Trade: ${status['average_fee_per_trade']:.2f}")
+                print(f"  • Risk/Reward Ratio: {status['risk_reward_ratio']:.2f}")
+            
+            # Recent Trade Information
             if status['last_trade']:
-                print("  Last Trade Reason: {}".format(status['last_trade']))
-                print("  Last Trade Based On: {} Data".format(
-                    status['last_trade_data_source'].capitalize()))
-                print("  Signal Timestamp: {}".format(
-                    status['last_trade_signal_timestamp']))
+                print("\nLast Trade Information:")
+                print(f"  • Reason: {status['last_trade']}")
+                print(f"  • Data Source: {status['last_trade_data_source'].capitalize()} Data")
+                print(f"  • Signal Time: {status['last_trade_signal_timestamp']}")
+            
+            # Technical Analysis
+            print("\nTechnical Analysis:")
             if status['next_trigger']:
-                print("  {}".format(status['next_trigger']))
+                print(f"  • {status['next_trigger']}")
+            
             if status['current_trends']:
-                print("  Current Trends:")
+                print("  • Current Trends:")
                 for key, value in status['current_trends'].items():
-                    print("    {}: {}".format(key, value))
+                    if isinstance(value, float):
+                        print(f"    ◦ {key}: {value:.2f}")
+                    else:
+                        print(f"    ◦ {key}: {value}")
+            
             if status['ma_difference'] is not None:
-                print(
-                    "  Current MA Difference (Short MA - Long MA): {:.6f}".format(status['ma_difference']))
+                print(f"  • MA Difference (Short - Long): {status['ma_difference']:.6f}")
+            
             if status['ma_slope_difference'] is not None:
-                print("  Current MA Slope Difference (Short MA Slope - Long MA Slope): {:.6f}".format(
-                    status['ma_slope_difference']))
+                print(f"  • MA Slope Difference: {status['ma_slope_difference']:.6f}")
+                
+            # Momentum Analysis
+            if 'short_ma_momentum' in status and 'long_ma_momentum' in status:
+                print("\nMomentum Analysis:")
+                print(f"  • Short MA Momentum: {status['short_ma_momentum']}")
+                print(f"  • Long MA Momentum: {status['long_ma_momentum']}")
+                print(f"  • Momentum Alignment: {status['momentum_alignment']}")
+            
+            # Error Handling and Warnings
+            if status['trades_executed'] == 0:
+                print("\nNote: No trades executed yet. Some statistics are unavailable.")
+            elif status['win_rate'] < 40:
+                print("\nWarning: Win rate is below 40%. Consider reviewing strategy parameters.")
+            
+            # Performance Warnings
+            if status['current_balance'] < status['initial_balance'] * 0.9:
+                print("\nWarning: Current balance is more than 10% below initial balance.")
+            
+            # Daily Trade Limit Warning
+            if status['remaining_trades_today'] <= 1:
+                print("\nWarning: Approaching daily trade limit!")
+            
+            print("━" * 50)
+            
+            # Session Duration
+            if hasattr(self.auto_trader, 'strategy_start_time'):
+                session_duration = datetime.now() - self.auto_trader.strategy_start_time
+                hours = session_duration.total_seconds() / 3600
+                print(f"Session Duration: {hours:.1f} hours")
+                
+            print("") # Extra line for readability
+            
         else:
             print("Auto-trading is not running.")
-
-    def do_help(self, arg):
-        """List available commands with "help" or detailed help with "help cmd"."""
-        super().do_help(arg)
-        if arg == '':
-            print("\nCustom Commands:")
-            print("  auto_trade       Start auto-trading using the best strategy")
-            print("  stop_auto_trade  Stop auto-trading")
-            print("  status           Show the status of auto-trading")
-            print(
-                "  chart            Show a live updating chart: chart [symbol] [bar_size]")
+        def do_help(self, arg):
+            """List available commands with "help" or detailed help with "help cmd"."""
+            super().do_help(arg)
+            if arg == '':
+                print("\nCustom Commands:")
+                print("  auto_trade       Start auto-trading using the best strategy")
+                print("  stop_auto_trade  Stop auto-trading")
+                print("  status           Show the status of auto-trading")
+                print(
+                    "  chart            Show a live updating chart: chart [symbol] [bar_size]")
 
     def do_quit(self, arg):
         """Quit the program"""
