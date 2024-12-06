@@ -438,7 +438,7 @@ class OrderPlacer:
 
 
 class MACrossoverStrategy:
-    def __init__(self, data_manager, short_window, long_window, amount, symbol, logger, live_trading=False):
+    def __init__(self, data_manager, short_window, long_window, amount, symbol, logger, live_trading=False, max_trades_per_day=5):
         self.data_manager = data_manager
         self.order_placer = data_manager.order_placer
         self.short_window = short_window
@@ -460,6 +460,12 @@ class MACrossoverStrategy:
         self.df_ma = pd.DataFrame()
         # Record the time when the strategy starts
         self.strategy_start_time = datetime.now()
+
+        self.max_trades_per_day = max_trades_per_day
+        self.trade_count_today = 0
+        self.current_day = datetime.utcnow().date()
+        self.logger.debug(
+            f"Trade limit set to {self.max_trades_per_day} trades per day.")
 
     def start(self):
         self.running = True
@@ -597,6 +603,17 @@ class MACrossoverStrategy:
             self.last_signal_time = signal_time
 
     def execute_trade(self, trade_type, price, timestamp, signal_timestamp):
+        today = datetime.utcnow().date()
+        if today != self.current_day:
+            self.current_day = today
+            self.trade_count_today = 0
+            self.logger.debug("New day detected. Trade count reset.")
+
+        if self.trade_count_today >= self.max_trades_per_day:
+            self.logger.info(
+                f"Trade limit of {self.max_trades_per_day} trades per day reached. Skipping trade.")
+            return
+
         # Determine if the signal is based on historical or live data
         if signal_timestamp < self.strategy_start_time:
             data_source = 'historical'
@@ -626,6 +643,9 @@ class MACrossoverStrategy:
             self.logger.info(
                 "Executed live {} order: {}".format(trade_type, result))
             trade_info.order_result = result
+            self.trade_count_today += 1
+            self.logger.debug(
+                f"Trade count for {self.current_day}: {self.trade_count_today}/{self.max_trades_per_day}")
         else:
             self.logger.info("Executed dry run {} order: {}".format(
                 trade_type, trade_info.to_dict()))
@@ -849,7 +869,7 @@ class CryptoShell(cmd.Cmd):
     intro = 'Welcome to the Crypto Shell. Type help or ? to list commands.\n'
     prompt = '(crypto) '
 
-    def __init__(self, data_manager, order_placer, logger, verbose=False, live_trading=False, stop_event=None):
+    def __init__(self, data_manager, order_placer, logger, verbose=False, live_trading=False, stop_event=None, max_trades_per_day=5):
         super().__init__()
         self.data_manager = data_manager
         self.order_placer = order_placer
@@ -864,6 +884,7 @@ class CryptoShell(cmd.Cmd):
         self.stop_event = stop_event
         self.manager = Manager()
         self.data_manager_dict = self.manager.dict()
+        self.max_trades_per_day = max_trades_per_day
 
         self.examples = {
             'price': 'price btcusd',
@@ -1134,7 +1155,9 @@ class CryptoShell(cmd.Cmd):
         symbol = 'btcusd'  # Adjust as needed
 
         self.auto_trader = MACrossoverStrategy(
-            self.data_manager, short_window, long_window, amount, symbol, self.logger, live_trading=self.live_trading)
+            self.data_manager, short_window, long_window, amount, symbol, self.logger,
+            live_trading=self.live_trading, max_trades_per_day=self.max_trades_per_day)
+
         self.auto_trader.start()
         print("Auto-trading started with amount {} using MA Crossover strategy.".format(amount))
         print("Trades will be logged to '{}'.".format(
@@ -1337,7 +1360,15 @@ def main():
                         help="Enable verbose output and optionally specify a log file (e.g., --verbose logfile.log)")
     parser.add_argument('--do-live-trades', action='store_true',
                         help="Enable live trading (default is dry run)")
+    parser.add_argument('--max-trades-per-day', type=int, default=5,
+                        help="Set the maximum number of trades allowed per day during auto-trading (default: 5).")
+
     args = parser.parse_args()
+
+    max_trades_per_day = args.max_trades_per_day
+    if max_trades_per_day < 1:
+        print("Error: --max-trades-per-day must be at least 1.")
+        sys.exit(1)
 
     # Setup logging based on verbose argument
     if args.verbose is True:
@@ -1414,7 +1445,8 @@ def main():
     stop_event = threading.Event()
 
     shell = CryptoShell(data_manager, order_placer, logger=logger,
-                        verbose=verbose_flag, live_trading=live_trading, stop_event=stop_event)
+                        verbose=verbose_flag, live_trading=live_trading,
+                        stop_event=stop_event, max_trades_per_day=max_trades_per_day)
 
     # Start WebSocket connections in a separate thread
     url = 'wss://ws.bitstamp.net'
