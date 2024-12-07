@@ -198,19 +198,17 @@ def optimize_ma_frequency(df, base_parameters):
         for freq in frequencies:
             # Resample data to current frequency
             df_resampled = df.resample(freq).agg({
-                'open': 'first',
-                'high': 'max',
-                'low': 'min',
-                'close': 'last',
-                'volume': 'sum',
-                'trades': 'sum'
+                'price': 'last',
+                'amount': 'sum',
+                'volume': 'sum'
             }).dropna()
             
             # Run strategy with base parameters
             df_strategy = add_moving_averages(
                 df_resampled.copy(),
                 short_window=base_parameters['Short_Window'],
-                long_window=base_parameters['Long_Window']
+                long_window=base_parameters['Long_Window'],
+                price_col='price'  # Specify the price column name
             )
             df_strategy = generate_ma_signals(df_strategy)
             
