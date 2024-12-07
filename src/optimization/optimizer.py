@@ -177,3 +177,56 @@ def optimize_hft_parameters(df, strategy, **kwargs):
                 **metrics
             })
     return pd.DataFrame(results)
+
+def optimize_ma_frequency(df, base_parameters):
+    """
+    Optimize trading frequency for a given MA strategy configuration.
+    
+    Args:
+        df: DataFrame with price data
+        base_parameters: Dict containing 'Short_Window' and 'Long_Window'
+        
+    Returns:
+        pd.DataFrame: Results of frequency optimization
+    """
+    frequencies = ['5min', '15min', '30min', '1H', '2H', '4H', '6H', '12H', '1D']
+    results = []
+    
+    print(f"Testing {len(frequencies)} different frequencies...")
+    
+    with tqdm(total=len(frequencies), desc="Optimizing Trading Frequency") as pbar:
+        for freq in frequencies:
+            # Resample data to current frequency
+            df_resampled = df.resample(freq).agg({
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+                'volume': 'sum',
+                'trades': 'sum'
+            }).dropna()
+            
+            # Run strategy with base parameters
+            df_strategy = add_moving_averages(
+                df_resampled.copy(),
+                short_window=base_parameters['Short_Window'],
+                long_window=base_parameters['Long_Window']
+            )
+            df_strategy = generate_ma_signals(df_strategy)
+            
+            # Run backtest
+            metrics = backtest(df_strategy, 'MA')
+            average_trades_per_day = metrics['Average_Trades_Per_Day']
+            
+            if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
+                results.append({
+                    'Frequency': freq,
+                    'Strategy': 'MA',
+                    'Short_Window': base_parameters['Short_Window'],
+                    'Long_Window': base_parameters['Long_Window'],
+                    **metrics
+                })
+            
+            pbar.update(1)
+    
+    return pd.DataFrame(results)
