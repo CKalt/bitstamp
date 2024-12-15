@@ -22,6 +22,7 @@ from indicators.technical_indicators import (
 )
 from strategies.ramm_strategy import calculate_ramm_signals
 
+
 def optimize_adaptive_vwma_parameters(df,
                                       base_window_range=range(5, 21, 3),
                                       vol_scale_range=np.arange(0.8, 1.4, 0.1)):
@@ -39,10 +40,12 @@ def optimize_adaptive_vwma_parameters(df,
                 df_test = df.copy()
 
                 # Calculate adaptive VWMA
-                df_test = calculate_adaptive_vwma(df_test, base_window=base_window)
+                df_test = calculate_adaptive_vwma(
+                    df_test, base_window=base_window)
 
                 # Generate signals
-                df_test = generate_adaptive_vwma_signals(df_test, vol_scale=vol_scale)
+                df_test = generate_adaptive_vwma_signals(
+                    df_test, vol_scale=vol_scale)
 
                 # Run backtest
                 metrics = backtest(df_test, 'Adaptive_VWMA')
@@ -59,6 +62,7 @@ def optimize_adaptive_vwma_parameters(df,
                 pbar.update(1)
 
     return pd.DataFrame(results)
+
 
 def optimize_ramm_parameters(df, max_iterations=50):
     """
@@ -113,6 +117,7 @@ def optimize_ramm_parameters(df, max_iterations=50):
 
     return pd.DataFrame(results)
 
+
 def optimize_ma_parameters(df, short_range, long_range):
     results = []
     for short_window in short_range:
@@ -131,6 +136,7 @@ def optimize_ma_parameters(df, short_range, long_range):
                     **metrics
                 })
     return pd.DataFrame(results)
+
 
 def optimize_rsi_parameters(df, window_range, overbought_range, oversold_range):
     results = []
@@ -152,6 +158,7 @@ def optimize_rsi_parameters(df, window_range, overbought_range, oversold_range):
                         **metrics
                     })
     return pd.DataFrame(results)
+
 
 def optimize_hft_parameters(df, strategy, **kwargs):
     results = []
@@ -178,22 +185,28 @@ def optimize_hft_parameters(df, strategy, **kwargs):
             })
     return pd.DataFrame(results)
 
+
 def optimize_ma_frequency(df, base_parameters):
     """
     Optimize trading frequency for a given MA strategy configuration.
-    
+
     Args:
         df: DataFrame with price data
         base_parameters: Dict containing 'Short_Window' and 'Long_Window'
-        
+
     Returns:
         pd.DataFrame: Results of frequency optimization
     """
-    frequencies = ['5min', '15min', '30min', '1H', '2H', '4H', '6H', '12H', '1D']
+    frequencies = ['5min', '15min', '30min',
+                   '1H', '2H', '4H', '6H', '12H', '1D']
     results = []
-    
+
     print(f"Testing {len(frequencies)} different frequencies...")
-    
+
+    # Debug prints to inspect DataFrame structure before testing frequencies
+    print("Debug: Columns available in DataFrame before frequency tests:", df.columns)
+    print("Debug: DataFrame index type:", df.index)
+
     with tqdm(total=len(frequencies), desc="Optimizing Trading Frequency") as pbar:
         for freq in frequencies:
             # Resample data to current frequency
@@ -202,7 +215,13 @@ def optimize_ma_frequency(df, base_parameters):
                 'amount': 'sum',
                 'volume': 'sum'
             }).dropna()
-            
+
+            print(
+                f"Debug after resampling at frequency {freq}: columns={df_resampled.columns}")
+
+            # Restore timestamp column
+            df_resampled['timestamp'] = df_resampled.index
+
             # Run strategy with base parameters
             df_strategy = add_moving_averages(
                 df_resampled.copy(),
@@ -211,11 +230,11 @@ def optimize_ma_frequency(df, base_parameters):
                 price_col='price'  # Specify the price column name
             )
             df_strategy = generate_ma_signals(df_strategy)
-            
+
             # Run backtest
             metrics = backtest(df_strategy, 'MA')
             average_trades_per_day = metrics['Average_Trades_Per_Day']
-            
+
             if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
                 results.append({
                     'Frequency': freq,
@@ -224,7 +243,7 @@ def optimize_ma_frequency(df, base_parameters):
                     'Long_Window': base_parameters['Long_Window'],
                     **metrics
                 })
-            
+
             pbar.update(1)
-    
+
     return pd.DataFrame(results)
