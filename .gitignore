@@ -1,4 +1,5 @@
-/*.json
+/app-tdr.txt
+/app-bktst.txt
 env
 .bitstamp
 .influxdb

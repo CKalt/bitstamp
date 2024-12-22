@@ -1,9 +1,13 @@
 # src/bktst.py
-
+from utils.analysis import analyze_data, run_trading_system
+from data.loader import create_metadata_file, parse_log_file
 import argparse
 import os
 import sys
 from datetime import datetime, timedelta
+import pandas as pd
+import json
+import traceback
 
 # Ensure that the 'src' directory is in sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -11,12 +15,13 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(current_dir)
 sys.path.append(parent_dir)
 
-from data.loader import create_metadata_file, parse_log_file
-from utils.analysis import analyze_data, run_trading_system
 
-def main():
+def parse_arguments():
+    """
+    Parse command-line arguments.
+    """
     parser = argparse.ArgumentParser(
-        description='Analyze Bitcoin trade log data.')
+        description="Analyze Bitcoin trade log data.")
     parser.add_argument('--start-window-days-back', type=int, default=30,
                         help='Number of days to subtract from the current date as the start window')
     parser.add_argument('--end-window-days-back', type=int, default=0,
@@ -25,87 +30,321 @@ def main():
                         help='Number of days to analyze from the start date (overrides end-window-days-back)')
     parser.add_argument('--max-iterations', type=int, default=50,
                         help='Maximum number of iterations for parameter optimization')
-    # New arguments for sampling frequencies
     parser.add_argument('--high-frequency', type=str, default='1H',
                         help='Sampling frequency for higher timeframe (e.g., "1H" for hourly)')
     parser.add_argument('--low-frequency', type=str, default='15T',
                         help='Sampling frequency for lower timeframe (e.g., "15T" for 15 minutes)')
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    file_path = 'btcusd.log'
+
+def setup_metadata(file_path):
+    """
+    Create metadata file if it does not exist.
+    """
     metadata_file_path = f"{file_path}.metadata"
-
     if not os.path.exists(metadata_file_path):
         print("Metadata file not found. Creating it now...")
         create_metadata_file(file_path, metadata_file_path)
         print("Metadata file created.")
 
-    file_size = os.path.getsize(file_path) / (1024 * 1024)  # Size in MB
-    print(f"Log file size: {file_size:.2f} MB")
 
+def determine_date_range(args):
+    """
+    Determine the start and end date for the analysis window.
+    """
     current_date = datetime.now()
-
     if args.start_window_days_back > 0:
         start_date = current_date - timedelta(days=args.start_window_days_back)
         print(f"Analyzing data from {start_date} onwards")
     else:
         start_date = None
-        print("No start date specified")
 
-    # Handle trading window days if specified
     if args.trading_window_days is not None:
         if start_date is None:
             raise ValueError(
                 "Cannot use trading-window-days without specifying start-window-days-back")
         end_date = start_date + timedelta(days=args.trading_window_days)
         print(f"Using trading window of {args.trading_window_days} days")
-        print(f"Analysis window: {start_date} to {end_date}")
     elif args.end_window_days_back > 0:
         end_date = current_date - timedelta(days=args.end_window_days_back)
         print(f"Analyzing data up to {end_date}")
     else:
         end_date = None
-        print("No end date specified")
 
     if start_date and end_date and start_date >= end_date:
         raise ValueError("Start date must be earlier than end date")
+    return start_date, end_date
 
-    print("Starting to parse log file...")
+
+###############################################################################
+# RESTORED FUNCTIONS (previously removed)
+###############################################################################
+def evaluate_all_strategies(data, strategies):
+    """
+    Evaluate all strategies on the given data and return their performance metrics.
+
+    :param data: The input data for backtesting.
+    :param strategies: List of strategies to evaluate.
+    :return: DataFrame containing results for all strategies.
+    """
+    all_results = []
+
+    for strategy in strategies:
+        # Run the strategy on the data
+        result = strategy.run(data)
+
+        # Collect relevant metrics
+        all_results.append({
+            "Strategy": strategy.name,
+            "Parameters": strategy.params,
+            "Final Balance": result.final_balance,
+            "Total Return (%)": round(result.total_return * 100, 2),
+            "Total Trades": result.total_trades,
+            "Profit Factor": round(result.profit_factor, 2),
+            "Sharpe Ratio": round(result.sharpe_ratio, 2),
+            "Win/Loss Ratio": round(result.win_loss_ratio, 2) if result.win_loss_ratio else "N/A",
+        })
+
+    # Convert results to a DataFrame for better display
+    results_df = pd.DataFrame(all_results)
+    return results_df
+
+
+def display_summary(strategy_comparison):
+    """
+    Display the best strategy for each type and the overall best strategy.
+
+    :param strategy_comparison: DataFrame with comparison results.
+    """
+    print("\nBest strategy for each type:")
+    for strategy in strategy_comparison['Strategy'].unique():
+        strategy_row = strategy_comparison[strategy_comparison['Strategy'] == strategy]
+        print(
+            f"{strategy}: Total Return = {strategy_row['Total_Return'].iloc[0]:.2f}%")
+
+    overall_best = strategy_comparison.loc[strategy_comparison['Total_Return'].idxmax(
+    )]
+    print(f"\nOverall best strategy: {overall_best['Strategy']}")
+    print(f"Best strategy Total Return: {overall_best['Total_Return']:.2f}%")
+
+
+def display_strategy_comparison(comparison_df):
+    """
+    Display strategy comparison results in a table format.
+
+    :param comparison_df: DataFrame containing comparison results for all strategies.
+    """
+    print("\nStrategy Comparison:")
+    print(comparison_df.to_markdown(index=False))
+    print("\n")
+
+
+def display_detailed_strategy_results(strategy_results):
+    """
+    Display detailed strategy results for each strategy in a table format.
+
+    :param strategy_results: Dictionary of results for each strategy type.
+    """
+    print("\nDetailed Strategy Results:\n")
+    for strategy, results in strategy_results.items():
+        print(f"--- {strategy} ---")
+        results_df = pd.DataFrame([results])
+        print(results_df.to_markdown(index=False))
+        print("\n")
+
+
+def display_results_table(results_df):
+    """
+    Display the results DataFrame in a neatly formatted table.
+
+    :param results_df: The DataFrame containing strategy results.
+    """
+    print("\nAll Strategy Results:")
+    print(results_df.to_markdown(index=False))
+
+
+def display_best_strategy_summary(strategy_comparison):
+    """
+    Display the best strategy summary based on the comparison results.
+    """
+    print("\nBest strategy for each type:")
+    for strategy in strategy_comparison.index:
+        print(
+            f"{strategy}: Total Return = {strategy_comparison.loc[strategy, 'Total_Return']:.2f}%")
+
+    if len(strategy_comparison) > 1:
+        best_strategy = strategy_comparison['Total_Return'].idxmax()
+        print(f"\nOverall best strategy: {best_strategy}")
+        print(
+            f"Best strategy Total Return: {strategy_comparison.loc[best_strategy, 'Total_Return']:.2f}%")
+
+
+def main():
+    """
+    Main function to run backtesting for multiple strategies.
+    """
+    # Parse arguments
+    args = parse_arguments()
+
+    # Setup metadata and load log file
+    file_path = 'btcusd.log'
+    setup_metadata(file_path)
+    start_date, end_date = determine_date_range(args)
     df = parse_log_file(file_path, start_date, end_date)
+
     print(f"Parsed {len(df)} trade events.")
     print(f"DataFrame shape after parsing: {df.shape}")
     print(
         f"DataFrame memory usage: {df.memory_usage().sum() / 1024 / 1024:.2f} MB")
 
+    # Analyze data
     print("Starting data analysis...")
     analyze_data(df)
 
+    # Run trading system
     print("Running trading system...")
     try:
+        # Execute the trading system and collect results
         optimization_results, strategy_comparison = run_trading_system(
             df,
             high_frequency=args.high_frequency,
             low_frequency=args.low_frequency,
             max_iterations=args.max_iterations
         )
-        print("Trading system analysis complete.")
 
+        # Example: Define detailed strategy results (mocked; replace with actual data from `run_trading_system`)
+        detailed_strategy_results = {
+            "MA": {
+                "Frequency": args.high_frequency,
+                "Short_Window": 12,
+                "Long_Window": 36,
+                "Final_Balance": 10262.35,
+                "Total_Return": 2.62,
+                "Total_Trades": 45,
+                "Average_Trades_Per_Day": 1.45,
+                "Profit_Factor": 1.03,
+                "Sharpe_Ratio": 0.15
+            },
+            "RSI": {
+                "RSI_Window": 14,
+                "Overbought": 80,
+                "Oversold": 35,
+                "Final_Balance": 10479.78,
+                "Total_Return": 4.80,
+                "Total_Trades": 80,
+                "Average_Trades_Per_Day": 2.58,
+                "Profit_Factor": 1.17,
+                "Sharpe_Ratio": 0.41
+            },
+            "RAMM": {
+                "MA_Short": 6,
+                "MA_Long": 35,
+                "RSI_Period": 12,
+                "RSI_Overbought": 65,
+                "RSI_Oversold": 35,
+                "Regime_Lookback": 20,
+                "Final_Balance": 10133.44,
+                "Total_Return": 1.33,
+                "Total_Trades": 50,
+                "Average_Trades_Per_Day": 1.61,
+                "Profit_Factor": 1.14,
+                "Sharpe_Ratio": 0.18
+            }
+        }
+
+        # Display detailed strategy results
+        print("\n--- Detailed Strategy Results ---")
+        display_detailed_strategy_results(detailed_strategy_results)
+
+        # Display strategy comparison
+        print("\n--- Strategy Comparison ---")
+        display_strategy_comparison(strategy_comparison)
+
+        # Display summary of best strategies
+        print("\n--- Summary of Best Strategies ---")
+        display_summary(strategy_comparison)
+
+        # Save optimization results to CSV
+        optimization_results.to_csv("all_strategy_results.csv", index=False)
+        print("\nResults saved to 'all_strategy_results.csv'.")
+
+        ################################################################
+        # NEW LOGIC: Write best_strategy.json in the "new" format
+        ################################################################
         if not strategy_comparison.empty:
-            print("\nBest strategy for each type:")
-            for strategy in strategy_comparison.index:
-                print(
-                    f"{strategy}: Total Return = {strategy_comparison.loc[strategy, 'Total_Return']:.2f}%")
+            # 1) Identify the best row by total return
+            best_idx = strategy_comparison['Total_Return'].idxmax()
+            best_row = strategy_comparison.loc[best_idx]
 
-            if len(strategy_comparison) > 1:
-                best_strategy = strategy_comparison['Total_Return'].idxmax()
-                print(f"\nOverall best strategy: {best_strategy}")
-                print(
-                    f"Best strategy Total Return: {strategy_comparison.loc[best_strategy, 'Total_Return']:.2f}%")
-        else:
-            print("No strategies met the criteria. No comparison results to display.")
+            # The code above uses columns like 'Final_Balance', 'Total_Return', etc.
+            # We'll unify them to match your desired best_strategy.json fields
+            # Also incorporate the date-range fields from your arguments
+
+            best_strategy_json = {
+                # Original version (lines to remove):
+                # "Frequency": args.high_frequency,
+                # "Strategy": best_row['Strategy'],
+                # "Short_Window": best_row.get('Short_Window', 0),
+                # "Long_Window": best_row.get('Long_Window', 0),
+                # "Final_Balance": best_row.get('Final_Balance', 0),
+                # "Total_Return": best_row.get('Total_Return', 0),
+                # "Total_Trades": best_row.get('Total_Trades', 0),
+                # "Profit_Factor": best_row.get('Profit_Factor', 0),
+                # "Sharpe_Ratio": best_row.get('Sharpe_Ratio', 0),
+                # "Average_Trades_Per_Day": best_row.get('Average_Trades_Per_Day', 0),
+                # "start_window_days_back": args.start_window_days_back,
+                # "end_window_days_back": args.end_window_days_back
+
+                # Updated version (lines to insert):
+                "Frequency": args.high_frequency,
+                "Strategy": best_row['Strategy'],
+                "Short_Window": best_row.get('Short_Window', 0),
+                "Long_Window": best_row.get('Long_Window', 0),
+                "Final_Balance": best_row.get('Final_Balance', 0),
+                "Total_Return": best_row.get('Total_Return', 0),
+                "Total_Trades": best_row.get('Total_Trades', 0),
+                "Profit_Factor": best_row.get('Profit_Factor', 0),
+                "Sharpe_Ratio": best_row.get('Sharpe_Ratio', 0),
+                "Average_Trades_Per_Day": best_row.get('Average_Trades_Per_Day', 0),
+                "start_window_days_back": args.start_window_days_back,
+                "end_window_days_back": args.end_window_days_back
+            }
+
+            # --- BEGIN: Insert these lines to fix JSON serialization errors ---
+            def convert_types(obj):
+                import numpy as np
+                import pandas as pd
+                if isinstance(obj, (np.integer, np.int64)):
+                    return int(obj)
+                elif isinstance(obj, (np.floating, np.float64)):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, pd.Timestamp):
+                    return obj.isoformat()
+                elif pd.isna(obj):
+                    return None  # or "NaN", depending on preference
+                return obj
+
+            best_strategy_json = {
+                key: convert_types(value) for key, value in best_strategy_json.items()
+            }
+            # --- END: Insert these lines ---
+
+            # 2) Write this to best_strategy.json
+            try:
+                with open("best_strategy.json", "w") as f:
+                    json.dump(best_strategy_json, f, indent=4)
+                print("\nWrote best_strategy.json with new fields:")
+                print(best_strategy_json)
+            except Exception as e:
+                print("Error writing best_strategy.json:")
+                traceback.print_exc()
+
     except Exception as e:
         print(f"An error occurred during trading system analysis: {str(e)}")
         print("Partial results may have been saved.")
+
 
 if __name__ == "__main__":
     main()

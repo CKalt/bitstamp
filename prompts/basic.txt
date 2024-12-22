@@ -1,0 +1,4 @@
+Please never make statements that are speculative about code that I have provided in the project.
+
+Please always include full and complete listings of all modules you seek to modify and retain all previous logic and comments
+unless you are supplying new code that must replace the previous functionality in some way that we have agreed.

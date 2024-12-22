@@ -5,7 +5,6 @@ import os
 import pandas as pd
 from datetime import datetime
 
-
 def create_metadata_file(log_file_path, metadata_file_path):
     print("Creating metadata file...")
     metadata = {}
@@ -37,7 +36,6 @@ def create_metadata_file(log_file_path, metadata_file_path):
 
     print(f"Metadata file created: {metadata_file_path}")
 
-
 def get_start_line_from_metadata(metadata_file_path, start_date):
     with open(metadata_file_path, 'r') as file:
         metadata = json.load(file)
@@ -51,7 +49,6 @@ def get_start_line_from_metadata(metadata_file_path, start_date):
                  if date != 'total_lines' and date != 'last_timestamp']
         nearest_date = min(dates, key=lambda x: abs(x - start_date.date()))
         return metadata[str(nearest_date)]['start_line']
-
 
 def parse_log_file(file_path, start_date=None, end_date=None):
     metadata_file_path = f"{file_path}.metadata"

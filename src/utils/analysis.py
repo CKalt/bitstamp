@@ -13,7 +13,8 @@ from optimization.optimizer import (
     optimize_rsi_parameters,
     optimize_hft_parameters,
     optimize_ramm_parameters,
-    optimize_adaptive_vwma_parameters
+    optimize_adaptive_vwma_parameters,
+    optimize_ma_frequency
 )
 from strategies.ramm_strategy import calculate_ramm_signals
 from indicators.technical_indicators import (
@@ -87,27 +88,54 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
     strategies = {}
     all_results_list = []
 
-    # Run MA Crossover Strategy
     print("Running MA Crossover Strategy...")
-    ma_results = optimize_ma_parameters(
-        df_high, range(4, 25, 2), range(26, 51, 2))
+    ma_results = optimize_ma_parameters(df_high, range(4, 25, 2), range(26, 51, 2))
+    
     if not ma_results.empty:
         best_ma = ma_results.loc[ma_results['Total_Return'].idxmax()]
+        print("Initial MA Crossover parameters:")
+        print(best_ma)
+        
+        # Add frequency optimization for best parameters
+        print("\nOptimizing trading frequency for best MA parameters...")
+        freq_results = optimize_ma_frequency(df, {
+            'Short_Window': int(best_ma['Short_Window']),
+            'Long_Window': int(best_ma['Long_Window'])
+        })
+        
+        if not freq_results.empty:
+            # Find best frequency result
+            best_freq_result = freq_results.loc[freq_results['Total_Return'].idxmax()]
+            print("\nBest frequency results:")
+            print(best_freq_result)
+            
+            # Update the best MA parameters with frequency-optimized version
+            best_ma = best_freq_result
+            
+        # Generate trade list using best parameters
+        best_ma_df = add_moving_averages(
+            df_high.copy(), 
+            int(best_ma['Short_Window']), 
+            int(best_ma['Long_Window'])
+        )
+        best_ma_df = generate_ma_signals(best_ma_df)
+        
         print("Best MA Crossover parameters:")
         print(best_ma)
-        strategies['MA Crossover'] = best_ma.to_dict()
-        all_results_list.append(ma_results)
-
-        print("Generating trade list for best MA strategy...")
-        best_ma_df = add_moving_averages(
-            df_high.copy(), int(best_ma['Short_Window']), int(best_ma['Long_Window']))
-        best_ma_df = generate_ma_signals(best_ma_df)
+        
         ma_trades = generate_trade_list(best_ma_df, 'MA')
         ma_trades.to_csv('ma_trades.csv', index=False)
         print("MA Crossover trades saved to 'ma_trades.csv'")
+        
+        # Save frequency optimization results if available
+        if 'freq_results' in locals() and not freq_results.empty:
+            freq_results.to_csv('ma_frequency_optimization.csv', index=False)
+            print("Frequency optimization results saved to 'ma_frequency_optimization.csv'")
+            
+        strategies['MA'] = best_ma.to_dict()
+        all_results_list.append(ma_results)
     else:
         print("No MA Crossover strategies met the criteria.")
-
     # Run RSI Strategy
     print("Running RSI Strategy...")
     rsi_results = optimize_rsi_parameters(df_high, range(
