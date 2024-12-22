@@ -1,11 +1,5 @@
-#!/bin/bash
-
-while true; do
-    # Replace 'your_python_script.py' with the actual name of your Python
-    # program
-    echo Webtick
-    python src/websock-ticker.py 
-    echo Will try again....
-    sleep 30
-done
-
+python src/bktst.py \
+  --start-window-days-back 90 \
+  --end-window-days-back 0 \
+  --high-frequency 1H \
+  --low-frequency 15T

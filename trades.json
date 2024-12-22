@@ -1,0 +1,13 @@
+[
+  {
+    "type": "sell",
+    "symbol": "btcusd",
+    "amount": 1.0,
+    "price": 96019.0,
+    "timestamp": "2024-11-30 22:13:16",
+    "signal_timestamp": "2024-12-01 03:00:00",
+    "data_source": "live",
+    "live_trading": false,
+    "reason": "MA Crossover: Short MA crossed below Long MA."
+  }
+]
