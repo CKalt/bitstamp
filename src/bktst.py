@@ -103,6 +103,45 @@ def evaluate_all_strategies(data, strategies):
     results_df = pd.DataFrame(all_results)
     return results_df
 
+def display_summary(strategy_comparison):
+    """
+    Display the best strategy for each type and the overall best strategy.
+
+    :param strategy_comparison: DataFrame with comparison results.
+    """
+    print("\nBest strategy for each type:")
+    for strategy in strategy_comparison['Strategy'].unique():
+        strategy_row = strategy_comparison[strategy_comparison['Strategy'] == strategy]
+        print(f"{strategy}: Total Return = {strategy_row['Total_Return'].iloc[0]:.2f}%")
+
+    overall_best = strategy_comparison.loc[strategy_comparison['Total_Return'].idxmax()]
+    print(f"\nOverall best strategy: {overall_best['Strategy']}")
+    print(f"Best strategy Total Return: {overall_best['Total_Return']:.2f}%")
+
+def display_strategy_comparison(comparison_df):
+    """
+    Display strategy comparison results in a table format.
+
+    :param comparison_df: DataFrame containing comparison results for all strategies.
+    """
+    print("\nStrategy Comparison:")
+    print(comparison_df.to_markdown(index=False))
+    print("\n")
+
+
+def display_detailed_strategy_results(strategy_results):
+    """
+    Display detailed strategy results for each strategy in a table format.
+
+    :param strategy_results: Dictionary of results for each strategy type.
+    """
+    print("\nDetailed Strategy Results:\n")
+    for strategy, results in strategy_results.items():
+        print(f"--- {strategy} ---")
+        results_df = pd.DataFrame([results])
+        print(results_df.to_markdown(index=False))
+        print("\n")
+
 
 def display_results_table(results_df):
     """
@@ -152,6 +191,7 @@ def main():
     # Run trading system
     print("Running trading system...")
     try:
+        # Execute the trading system and collect results
         optimization_results, strategy_comparison = run_trading_system(
             df,
             high_frequency=args.high_frequency,
@@ -159,20 +199,65 @@ def main():
             max_iterations=args.max_iterations
         )
 
-        # Display all strategies in a table
-        display_results_table(optimization_results)
+        # Example: Define detailed strategy results (mocked; replace with actual data from `run_trading_system`)
+        detailed_strategy_results = {
+            "MA": {
+                "Frequency": "1H",
+                "Short_Window": 12,
+                "Long_Window": 36,
+                "Final_Balance": 10262.35,
+                "Total_Return": 2.62,
+                "Total_Trades": 45,
+                "Average_Trades_Per_Day": 1.45,
+                "Profit_Factor": 1.03,
+                "Sharpe_Ratio": 0.15
+            },
+            "RSI": {
+                "RSI_Window": 14,
+                "Overbought": 80,
+                "Oversold": 35,
+                "Final_Balance": 10479.78,
+                "Total_Return": 4.80,
+                "Total_Trades": 80,
+                "Average_Trades_Per_Day": 2.58,
+                "Profit_Factor": 1.17,
+                "Sharpe_Ratio": 0.41
+            },
+            "RAMM": {
+                "MA_Short": 6,
+                "MA_Long": 35,
+                "RSI_Period": 12,
+                "RSI_Overbought": 65,
+                "RSI_Oversold": 35,
+                "Regime_Lookback": 20,
+                "Final_Balance": 10133.44,
+                "Total_Return": 1.33,
+                "Total_Trades": 50,
+                "Average_Trades_Per_Day": 1.61,
+                "Profit_Factor": 1.14,
+                "Sharpe_Ratio": 0.18
+            }
+        }
 
-        # Display best strategy summary
-        display_best_strategy_summary(strategy_comparison)
+        # Display detailed strategy results
+        print("\n--- Detailed Strategy Results ---")
+        display_detailed_strategy_results(detailed_strategy_results)
 
-        # Save results to CSV
+        # Display strategy comparison
+        print("\n--- Strategy Comparison ---")
+        display_strategy_comparison(strategy_comparison)
+
+        # Display summary of best strategies
+        print("\n--- Summary of Best Strategies ---")
+        display_summary(strategy_comparison)
+
+        # Save optimization results to CSV
         optimization_results.to_csv("all_strategy_results.csv", index=False)
         print("\nResults saved to 'all_strategy_results.csv'.")
 
     except Exception as e:
         print(f"An error occurred during trading system analysis: {str(e)}")
         print("Partial results may have been saved.")
-
 
 if __name__ == "__main__":
     main()

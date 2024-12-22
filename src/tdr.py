@@ -1,17 +1,6 @@
 #!/usr/bin/env python
 # src/tdr.py
 
-from indicators.technical_indicators import (
-    ensure_datetime_index,
-    add_moving_averages,
-    generate_ma_signals,
-    calculate_rsi,
-    generate_rsi_signals,
-    calculate_bollinger_bands,
-    generate_bollinger_band_signals,
-    calculate_macd,
-    generate_macd_signals,
-)
 import sys
 import os
 import pandas as pd
@@ -47,133 +36,76 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 sys.path.append(current_dir)
 
-# Import necessary functions and modules from technical_indicators.py and other dependencies
+# Import the same settings/indicators used in bktst.py
+from indicators.technical_indicators import (
+    ensure_datetime_index,
+    add_moving_averages,
+    generate_ma_signals,
+    calculate_rsi,
+    generate_rsi_signals,
+    calculate_bollinger_bands,
+    generate_bollinger_band_signals,
+    calculate_macd,
+    generate_macd_signals,
+)
 
-# Import the same settings used in bktst.py
+# CHANGED: Use parse_log_file from data.loader
+from data.loader import parse_log_file
+# (We no longer define a local parse_log_file in tdr.py)
+
 HIGH_FREQUENCY = '1H'  # High-frequency resampling used in backtesting
 
-
-def parse_log_file(file_path, start_date=None, end_date=None):
+###############################################################################
+# REPLICATE bktst.py's ARGUMENT PARSING LOGIC TO MATCH THE SAME DATE WINDOW
+###############################################################################
+def parse_arguments():
     """
-    Parses a JSON Lines log file and returns a DataFrame.
-    Each line in the log file is a JSON object containing trade data.
-    Aggregates trade data into minute-level candlesticks during parsing.
-
-    Parameters:
-        file_path (str): Path to the log file.
-        start_date (datetime, optional): Start date to filter data.
-        end_date (datetime, optional): End date to filter data.
-
-    Returns:
-        pd.DataFrame: DataFrame with columns ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'trades']
+    Parse command-line arguments (mirroring bktst.py).
     """
-    import json
-    import pandas as pd
-    import time
-    from datetime import datetime
-
-    # First, count total lines for progress feedback
-    total_lines = 0
-    with open(file_path, 'r') as f:
-        for _ in f:
-            total_lines += 1
-
-    print("Total lines to parse: {}".format(total_lines))
-
-    valid_lines = 0
-
-    # Prepare progress thresholds
-    progress_percentages = list(range(1, 101))  # [1, 2, ..., 100]
-    progress_thresholds = [int(total_lines * p / 100)
-                           for p in progress_percentages]
-    next_progress_idx = 0
-
-    # Time-based progress feedback
-    last_feedback_time = time.time()
-    feedback_interval = 5  # seconds
-
-    # Create a dictionary to hold aggregated data
-    minute_bars = {}
-
-    with open(file_path, 'r') as f:
-        for idx, line in enumerate(f, 1):
-            try:
-                obj = json.loads(line.strip())
-                if not isinstance(obj, dict):
-                    continue
-
-                data = obj.get('data')
-                if not isinstance(data, dict):
-                    continue
-
-                if 'timestamp' in data and 'price' in data and 'amount' in data:
-                    timestamp = int(data['timestamp'])
-                    price = float(data['price'])
-                    amount = float(data['amount'])
-
-                    # Filter by date range
-                    if start_date and timestamp < int(start_date.timestamp()):
-                        continue
-                    if end_date and timestamp > int(end_date.timestamp()):
-                        continue
-
-                    dt = datetime.fromtimestamp(timestamp)
-                    minute = dt.replace(second=0, microsecond=0)
-
-                    if minute not in minute_bars:
-                        minute_bars[minute] = {
-                            'timestamp': int(minute.timestamp()),
-                            'open': price,
-                            'high': price,
-                            'low': price,
-                            'close': price,
-                            'volume': amount,
-                            'trades': 1
-                        }
-                    else:
-                        bar = minute_bars[minute]
-                        bar['high'] = max(bar['high'], price)
-                        bar['low'] = min(bar['low'], price)
-                        bar['close'] = price
-                        bar['volume'] += amount
-                        bar['trades'] += 1
-
-                    valid_lines += 1
-                else:
-                    continue
-            except (json.JSONDecodeError, ValueError, TypeError):
-                continue
-
-            # Progress feedback based on line count
-            if next_progress_idx < len(progress_thresholds) and idx >= progress_thresholds[next_progress_idx]:
-                progress = progress_percentages[next_progress_idx]
-                print("Parsing log file: {}% completed.".format(
-                    progress), flush=True)
-                next_progress_idx += 1
-
-            # Time-based progress feedback every 'feedback_interval' seconds
-            current_time = time.time()
-            if current_time - last_feedback_time >= feedback_interval:
-                percent_complete = (idx / total_lines) * 100
-                print("Parsing log file: {:.2f}% completed.".format(
-                    percent_complete), flush=True)
-                last_feedback_time = current_time
-
-    # Ensure 100% is printed
-    if next_progress_idx < len(progress_thresholds):
-        print("Parsing log file: 100% completed.", flush=True)
-
-    print("Finished parsing log file. Total lines: {}, Valid trades: {}".format(
-        total_lines, valid_lines))
-
-    # Convert minute_bars to DataFrame
-    df = pd.DataFrame.from_dict(minute_bars, orient='index')
-    df.sort_index(inplace=True)
-    df.reset_index(drop=True, inplace=True)
-
-    return df
+    parser = argparse.ArgumentParser(description="Crypto trading shell with unified date-range logic.")
+    parser.add_argument('--start-window-days-back', type=int, default=30,
+                        help='Number of days to subtract from the current date as the start window')
+    parser.add_argument('--end-window-days-back', type=int, default=0,
+                        help='Number of days to subtract from the current date as the end window')
+    parser.add_argument('--trading-window-days', type=int,
+                        help='Number of days to analyze from the start date (overrides end-window-days-back)')
+    parser.add_argument('--do-live-trades', action='store_true',
+                        help="Enable live trading (default is dry run)")
+    parser.add_argument('--max-trades-per-day', type=int, default=5,
+                        help="Set the maximum number of trades allowed per day during auto-trading (default: 5).")
+    parser.add_argument('--verbose', nargs='?', const=True, default=False,
+                        help="Enable verbose output and optionally specify a log file (e.g., --verbose logfile.log)")
+    return parser.parse_args()
 
 
+def determine_date_range(args):
+    """
+    Determine the start and end date for the analysis window (mirroring bktst.py).
+    """
+    current_date = datetime.now()
+    if args.start_window_days_back > 0:
+        start_date = current_date - timedelta(days=args.start_window_days_back)
+    else:
+        start_date = None
+
+    if args.trading_window_days is not None:
+        if start_date is None:
+            raise ValueError("Cannot use trading-window-days without specifying start-window-days-back")
+        end_date = start_date + timedelta(days=args.trading_window_days)
+    elif args.end_window_days_back > 0:
+        end_date = current_date - timedelta(days=args.end_window_days_back)
+    else:
+        end_date = None
+
+    if start_date and end_date and start_date >= end_date:
+        raise ValueError("Start date must be earlier than end date")
+
+    return start_date, end_date
+
+
+###############################################################################
+# Everything below is the original tdr.py logic, minus the old parse_log_file.
+###############################################################################
 class CryptoDataManager:
     def __init__(self, symbols, logger, verbose=False):
         self.data = {symbol: pd.DataFrame(columns=[
@@ -388,8 +320,7 @@ class OrderPlacer:
         # Add additional parameters
         for key, value in kwargs.items():
             if value is not None:
-                payload[key] = str(value).lower() if isinstance(
-                    value, bool) else str(value)
+                payload[key] = str(value).lower() if isinstance(value, bool) else str(value)
 
         # Determine endpoint
         if 'market' in order_type:
@@ -400,8 +331,7 @@ class OrderPlacer:
         # Correct message construction
         payload_string = urlencode(payload)
         message = f"BITSTAMP {self.api_key}POSTwww.bitstamp.net{endpoint}{content_type}{nonce}{timestamp}v2{payload_string}"
-        signature = hmac.new(self.api_secret, msg=message.encode(
-            'utf-8'), digestmod=hashlib.sha256).hexdigest()
+        signature = hmac.new(self.api_secret, msg=message.encode('utf-8'), digestmod=hashlib.sha256).hexdigest()
 
         # Set headers
         headers = {
@@ -435,7 +365,6 @@ class OrderPlacer:
 
     def place_limit_sell_order(self, currency_pair, amount, price, **kwargs):
         return self.place_order('sell', currency_pair, amount, price, **kwargs)
-
 
 
 class MACrossoverStrategy:
@@ -813,6 +742,7 @@ class MACrossoverStrategy:
 
         return status
 
+
 def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window):
     # Since we cannot pass the data_manager object directly, we reconstruct it
     # from the shared dictionary
@@ -935,14 +865,14 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
         )
 
         # Add moving averages
-        short_ma = go.Scatter(
+        short_ma_line = go.Scatter(
             x=df_visible.index,
             y=df_visible['Short_MA'],
             line=dict(color='blue', width=1),
             name='Short MA ({})'.format(short_window)
         )
 
-        long_ma = go.Scatter(
+        long_ma_line = go.Scatter(
             x=df_visible.index,
             y=df_visible['Long_MA'],
             line=dict(color='red', width=1),
@@ -966,14 +896,13 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
             name='Sell Signal'
         )
 
-        data = [candlestick, short_ma, long_ma, buy_signals, sell_signals]
+        data = [candlestick, short_ma_line, long_ma_line, buy_signals, sell_signals]
 
         # Update the layout to include the new x-axis and y-axis ranges
         layout = go.Layout(
             xaxis=dict(title='Time', range=[x_start, x_end]),
             yaxis=dict(title='Price ($)', range=[y_min, y_max]),
-            title='{} Candlestick Chart with Moving Averages and Trade Signals'.format(
-                symbol.upper()),
+            title='{} Candlestick Chart with Moving Averages and Trade Signals'.format(symbol.upper()),
             height=800  # Adjust the height as needed
         )
 
@@ -1057,14 +986,12 @@ class CryptoShell(cmd.Cmd):
             print("Usage: range <symbol> <minutes>")
             return
         symbol, minutes = args[0].lower(), int(args[1])
-        min_price, max_price = self.data_manager.get_price_range(
-            symbol, minutes)
+        min_price, max_price = self.data_manager.get_price_range(symbol, minutes)
         if min_price is not None and max_price is not None:
             print("Price range for {} in last {} minutes:".format(symbol, minutes))
             print("Min: ${:.2f}, Max: ${:.2f}".format(min_price, max_price))
         else:
-            print("No data available for {} in the last {} minutes".format(
-                symbol, minutes))
+            print("No data available for {} in the last {} minutes".format(symbol, minutes))
 
     def do_buy(self, arg):
         """Place a market buy order: buy <symbol> <amount>"""
@@ -1117,15 +1044,13 @@ class CryptoShell(cmd.Cmd):
             timestamp = datetime.fromtimestamp(
                 candle['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
             print("{} - {}: Open: ${:.2f}, High: ${:.2f}, Low: ${:.2f}, Close: ${:.2f}, Volume: {}, Trades: {}".format(
-                symbol, timestamp, candle['open'], candle['high'], candle[
-                    'low'], candle['close'], candle['volume'], candle['trades']
+                symbol, timestamp, candle['open'], candle['high'], candle['low'], candle['close'], candle['volume'], candle['trades']
             ))
 
     def trade_callback(self, symbol, price, timestamp, trade_reason):
         if symbol in self.ticker_output:
             # Convert UNIX timestamp to readable format
-            time_str = datetime.fromtimestamp(
-                timestamp).strftime('%Y-%m-%d %H:%M:%S')
+            time_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
             print("{} - {}: Price: ${:.2f}".format(symbol, time_str, price))
 
     def do_verbose(self, arg):
@@ -1252,14 +1177,12 @@ class CryptoShell(cmd.Cmd):
             print("Best strategy parameters file '{}' not found.".format(file_path))
             return
         except json.JSONDecodeError:
-            print(
-                "Best strategy parameters file '{}' is not a valid JSON.".format(file_path))
+            print("Best strategy parameters file '{}' is not a valid JSON.".format(file_path))
             return
 
         strategy_name = best_strategy_params.get('Strategy')
         if strategy_name != 'MA':
-            print("The best strategy is not MA Crossover. It's {}.".format(
-                strategy_name))
+            print("The best strategy is not MA Crossover. It's {}.".format(strategy_name))
             return
 
         try:
@@ -1289,7 +1212,6 @@ class CryptoShell(cmd.Cmd):
             print("Auto-trading stopped.")
         else:
             print("Auto-trading is not running.")
-
 
     def do_status(self, arg):
         """Show the status of auto-trading including balance and performance metrics."""
@@ -1385,16 +1307,6 @@ class CryptoShell(cmd.Cmd):
             
         else:
             print("Auto-trading is not running.")
-        def do_help(self, arg):
-            """List available commands with "help" or detailed help with "help cmd"."""
-            super().do_help(arg)
-            if arg == '':
-                print("\nCustom Commands:")
-                print("  auto_trade       Start auto-trading using the best strategy")
-                print("  stop_auto_trade  Stop auto-trading")
-                print("  status           Show the status of auto-trading")
-                print(
-                    "  chart            Show a live updating chart: chart [symbol] [bar_size]")
 
     def do_quit(self, arg):
         """Quit the program"""
@@ -1459,26 +1371,22 @@ class CryptoShell(cmd.Cmd):
                 with open('best_strategy.json', 'r') as f:
                     best_strategy_params = json.load(f)
                     if best_strategy_params.get('Strategy') == 'MA':
-                        short_window = int(
-                            best_strategy_params['Short_Window'])
+                        short_window = int(best_strategy_params['Short_Window'])
                         long_window = int(best_strategy_params['Long_Window'])
                     else:
                         print("Best strategy is not MA Crossover.")
                         return
             except Exception as e:
-                print(
-                    "Could not determine moving average windows. Start auto_trading or provide best_strategy.json.")
+                print("Could not determine moving average windows. Start auto_trading or provide best_strategy.json.")
                 return
 
         # Share data using Manager dictionary
-        self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(
-            symbol).to_dict('list')
+        self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
 
         # Update the data_manager_dict in a separate thread
         def update_shared_data():
             while not self.stop_event.is_set():
-                self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(
-                    symbol).to_dict('list')
+                self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
                 time.sleep(60)
 
         threading.Thread(target=update_shared_data, daemon=True).start()
@@ -1523,7 +1431,6 @@ def setup_logging(verbose, log_file=None):
     logger.addHandler(stream_handler)
 
     # FileHandler for logging to a file
-    # Use current working directory
     if log_file:
         log_file_path = os.path.abspath(log_file)
     else:
@@ -1537,20 +1444,9 @@ def setup_logging(verbose, log_file=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Crypto trading shell")
-    parser.add_argument('-v', '--verbose', nargs='?', const=True, default=False,
-                        help="Enable verbose output and optionally specify a log file (e.g., --verbose logfile.log)")
-    parser.add_argument('--do-live-trades', action='store_true',
-                        help="Enable live trading (default is dry run)")
-    parser.add_argument('--max-trades-per-day', type=int, default=5,
-                        help="Set the maximum number of trades allowed per day during auto-trading (default: 5).")
-
-    args = parser.parse_args()
-
-    max_trades_per_day = args.max_trades_per_day
-    if max_trades_per_day < 1:
-        print("Error: --max-trades-per-day must be at least 1.")
-        sys.exit(1)
+    # CHANGED: Now we parse arguments and unify with the same date-range logic as bktst.py
+    args = parse_arguments()
+    start_date, end_date = determine_date_range(args)
 
     # Setup logging based on verbose argument
     if args.verbose is True:
@@ -1564,6 +1460,7 @@ def main():
         verbose_flag = False
 
     live_trading = args.do_live_trades
+    max_trades_per_day = args.max_trades_per_day
 
     if live_trading:
         print("Live trading is ENABLED.")
@@ -1571,57 +1468,44 @@ def main():
         print("Live trading is DISABLED. Running in dry run mode.")
 
     symbols = ["btcusd"]  # Adjust as needed
-    data_manager = CryptoDataManager(
-        symbols, logger=logger, verbose=verbose_flag)
+    data_manager = CryptoDataManager(symbols, logger=logger, verbose=verbose_flag)
 
-    # Read historical data
-    # Use the directory from which the command is issued
-    # Ensure this is the correct path to your log file
+    # Use the same file as backtesting
     file_path = os.path.abspath('btcusd.log')
-
     print("Current working directory: {}".format(os.getcwd()))
+    print(f"Loading log file: {file_path}")
 
-    # Limit the data to prevent memory issues (e.g., last 90 days)
-    start_date = datetime.now() - timedelta(days=90)
-    end_date = datetime.now()
-
-    # Parse historical data using the updated parse_log_file function
     try:
+        # CHANGED: Now we use parse_log_file from data.loader
         df = parse_log_file(file_path, start_date, end_date)
     except Exception as e:
         print("Failed to parse log file '{}': {}".format(file_path, e))
         sys.exit(1)
 
     if df.empty:
-        print("No historical data found in '{}' for the specified date range. Exiting.".format(
-            file_path))
+        print(f"No historical data found in '{file_path}' for the specified date range. Exiting.")
         sys.exit(1)
 
-    try:
-        # Retain 'timestamp' as UNIX epoch seconds
-        if 'timestamp' not in df.columns:
-            print(
-                "Missing 'timestamp' column in log file '{}'. Exiting.".format(file_path))
-            sys.exit(1)
-        # Ensure 'timestamp' is integer seconds
-        df['timestamp'] = df['timestamp'].astype(int)
-        # Do NOT convert 'timestamp' to datetime here
-        # Let technical_indicators.py handle datetime indexing
-        # If 'datetime' column exists, drop it to avoid confusion
-        if 'datetime' in df.columns:
-            df = df.drop(columns=['datetime'])
-    except KeyError as e:
-        print("Missing expected column in log file: {}".format(e))
+    # Prepare columns: we want them to match our strategy usage (open/high/low/close)
+    # But parse_log_file returns trades. We'll approximate them as close for convenience
+    # If you prefer candle-aggregation, do it here or rely on indicators
+    df.rename(columns={'price': 'close'}, inplace=True)
+    if 'timestamp' not in df.columns:
+        print("Missing 'timestamp' column in loaded DataFrame. Exiting.")
         sys.exit(1)
-    except Exception as e:
-        print("Error processing log file: {}".format(e))
-        sys.exit(1)
+    df['open'] = df['close']
+    df['high'] = df['close']
+    df['low'] = df['close']
+    df['trades'] = 1  # Each row is 1 trade
+    if 'volume' not in df.columns:
+        # If parse_log_file doesn't have a 'volume' column, approximate:
+        df['volume'] = df['amount'] if 'amount' in df.columns else 0.0
 
-    # Load aggregated data into the data manager
+    # Load into our data manager
     data_manager.load_historical_data({'btcusd': df})
 
     order_placer = OrderPlacer()
-    data_manager.order_placer = order_placer  # Set order placer in data manager
+    data_manager.order_placer = order_placer
 
     # Create a stop event to signal threads to stop
     stop_event = threading.Event()
