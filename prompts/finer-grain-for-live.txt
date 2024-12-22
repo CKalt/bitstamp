@@ -1,0 +1,27 @@
+I show two python projects below.  The first one is called `src/bktst.py` and performs back testing against a log of trading btcusd trading data. The second one is called `src/tdr.py` and is used to run a live automatic trading system using the best strategy found from the `src/bktst.py` as communicated by the file called `best_strategy.json`.
+
+
+cat best_strategy.json 
+{
+    "Frequency": "1H",
+    "Strategy": "MA",
+    "Short_Window": 8.0,
+    "Long_Window": 46.0,
+    "Final_Balance": 13700.61923409448,
+    "Total_Return": 37.0061923409448,
+    "Total_Trades": 109.0,
+    "Profit_Factor": 1.0940269725006704,
+    "Sharpe_Ratio": 0.480339438548211,
+    "Average_Trades_Per_Day": 1.211111111111111,
+    "start_window_days_back": 90,
+    "end_window_days_back": 0
+}
+
+What I would like you to do is confirm that when `src/tdr.py` is run it computes the same position as would be traded using the stratey and executes a position that would be consistent with the one found by `src/bktst.py`
+
+It is while moving forward that I should like to make `src/tdr.py` take advantage of the fact that it is monitoring the data real time and so therefor should be able to trade sooner because the signals will be computed based on higher frequency.  
+
+Is there anyway you can see how we might improve `src/tdr.py` to perform trades sooner that would be consistent with the same strategy found by the `src/bktst.py` program:
+
+Here's the first project:
+
