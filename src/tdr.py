@@ -129,7 +129,7 @@ class CryptoDataManager:
 
         self.last_price[symbol] = price
 
-        # Notify any observers
+        # Notify any observers (including the real-time strategy, if attached)
         for observer in self.trade_observers:
             observer(symbol, price, timestamp, trade_reason)
 
@@ -399,6 +399,21 @@ class MACrossoverStrategy:
         self.current_day = datetime.utcnow().date()
         self.logger.debug(f"Trade limit set to {self.max_trades_per_day} trades/day.")
 
+        # CHANGED / ADDED: track trades this hour for the new hourly limit
+        self.trades_this_hour = []
+
+        # CHANGED / ADDED: We attach this strategy as a trade observer so that 
+        # we can update signals in real time as soon as a new trade arrives.
+        # This will allow near-instant detection of MA crossovers.
+        data_manager.add_trade_observer(self.check_instant_signal)
+
+    def _clean_up_hourly_trades(self):
+        """Remove trades older than 1 hour from trades_this_hour."""
+        one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+        self.trades_this_hour = [
+            t for t in self.trades_this_hour if t > one_hour_ago
+        ]
+
     def start(self):
         """
         Start the strategy loop in a background thread.
@@ -465,13 +480,14 @@ class MACrossoverStrategy:
     def run_strategy_loop(self):
         """
         Strategy loop that checks for signals every minute and acts accordingly.
+        (You can disable or ignore this if you want purely instant trades.)
         """
         while self.running:
             df = self.data_manager.get_price_dataframe(self.symbol)
             if not df.empty:
                 try:
                     df = ensure_datetime_index(df)
-                    # Resample to the frequency we want:
+                    # Original 1-hour resampling approach:
                     df_resampled = df.resample(HIGH_FREQUENCY).agg({
                         'open': 'first',
                         'high': 'max',
@@ -542,20 +558,81 @@ class MACrossoverStrategy:
             'Trend_Strength': abs(short_ma_curr - long_ma_curr) / long_ma_curr * 100 if long_ma_curr != 0 else 0
         }
 
+    # CHANGED / ADDED: A new callback that triggers on every real-time trade.
+    def check_instant_signal(self, symbol, price, timestamp, trade_reason):
+        """
+        Real-time callback whenever a new trade is received for `symbol`.
+        We'll do a quick 'MA crossover' check on streaming data, 
+        and if there's a new signal, execute the trade instantly.
+        """
+        if not self.running:
+            # If the strategy is not started, do nothing.
+            return
+        if symbol != self.symbol:
+            return  # We only trade on self.symbol
+
+        # Build/Update a rolling list of 'close' prices to approximate MAs in real time
+        # Example approach: you might want to store more data, or fetch from data_manager.
+        df_live = self.data_manager.get_price_dataframe(symbol)
+        if df_live.empty:
+            return
+
+        # We'll skip resampling. Instead, just ensure a DateTime index and compute MAs directly.
+        df_live = ensure_datetime_index(df_live)
+
+        # Only proceed if we have enough data for the long_window
+        if len(df_live) < self.long_window:
+            return
+
+        # We'll compute the MAs directly on the last N rows:
+        df_ma = df_live.copy()
+        df_ma['Short_MA'] = df_ma['close'].rolling(self.short_window).mean()
+        df_ma['Long_MA'] = df_ma['close'].rolling(self.long_window).mean()
+        df_ma.dropna(inplace=True)  # Must drop until both MAs are valid
+
+        if df_ma.empty:
+            return
+
+        latest = df_ma.iloc[-1]
+        short_ma_now = latest['Short_MA']
+        long_ma_now = latest['Long_MA']
+        # Convert to a simple signal: 1 if short>long, -1 if short<long
+        signal_now = 1 if short_ma_now > long_ma_now else -1
+
+        # Compare to the previous row's signal (if any) to detect a 'crossover'
+        if len(df_ma) < 2:
+            return
+
+        prev = df_ma.iloc[-2]
+        prev_signal = 1 if prev['Short_MA'] > prev['Long_MA'] else -1
+
+        if signal_now == prev_signal:
+            return  # No change in signal, do nothing
+
+        # If we do have a signal change, let's record signal_time as the row's index
+        signal_time = df_ma.index[-1]
+
+        # The same check_for_signals logic but called immediately
+        self.check_for_signals(signal_now, price, signal_time)
+
     def check_for_signals(self, latest_signal, current_price, signal_time):
         """
         Decide whether to buy or sell based on the latest MA signal.
+        (Now also used by check_instant_signal in real time.)
         """
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if self.last_signal_time == signal_time:
             return
 
+        # MA CROSS: 1 => means go long if not already
         if latest_signal == 1 and self.position <= 0:
             self.logger.info(f"Buy signal triggered at {current_price}")
             self.position = 1
             self.last_trade_reason = "MA Crossover: short above long."
             self.execute_trade("buy", current_price, timestamp, signal_time)
             self.last_signal_time = signal_time
+
+        # MA CROSS: -1 => means go short if not already
         elif latest_signal == -1 and self.position >= 0:
             self.logger.info(f"Sell signal triggered at {current_price}")
             self.position = -1
@@ -565,7 +642,7 @@ class MACrossoverStrategy:
 
     def execute_trade(self, trade_type, price, timestamp, signal_timestamp):
         """
-        Execute a trade (buy or sell) and update balances if we haven't exceeded daily limits.
+        Execute a trade (buy or sell) and update balances if we haven't exceeded daily or hourly limits.
         """
         today = datetime.utcnow().date()
         if today != self.current_day:
@@ -573,8 +650,16 @@ class MACrossoverStrategy:
             self.trade_count_today = 0
             self.logger.debug("New day, resetting daily trade count.")
 
+        # Check daily trade limit
         if self.trade_count_today >= self.max_trades_per_day:
             self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping trade.")
+            return
+
+        # ADDED: Check hourly trade limit (3 trades per rolling hour)
+        self._clean_up_hourly_trades()
+        max_trades_per_hour = 3
+        if len(self.trades_this_hour) >= max_trades_per_hour:
+            self.logger.info(f"Reached hourly trade limit {max_trades_per_hour}, skipping trade.")
             return
 
         data_source = 'historical' if signal_timestamp < self.strategy_start_time else 'live'
@@ -605,6 +690,9 @@ class MACrossoverStrategy:
             self.logger.info(f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
             self.trade_log.append(trade_info)
             self.update_balance(trade_type, price, self.current_amount)
+
+        # Increment the hourly trade list
+        self.trades_this_hour.append(datetime.utcnow())
 
         # Write to log file (trades.json)
         try:
