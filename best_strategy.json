@@ -3,10 +3,10 @@
     "Strategy": "MA",
     "Short_Window": 8,
     "Long_Window": 46,
-    "Final_Balance": 13776.920575805245,
-    "Total_Return": 37.76920575805245,
+    "Final_Balance": 13700.61923409448,
+    "Total_Return": 37.0061923409448,
     "Total_Trades": 109.0,
     "Average_Trades_Per_Day": 1.211111111111111,
-    "Profit_Factor": 1.0957339390612522,
-    "Sharpe_Ratio": 0.488629276076593
+    "Profit_Factor": 1.0940269725006704,
+    "Sharpe_Ratio": 0.480339438548211
 }
