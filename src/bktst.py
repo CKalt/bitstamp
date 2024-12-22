@@ -73,6 +73,9 @@ def determine_date_range(args):
     return start_date, end_date
 
 
+###############################################################################
+# RESTORED FUNCTIONS (previously removed)
+###############################################################################
 def evaluate_all_strategies(data, strategies):
     """
     Evaluate all strategies on the given data and return their performance metrics.
@@ -103,6 +106,7 @@ def evaluate_all_strategies(data, strategies):
     results_df = pd.DataFrame(all_results)
     return results_df
 
+
 def display_summary(strategy_comparison):
     """
     Display the best strategy for each type and the overall best strategy.
@@ -117,6 +121,7 @@ def display_summary(strategy_comparison):
     overall_best = strategy_comparison.loc[strategy_comparison['Total_Return'].idxmax()]
     print(f"\nOverall best strategy: {overall_best['Strategy']}")
     print(f"Best strategy Total Return: {overall_best['Total_Return']:.2f}%")
+
 
 def display_strategy_comparison(comparison_df):
     """
@@ -258,6 +263,7 @@ def main():
     except Exception as e:
         print(f"An error occurred during trading system analysis: {str(e)}")
         print("Partial results may have been saved.")
+
 
 if __name__ == "__main__":
     main()
