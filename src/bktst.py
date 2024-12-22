@@ -1,9 +1,13 @@
 # src/bktst.py
+from utils.analysis import analyze_data, run_trading_system
+from data.loader import create_metadata_file, parse_log_file
 import argparse
 import os
 import sys
 from datetime import datetime, timedelta
 import pandas as pd
+import json
+import traceback
 
 # Ensure that the 'src' directory is in sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -11,15 +15,13 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(current_dir)
 sys.path.append(parent_dir)
 
-from data.loader import create_metadata_file, parse_log_file
-from utils.analysis import analyze_data, run_trading_system
-
 
 def parse_arguments():
     """
     Parse command-line arguments.
     """
-    parser = argparse.ArgumentParser(description="Analyze Bitcoin trade log data.")
+    parser = argparse.ArgumentParser(
+        description="Analyze Bitcoin trade log data.")
     parser.add_argument('--start-window-days-back', type=int, default=30,
                         help='Number of days to subtract from the current date as the start window')
     parser.add_argument('--end-window-days-back', type=int, default=0,
@@ -59,7 +61,8 @@ def determine_date_range(args):
 
     if args.trading_window_days is not None:
         if start_date is None:
-            raise ValueError("Cannot use trading-window-days without specifying start-window-days-back")
+            raise ValueError(
+                "Cannot use trading-window-days without specifying start-window-days-back")
         end_date = start_date + timedelta(days=args.trading_window_days)
         print(f"Using trading window of {args.trading_window_days} days")
     elif args.end_window_days_back > 0:
@@ -116,9 +119,11 @@ def display_summary(strategy_comparison):
     print("\nBest strategy for each type:")
     for strategy in strategy_comparison['Strategy'].unique():
         strategy_row = strategy_comparison[strategy_comparison['Strategy'] == strategy]
-        print(f"{strategy}: Total Return = {strategy_row['Total_Return'].iloc[0]:.2f}%")
+        print(
+            f"{strategy}: Total Return = {strategy_row['Total_Return'].iloc[0]:.2f}%")
 
-    overall_best = strategy_comparison.loc[strategy_comparison['Total_Return'].idxmax()]
+    overall_best = strategy_comparison.loc[strategy_comparison['Total_Return'].idxmax(
+    )]
     print(f"\nOverall best strategy: {overall_best['Strategy']}")
     print(f"Best strategy Total Return: {overall_best['Total_Return']:.2f}%")
 
@@ -164,12 +169,14 @@ def display_best_strategy_summary(strategy_comparison):
     """
     print("\nBest strategy for each type:")
     for strategy in strategy_comparison.index:
-        print(f"{strategy}: Total Return = {strategy_comparison.loc[strategy, 'Total_Return']:.2f}%")
+        print(
+            f"{strategy}: Total Return = {strategy_comparison.loc[strategy, 'Total_Return']:.2f}%")
 
     if len(strategy_comparison) > 1:
         best_strategy = strategy_comparison['Total_Return'].idxmax()
         print(f"\nOverall best strategy: {best_strategy}")
-        print(f"Best strategy Total Return: {strategy_comparison.loc[best_strategy, 'Total_Return']:.2f}%")
+        print(
+            f"Best strategy Total Return: {strategy_comparison.loc[best_strategy, 'Total_Return']:.2f}%")
 
 
 def main():
@@ -187,7 +194,8 @@ def main():
 
     print(f"Parsed {len(df)} trade events.")
     print(f"DataFrame shape after parsing: {df.shape}")
-    print(f"DataFrame memory usage: {df.memory_usage().sum() / 1024 / 1024:.2f} MB")
+    print(
+        f"DataFrame memory usage: {df.memory_usage().sum() / 1024 / 1024:.2f} MB")
 
     # Analyze data
     print("Starting data analysis...")
@@ -207,7 +215,7 @@ def main():
         # Example: Define detailed strategy results (mocked; replace with actual data from `run_trading_system`)
         detailed_strategy_results = {
             "MA": {
-                "Frequency": "1H",
+                "Frequency": args.high_frequency,
                 "Short_Window": 12,
                 "Long_Window": 36,
                 "Final_Balance": 10262.35,
@@ -259,6 +267,79 @@ def main():
         # Save optimization results to CSV
         optimization_results.to_csv("all_strategy_results.csv", index=False)
         print("\nResults saved to 'all_strategy_results.csv'.")
+
+        ################################################################
+        # NEW LOGIC: Write best_strategy.json in the "new" format
+        ################################################################
+        if not strategy_comparison.empty:
+            # 1) Identify the best row by total return
+            best_idx = strategy_comparison['Total_Return'].idxmax()
+            best_row = strategy_comparison.loc[best_idx]
+
+            # The code above uses columns like 'Final_Balance', 'Total_Return', etc.
+            # We'll unify them to match your desired best_strategy.json fields
+            # Also incorporate the date-range fields from your arguments
+
+            best_strategy_json = {
+                # Original version (lines to remove):
+                # "Frequency": args.high_frequency,
+                # "Strategy": best_row['Strategy'],
+                # "Short_Window": best_row.get('Short_Window', 0),
+                # "Long_Window": best_row.get('Long_Window', 0),
+                # "Final_Balance": best_row.get('Final_Balance', 0),
+                # "Total_Return": best_row.get('Total_Return', 0),
+                # "Total_Trades": best_row.get('Total_Trades', 0),
+                # "Profit_Factor": best_row.get('Profit_Factor', 0),
+                # "Sharpe_Ratio": best_row.get('Sharpe_Ratio', 0),
+                # "Average_Trades_Per_Day": best_row.get('Average_Trades_Per_Day', 0),
+                # "start_window_days_back": args.start_window_days_back,
+                # "end_window_days_back": args.end_window_days_back
+
+                # Updated version (lines to insert):
+                "Frequency": args.high_frequency,
+                "Strategy": best_row['Strategy'],
+                "Short_Window": best_row.get('Short_Window', 0),
+                "Long_Window": best_row.get('Long_Window', 0),
+                "Final_Balance": best_row.get('Final_Balance', 0),
+                "Total_Return": best_row.get('Total_Return', 0),
+                "Total_Trades": best_row.get('Total_Trades', 0),
+                "Profit_Factor": best_row.get('Profit_Factor', 0),
+                "Sharpe_Ratio": best_row.get('Sharpe_Ratio', 0),
+                "Average_Trades_Per_Day": best_row.get('Average_Trades_Per_Day', 0),
+                "start_window_days_back": args.start_window_days_back,
+                "end_window_days_back": args.end_window_days_back
+            }
+
+            # --- BEGIN: Insert these lines to fix JSON serialization errors ---
+            def convert_types(obj):
+                import numpy as np
+                import pandas as pd
+                if isinstance(obj, (np.integer, np.int64)):
+                    return int(obj)
+                elif isinstance(obj, (np.floating, np.float64)):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, pd.Timestamp):
+                    return obj.isoformat()
+                elif pd.isna(obj):
+                    return None  # or "NaN", depending on preference
+                return obj
+
+            best_strategy_json = {
+                key: convert_types(value) for key, value in best_strategy_json.items()
+            }
+            # --- END: Insert these lines ---
+
+            # 2) Write this to best_strategy.json
+            try:
+                with open("best_strategy.json", "w") as f:
+                    json.dump(best_strategy_json, f, indent=4)
+                print("\nWrote best_strategy.json with new fields:")
+                print(best_strategy_json)
+            except Exception as e:
+                print("Error writing best_strategy.json:")
+                traceback.print_exc()
 
     except Exception as e:
         print(f"An error occurred during trading system analysis: {str(e)}")
