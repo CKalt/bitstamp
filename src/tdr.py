@@ -45,37 +45,33 @@ from indicators.technical_indicators import (
     generate_macd_signals,
 )
 
-# We remove CLI argument parsing. We'll read config from best_strategy.json if present.
-HIGH_FREQUENCY = '1H'  # Default; can be overridden if desired from best_strategy.json
+HIGH_FREQUENCY = '1H'  # Default bar size for run_strategy_loop()
 
 ###############################################################################
-# Enhancement #1: Helper function to determine initial position from history
+# Helper to find final MA-based position from historical data
 ###############################################################################
 def determine_initial_position(df: pd.DataFrame, short_window: int, long_window: int) -> int:
     """
-    Computes the final short/long MA crossover on the given DataFrame to decide 
-    whether the correct position is long (1), short (-1), or neutral (0).
+    Computes the final short/long MA crossover on df to decide 
+    if we "should" be long (1), short (-1), or neutral (0).
 
-    :param df: DataFrame with at least a 'close' column.
-    :param short_window: int - the short MA window size
-    :param long_window: int - the long MA window size
-    :return: 1 (long), -1 (short), or 0 (neutral)
+    :param df: DataFrame with at least a 'close' column
+    :param short_window: int
+    :param long_window: int
+    :return: 1, -1, or 0
     """
     if len(df) < long_window:
-        return 0  # Not enough data to form a long MA
+        return 0
 
-    # Ensure datetime index and compute MAs
     df_copy = ensure_datetime_index(df.copy())
     df_copy['Short_MA'] = df_copy['close'].rolling(short_window).mean()
     df_copy['Long_MA'] = df_copy['close'].rolling(long_window).mean()
     df_copy.dropna(inplace=True)
-
     if df_copy.empty:
         return 0
 
     last_short = df_copy.iloc[-1]['Short_MA']
     last_long  = df_copy.iloc[-1]['Long_MA']
-
     if last_short > last_long:
         return 1
     elif last_short < last_long:
@@ -135,7 +131,7 @@ class CryptoDataManager:
 
     def add_trade(self, symbol, price, timestamp, trade_reason="Live Trade"):
         """
-        Add a new trade to the candlestick data. 
+        Add a new trade to the candlestick data.
         Aggregates trades into current-minute candles.
         """
         price = float(price)
@@ -152,7 +148,7 @@ class CryptoDataManager:
                 'high': price,
                 'low': price,
                 'close': price,
-                'volume': 0.0,  # For real-time data, we don't have 'amount', so 0.0
+                'volume': 0.0,
                 'trades': 1
             }
         else:
@@ -164,7 +160,7 @@ class CryptoDataManager:
 
         self.last_price[symbol] = price
 
-        # Notify any observers (including the real-time strategy, if attached)
+        # Notify trade observers
         for observer in self.trade_observers:
             observer(symbol, price, timestamp, trade_reason)
 
@@ -199,7 +195,6 @@ class CryptoDataManager:
         else:
             df['source'] = pd.Series(dtype=str)
 
-        # Add live candlesticks to the DataFrame
         if symbol in self.candlesticks:
             live_df = pd.DataFrame.from_dict(self.candlesticks[symbol], orient='index')
             live_df.sort_index(inplace=True)
@@ -257,8 +252,8 @@ class Trade:
 
 async def subscribe_to_websocket(url: str, symbol: str, data_manager, stop_event):
     """
-    Async function to subscribe to the Bitstamp (or other) WebSocket channel
-    for a given symbol, and store new trades into the data_manager.
+    Async function to subscribe to the Bitstamp WebSocket for a given symbol,
+    storing new trades into data_manager.
     """
     channel = f"live_trades_{symbol}"
 
@@ -268,7 +263,6 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager, stop_event
             async with websockets.connect(url) as websocket:
                 data_manager.logger.info(f"{symbol}: Connected to WebSocket.")
 
-                # Subscribe
                 subscribe_message = {
                     "event": "bts:subscribe",
                     "data": {
@@ -278,7 +272,6 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager, stop_event
                 await websocket.send(json.dumps(subscribe_message))
                 data_manager.logger.info(f"{symbol}: Subscribed to channel: {channel}")
 
-                # Handle messages
                 while not stop_event.is_set():
                     message = await websocket.recv()
                     data_manager.logger.debug(f"{symbol}: {message}")
@@ -320,7 +313,7 @@ class OrderPlacer:
 
     def place_order(self, order_type, currency_pair, amount, price=None, **kwargs):
         """
-        Place a buy/sell or market/limit order using the exchange's REST API.
+        Place a buy/sell or market/limit order using the Bitstamp REST API.
         """
         import time
         import uuid
@@ -347,7 +340,10 @@ class OrderPlacer:
             endpoint = f"/api/v2/{'buy' if 'buy' in order_type else 'sell'}/{currency_pair}/"
 
         payload_string = urlencode(payload)
-        message = f"BITSTAMP {self.api_key}POSTwww.bitstamp.net{endpoint}{content_type}{nonce}{timestamp}v2{payload_string}"
+        message = (
+            f"BITSTAMP {self.api_key}"
+            f"POSTwww.bitstamp.net{endpoint}{content_type}{nonce}{timestamp}v2{payload_string}"
+        )
         signature = hmac.new(self.api_secret, msg=message.encode('utf-8'), digestmod=hashlib.sha256).hexdigest()
 
         headers = {
@@ -395,7 +391,7 @@ class MACrossoverStrategy:
         logger,
         live_trading=False,
         max_trades_per_day=5,
-        initial_position=0  # Enhancement #2: initialize with a known position
+        initial_position=0
     ):
         self.data_manager = data_manager
         self.order_placer = data_manager.order_placer
@@ -405,7 +401,6 @@ class MACrossoverStrategy:
         self.current_amount = amount
         self.symbol = symbol
         self.logger = logger
-        # Enhancement: start with user-supplied position from historical analysis
         self.position = initial_position
         self.running = False
         self.live_trading = live_trading
@@ -436,20 +431,18 @@ class MACrossoverStrategy:
         self.current_day = datetime.utcnow().date()
         self.logger.debug(f"Trade limit set to {self.max_trades_per_day} trades/day.")
 
-        # CHANGED / ADDED: track trades this hour for the new hourly limit
+        # Track trades this hour for the new hourly limit
         self.trades_this_hour = []
 
-        # CHANGED / ADDED: We attach this strategy as a trade observer so that 
-        # we can update signals in real time as soon as a new trade arrives.
-        # This will allow near-instant detection of MA crossovers.
+        # Real-time callback
         data_manager.add_trade_observer(self.check_instant_signal)
 
     def _clean_up_hourly_trades(self):
-        """Remove trades older than 1 hour from trades_this_hour."""
+        """
+        Remove trades older than 1 hour from trades_this_hour.
+        """
         one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-        self.trades_this_hour = [
-            t for t in self.trades_this_hour if t > one_hour_ago
-        ]
+        self.trades_this_hour = [t for t in self.trades_this_hour if t > one_hour_ago]
 
     def start(self):
         """
@@ -516,15 +509,14 @@ class MACrossoverStrategy:
 
     def run_strategy_loop(self):
         """
-        Strategy loop that checks for signals every minute and acts accordingly.
-        (You can disable or ignore this if you want purely instant trades.)
+        Strategy loop that checks for signals every minute 
+        (optional, if you want purely real-time trades).
         """
         while self.running:
             df = self.data_manager.get_price_dataframe(self.symbol)
             if not df.empty:
                 try:
                     df = ensure_datetime_index(df)
-                    # Original 1-hour resampling approach:
                     df_resampled = df.resample(HIGH_FREQUENCY).agg({
                         'open': 'first',
                         'high': 'max',
@@ -537,8 +529,7 @@ class MACrossoverStrategy:
                     }).dropna()
 
                     if len(df_resampled) >= self.long_window:
-                        df_ma = add_moving_averages(
-                            df_resampled.copy(), self.short_window, self.long_window, price_col='close')
+                        df_ma = add_moving_averages(df_resampled.copy(), self.short_window, self.long_window, price_col='close')
                         df_ma = generate_ma_signals(df_ma)
 
                         latest_signal = df_ma.iloc[-1]['MA_Signal']
@@ -561,7 +552,7 @@ class MACrossoverStrategy:
 
     def determine_next_trigger(self, df_ma):
         """
-        Look at the latest signals, produce a text explanation of next potential trigger.
+        Look at the latest signals, produce a text explanation.
         """
         if len(df_ma) < 2:
             return None
@@ -595,77 +586,62 @@ class MACrossoverStrategy:
             'Trend_Strength': abs(short_ma_curr - long_ma_curr) / long_ma_curr * 100 if long_ma_curr != 0 else 0
         }
 
-    # CHANGED / ADDED: A new callback that triggers on every real-time trade.
     def check_instant_signal(self, symbol, price, timestamp, trade_reason):
         """
-        Real-time callback whenever a new trade is received for `symbol`.
-        We'll do a quick 'MA crossover' check on streaming data, 
-        and if there's a new signal, execute the trade instantly.
+        Real-time callback for each new trade. We do a quick rolling MA check
+        and if there's a new crossover, we act immediately.
         """
         if not self.running:
-            # If the strategy is not started, do nothing.
             return
         if symbol != self.symbol:
-            return  # We only trade on self.symbol
+            return
 
-        # Build/Update a rolling list of 'close' prices to approximate MAs in real time
         df_live = self.data_manager.get_price_dataframe(symbol)
         if df_live.empty:
             return
 
         df_live = ensure_datetime_index(df_live)
-
-        # Only proceed if we have enough data for the long_window
         if len(df_live) < self.long_window:
             return
 
         df_ma = df_live.copy()
         df_ma['Short_MA'] = df_ma['close'].rolling(self.short_window).mean()
-        df_ma['Long_MA'] = df_ma['close'].rolling(self.long_window).mean()
+        df_ma['Long_MA']  = df_ma['close'].rolling(self.long_window).mean()
         df_ma.dropna(inplace=True)
-
         if df_ma.empty:
             return
 
         latest = df_ma.iloc[-1]
         short_ma_now = latest['Short_MA']
         long_ma_now = latest['Long_MA']
-        # Convert to a simple signal: 1 if short>long, -1 if short<long
         signal_now = 1 if short_ma_now > long_ma_now else -1
 
-        # Compare to the previous row's signal (if any) to detect a 'crossover'
         if len(df_ma) < 2:
             return
-
         prev = df_ma.iloc[-2]
         prev_signal = 1 if prev['Short_MA'] > prev['Long_MA'] else -1
-
         if signal_now == prev_signal:
-            return  # No change in signal, do nothing
+            return
 
-        # If we do have a signal change, let's record signal_time as the row's index
         signal_time = df_ma.index[-1]
-
         self.check_for_signals(signal_now, price, signal_time)
 
     def check_for_signals(self, latest_signal, current_price, signal_time):
         """
-        Decide whether to buy or sell based on the latest MA signal.
-        (Now also used by check_instant_signal in real time.)
+        If the new signal differs from our current position, execute trades to
+        get into the correct position.
         """
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if self.last_signal_time == signal_time:
             return
 
-        # MA CROSS: 1 => means go long if not already
+        # If new signal is 1 => want to be long
         if latest_signal == 1 and self.position <= 0:
             self.logger.info(f"Buy signal triggered at {current_price}")
             self.position = 1
             self.last_trade_reason = "MA Crossover: short above long."
             self.execute_trade("buy", current_price, timestamp, signal_time)
             self.last_signal_time = signal_time
-
-        # MA CROSS: -1 => means go short if not already
         elif latest_signal == -1 and self.position >= 0:
             self.logger.info(f"Sell signal triggered at {current_price}")
             self.position = -1
@@ -675,7 +651,7 @@ class MACrossoverStrategy:
 
     def execute_trade(self, trade_type, price, timestamp, signal_timestamp):
         """
-        Execute a trade (buy or sell) and update balances if we haven't exceeded daily or hourly limits.
+        Execute a buy or sell, respecting daily and hourly trade limits.
         """
         today = datetime.utcnow().date()
         if today != self.current_day:
@@ -683,12 +659,10 @@ class MACrossoverStrategy:
             self.trade_count_today = 0
             self.logger.debug("New day, resetting daily trade count.")
 
-        # Check daily trade limit
         if self.trade_count_today >= self.max_trades_per_day:
             self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping trade.")
             return
 
-        # ADDED: Check hourly trade limit (3 trades per rolling hour)
         self._clean_up_hourly_trades()
         max_trades_per_hour = 3
         if len(self.trades_this_hour) >= max_trades_per_hour:
@@ -713,21 +687,21 @@ class MACrossoverStrategy:
 
         if self.live_trading:
             result = self.order_placer.place_order(
-                f"market-{trade_type}", self.symbol, self.current_amount)
+                f"market-{trade_type}", self.symbol, self.current_amount
+            )
             self.logger.info(f"Executed LIVE {trade_type} order: {result}")
             trade_info.order_result = result
             self.trade_count_today += 1
-            self.logger.debug(f"Trade count for {self.current_day}: {self.trade_count_today}/{self.max_trades_per_day}")
+            self.logger.debug(f"Trade count for {self.current_day}: "
+                              f"{self.trade_count_today}/{self.max_trades_per_day}")
             self.update_balance(trade_type, price, self.current_amount)
         else:
             self.logger.info(f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
             self.trade_log.append(trade_info)
             self.update_balance(trade_type, price, self.current_amount)
 
-        # Increment the hourly trade list
         self.trades_this_hour.append(datetime.utcnow())
 
-        # Write to log file (trades.json)
         try:
             file_path = os.path.abspath(self.trade_log_file)
             with open(file_path, 'a') as f:
@@ -770,7 +744,6 @@ class MACrossoverStrategy:
             if self.last_trade_signal_timestamp:
                 status['last_trade_signal_timestamp'] = self.last_trade_signal_timestamp.strftime('%Y-%m-%d %H:%M:%S')
 
-        # If we have a DataFrame of MAs, show difference
         if hasattr(self, 'df_ma') and not self.df_ma.empty:
             status['ma_difference'] = self.df_ma.iloc[-1]['Short_MA'] - self.df_ma.iloc[-1]['Long_MA']
             if len(self.df_ma) >= 2:
@@ -795,12 +768,13 @@ class MACrossoverStrategy:
 ###############################################################################
 # The interactive cmd-based shell
 ###############################################################################
+import cmd
 from flask import Flask, request
 import requests
 
 def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window):
     """
-    Dash-based real-time candlestick chart with MA signals for the chosen symbol.
+    Dash-based real-time candlestick chart with MA signals.
     """
     import dash
     from dash import dcc, html
@@ -929,8 +903,6 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
     app.run_server(debug=False, use_reloader=False)
 
 
-import cmd
-
 class CryptoShell(cmd.Cmd):
     """
     An interactive command-based shell for controlling the Crypto trading system.
@@ -944,7 +916,7 @@ class CryptoShell(cmd.Cmd):
         super().__init__()
         self.data_manager = data_manager
         self.order_placer = order_placer
-        self.data_manager.order_placer = order_placer  # Make sure they match
+        self.data_manager.order_placer = order_placer
         self.logger = logger
         self.candlestick_output = {}
         self.ticker_output = {}
@@ -967,7 +939,7 @@ class CryptoShell(cmd.Cmd):
             'example': 'example price',
             'limit_buy': 'limit_buy btcusd 0.001 50000 daily_order=true',
             'limit_sell': 'limit_sell btcusd 0.001 60000 ioc_order=true',
-            'auto_trade': 'auto_trade 2',
+            'auto_trade': 'auto_trade 2 long',
             'stop_auto_trade': 'stop_auto_trade',
             'status': 'status',
             'chart': 'chart btcusd 1H'
@@ -978,10 +950,6 @@ class CryptoShell(cmd.Cmd):
         self.data_manager.add_trade_observer(self.trade_callback)
 
     def emptyline(self):
-        """
-        Called when user presses Enter with no command input.
-        We override to do nothing instead of repeating last command.
-        """
         pass
 
     def do_example(self, arg):
@@ -1006,9 +974,9 @@ class CryptoShell(cmd.Cmd):
             return
         price = self.data_manager.get_current_price(symbol)
         if price:
-            print("Current price of {}: ${:.2f}".format(symbol, price))
+            print(f"Current price of {symbol}: ${price:.2f}")
         else:
-            print("No data for {}".format(symbol))
+            print(f"No data for {symbol}")
 
     def do_range(self, arg):
         """
@@ -1139,9 +1107,6 @@ class CryptoShell(cmd.Cmd):
                 print(f"Failed to open log file {log_file}: {e}")
 
     def parse_order_options(self, args):
-        """
-        Parse key=value options for limit orders (like daily_order, ioc_order, etc.).
-        """
         options = {}
         for arg in args:
             if '=' in arg:
@@ -1188,22 +1153,52 @@ class CryptoShell(cmd.Cmd):
         result = self.order_placer.place_limit_sell_order(symbol, amount, price, **options)
         print(json.dumps(result, indent=2))
 
+    def parse_position_str(self, pos_str):
+        """
+        Convert 'long'|'short'|'neutral' to +1|-1|0.
+        """
+        pos_str = pos_str.lower()
+        if pos_str == 'long':
+            return 1
+        elif pos_str == 'short':
+            return -1
+        elif pos_str == 'neutral':
+            return 0
+        else:
+            return None
+
     def do_auto_trade(self, arg):
         """
-        Start auto-trading using the best strategy from best_strategy.json, e.g.: auto_trade 2
+        Start auto-trading using the best strategy from best_strategy.json.
+        
+        Usage:
+          auto_trade <amount> [<current_position>]
+          
+        <amount> = how many BTC to trade (float).
+        <current_position> = optional, one of 'long', 'short', or 'neutral'.
         """
         if self.auto_trader and self.auto_trader.running:
             print("Auto-trading is already running. Stop it first.")
             return
+
         args_list = arg.split()
-        if len(args_list) != 1:
-            print("Usage: auto_trade <amount>")
+        if len(args_list) < 1 or len(args_list) > 2:
+            print("Usage: auto_trade <amount> [long|short|neutral]")
             return
+
         try:
             amount = float(args_list[0])
         except ValueError:
             print("Amount must be numeric.")
             return
+
+        # See if the user specified their actual position
+        user_current_pos = None
+        if len(args_list) == 2:
+            user_current_pos = self.parse_position_str(args_list[1])
+            if user_current_pos is None:
+                print("Invalid position. Must be 'long', 'short', or 'neutral'.")
+                return
 
         file_path = os.path.abspath('best_strategy.json')
         if not os.path.exists(file_path):
@@ -1219,21 +1214,29 @@ class CryptoShell(cmd.Cmd):
             return
 
         short_window = int(best_strategy_params.get('Short_Window', 12))
-        long_window = int(best_strategy_params.get('Long_Window', 36))
-        do_live = best_strategy_params.get('do_live_trades', False)
+        long_window  = int(best_strategy_params.get('Long_Window', 36))
+        do_live      = best_strategy_params.get('do_live_trades', False)
         max_trades_day = best_strategy_params.get('max_trades_per_day', 5)
 
-        # Enhancement #3: Determine initial position from loaded historical data
+        # 1) We see what historical MAs suggest for the final position
         df = self.data_manager.get_price_dataframe('btcusd').copy()
-        # If we never renamed 'price' to 'close' in the historical parse, do it now
         if 'close' not in df.columns and 'price' in df.columns:
             df.rename(columns={'price': 'close'}, inplace=True)
-
         if df.empty:
-            initial_position = 0
+            hist_position = 0
         else:
-            initial_position = determine_initial_position(df, short_window, long_window)
+            hist_position = determine_initial_position(df, short_window, long_window)
 
+        # 2) If user specified a current position, that means physically they are in that position.
+        #    If user didn't specify, we assume user_current_pos is None => we just start with hist_position.
+        if user_current_pos is not None:
+            # We override the initial position to the user's actual position
+            initial_position = user_current_pos
+        else:
+            # We default to whatever historical data says
+            initial_position = hist_position
+
+        # 3) Create the strategy
         self.auto_trader = MACrossoverStrategy(
             self.data_manager,
             short_window,
@@ -1243,8 +1246,20 @@ class CryptoShell(cmd.Cmd):
             self.logger,
             live_trading=do_live,
             max_trades_per_day=max_trades_day,
-            initial_position=initial_position  # pass the computed position
+            initial_position=initial_position
         )
+
+        # 4) If there's a mismatch (e.g. user says "long" but hist says "short"), 
+        #    do an immediate "check_for_signals" to bring position in line:
+        last_price = self.data_manager.get_current_price('btcusd') or 0.0
+        # We'll treat the "historical position" as a new signal for immediate alignment
+        if (user_current_pos is not None) and (hist_position != user_current_pos):
+            # We simulate a quick "signal" to let the strategy fix the position
+            # if needed.  We'll do an artificial signal_time = now
+            signal_time = datetime.now()
+            self.auto_trader.check_for_signals(hist_position, last_price, signal_time)
+
+        # 5) Start the strategy
         self.auto_trader.start()
         print(f"Auto-trading started with amount {amount}, using MA strategy "
               f"(Short={short_window}, Long={long_window}). do_live_trades={do_live}")
@@ -1285,7 +1300,7 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Total Trades: {status['trades_executed']}")
             print(f"  • Profitable Trades: {status['profitable_trades']}")
             print(f"  • Win Rate: {status['win_rate']:.1f}%")
-            if status['trades_executed']>0:
+            if status['trades_executed'] > 0:
                 print(f"  • Avg Profit/Trade: ${status['average_profit_per_trade']:.2f}")
                 print(f"  • Avg Fee/Trade: ${status['average_fee_per_trade']:.2f}")
                 print(f"  • Risk/Reward Ratio: {status['risk_reward_ratio']:.2f}")
@@ -1394,7 +1409,6 @@ class CryptoShell(cmd.Cmd):
             short_window = self.auto_trader.short_window
             long_window = self.auto_trader.long_window
         else:
-            # Attempt to read best_strategy.json
             try:
                 with open('best_strategy.json','r') as f:
                     best_params = json.load(f)
@@ -1421,9 +1435,7 @@ class CryptoShell(cmd.Cmd):
         print("Dash app is running at http://127.0.0.1:8050/")
         time.sleep(1)
 
-###############################################################################
-# The main() function: no CLI args, all config read from best_strategy.json
-###############################################################################
+
 def run_websocket(url, symbols, data_manager, stop_event):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -1458,10 +1470,9 @@ def setup_logging(verbose):
 
 def main():
     """
-    Main entry point: read best_strategy.json for config, parse historical log if present,
-    then launch the CryptoShell with or without live trades.
+    Main entry point: reads best_strategy.json for config, 
+    parses historical log if present, then launches the CryptoShell.
     """
-    # Attempt to load config from best_strategy.json
     config_file = os.path.abspath("best_strategy.json")
     if not os.path.exists(config_file):
         print(f"No '{config_file}' found. Using default settings.")
@@ -1471,27 +1482,24 @@ def main():
             config = json.load(f)
 
     start_back = config.get('start_window_days_back', 30)
-    end_back = config.get('end_window_days_back', 0)
-    do_live = config.get('do_live_trades', False)
+    end_back   = config.get('end_window_days_back', 0)
+    do_live    = config.get('do_live_trades', False)
     max_trades = config.get('max_trades_per_day', 5)
 
-    # Determine date range
     now = datetime.now()
     start_date = now - timedelta(days=start_back) if start_back else None
-    end_date = now - timedelta(days=end_back) if end_back else None
+    end_date   = now - timedelta(days=end_back) if end_back else None
 
     if start_date and end_date and start_date >= end_date:
         print("Invalid date range from best_strategy.json; ignoring end_date.")
         end_date = None
 
-    # Setup logging
     logger = setup_logging(verbose=False)
     if do_live:
         logger.info("Running in LIVE trading mode.")
     else:
         logger.info("Running in DRY RUN mode.")
 
-    # Parse historical data if we have a log file
     log_file_path = os.path.abspath("btcusd.log")
     if not os.path.exists(log_file_path):
         print(f"No local log file '{log_file_path}'. Relying on real-time data only.")
@@ -1499,7 +1507,6 @@ def main():
     else:
         df = parse_log_file(log_file_path, start_date, end_date)
 
-    # Prepare DataFrame columns if data is loaded
     if not df.empty:
         df.rename(columns={'price': 'close'}, inplace=True)
         df['open'] = df['close']
@@ -1509,16 +1516,13 @@ def main():
         if 'volume' not in df.columns:
             df['volume'] = df.get('amount', 0.0)
 
-    # Create a data manager and load historical data
     data_manager = CryptoDataManager(["btcusd"], logger=logger)
     if not df.empty:
         data_manager.load_historical_data({'btcusd': df})
 
-    # Set up order placer
     order_placer = OrderPlacer()
     data_manager.order_placer = order_placer
 
-    # Start the interactive shell
     stop_event = threading.Event()
     shell = CryptoShell(
         data_manager=data_manager,
@@ -1530,7 +1534,6 @@ def main():
         max_trades_per_day=max_trades
     )
 
-    # Start the WebSocket thread for real-time data
     url = 'wss://ws.bitstamp.net'
     websocket_thread = threading.Thread(
         target=run_websocket, args=(url, ["btcusd"], data_manager, stop_event), daemon=True)
