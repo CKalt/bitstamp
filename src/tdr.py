@@ -49,6 +49,41 @@ from indicators.technical_indicators import (
 HIGH_FREQUENCY = '1H'  # Default; can be overridden if desired from best_strategy.json
 
 ###############################################################################
+# Enhancement #1: Helper function to determine initial position from history
+###############################################################################
+def determine_initial_position(df: pd.DataFrame, short_window: int, long_window: int) -> int:
+    """
+    Computes the final short/long MA crossover on the given DataFrame to decide 
+    whether the correct position is long (1), short (-1), or neutral (0).
+
+    :param df: DataFrame with at least a 'close' column.
+    :param short_window: int - the short MA window size
+    :param long_window: int - the long MA window size
+    :return: 1 (long), -1 (short), or 0 (neutral)
+    """
+    if len(df) < long_window:
+        return 0  # Not enough data to form a long MA
+
+    # Ensure datetime index and compute MAs
+    df_copy = ensure_datetime_index(df.copy())
+    df_copy['Short_MA'] = df_copy['close'].rolling(short_window).mean()
+    df_copy['Long_MA'] = df_copy['close'].rolling(long_window).mean()
+    df_copy.dropna(inplace=True)
+
+    if df_copy.empty:
+        return 0
+
+    last_short = df_copy.iloc[-1]['Short_MA']
+    last_long  = df_copy.iloc[-1]['Long_MA']
+
+    if last_short > last_long:
+        return 1
+    elif last_short < last_long:
+        return -1
+    else:
+        return 0
+
+###############################################################################
 # Classes: CryptoDataManager, Trade, MACrossoverStrategy, etc.
 ###############################################################################
 
@@ -359,7 +394,8 @@ class MACrossoverStrategy:
         symbol,
         logger,
         live_trading=False,
-        max_trades_per_day=5
+        max_trades_per_day=5,
+        initial_position=0  # Enhancement #2: initialize with a known position
     ):
         self.data_manager = data_manager
         self.order_placer = data_manager.order_placer
@@ -369,7 +405,8 @@ class MACrossoverStrategy:
         self.current_amount = amount
         self.symbol = symbol
         self.logger = logger
-        self.position = 0  # 1 for long, -1 for short, 0 for neutral
+        # Enhancement: start with user-supplied position from historical analysis
+        self.position = initial_position
         self.running = False
         self.live_trading = live_trading
         self.trade_log = []
@@ -572,23 +609,20 @@ class MACrossoverStrategy:
             return  # We only trade on self.symbol
 
         # Build/Update a rolling list of 'close' prices to approximate MAs in real time
-        # Example approach: you might want to store more data, or fetch from data_manager.
         df_live = self.data_manager.get_price_dataframe(symbol)
         if df_live.empty:
             return
 
-        # We'll skip resampling. Instead, just ensure a DateTime index and compute MAs directly.
         df_live = ensure_datetime_index(df_live)
 
         # Only proceed if we have enough data for the long_window
         if len(df_live) < self.long_window:
             return
 
-        # We'll compute the MAs directly on the last N rows:
         df_ma = df_live.copy()
         df_ma['Short_MA'] = df_ma['close'].rolling(self.short_window).mean()
         df_ma['Long_MA'] = df_ma['close'].rolling(self.long_window).mean()
-        df_ma.dropna(inplace=True)  # Must drop until both MAs are valid
+        df_ma.dropna(inplace=True)
 
         if df_ma.empty:
             return
@@ -612,7 +646,6 @@ class MACrossoverStrategy:
         # If we do have a signal change, let's record signal_time as the row's index
         signal_time = df_ma.index[-1]
 
-        # The same check_for_signals logic but called immediately
         self.check_for_signals(signal_now, price, signal_time)
 
     def check_for_signals(self, latest_signal, current_price, signal_time):
@@ -762,7 +795,6 @@ class MACrossoverStrategy:
 ###############################################################################
 # The interactive cmd-based shell
 ###############################################################################
-import cmd
 from flask import Flask, request
 import requests
 
@@ -896,6 +928,8 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
 
     app.run_server(debug=False, use_reloader=False)
 
+
+import cmd
 
 class CryptoShell(cmd.Cmd):
     """
@@ -1189,6 +1223,17 @@ class CryptoShell(cmd.Cmd):
         do_live = best_strategy_params.get('do_live_trades', False)
         max_trades_day = best_strategy_params.get('max_trades_per_day', 5)
 
+        # Enhancement #3: Determine initial position from loaded historical data
+        df = self.data_manager.get_price_dataframe('btcusd').copy()
+        # If we never renamed 'price' to 'close' in the historical parse, do it now
+        if 'close' not in df.columns and 'price' in df.columns:
+            df.rename(columns={'price': 'close'}, inplace=True)
+
+        if df.empty:
+            initial_position = 0
+        else:
+            initial_position = determine_initial_position(df, short_window, long_window)
+
         self.auto_trader = MACrossoverStrategy(
             self.data_manager,
             short_window,
@@ -1197,7 +1242,8 @@ class CryptoShell(cmd.Cmd):
             'btcusd',
             self.logger,
             live_trading=do_live,
-            max_trades_per_day=max_trades_day
+            max_trades_per_day=max_trades_day,
+            initial_position=initial_position  # pass the computed position
         )
         self.auto_trader.start()
         print(f"Auto-trading started with amount {amount}, using MA strategy "
