@@ -59,10 +59,26 @@ def analyze_data(df):
     df.reset_index(inplace=True)
     print("Analysis complete. Check the current directory for generated PNG files.")
 
-def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterations=50):
+
+###############################################################################
+# CHANGED: Now accepts `config` with constraint settings
+###############################################################################
+def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterations=50, config=None):
     print("Starting run_trading_system function...")
     df = ensure_datetime_index(df)
     print(f"DataFrame shape after ensuring datetime index: {df.shape}")
+
+    # If config is None, default it to an empty dict
+    # so we don't get KeyError below
+    if config is None:
+        config = {}
+
+    # Extract our constraints (with fallback defaults)
+    constraints = config.get("strategy_constraints", {})
+    min_trades_per_day  = constraints.get("min_trades_per_day", 1)
+    max_trades_per_day  = constraints.get("max_trades_per_day", 4)
+    min_total_return    = constraints.get("min_total_return", 0.0)
+    min_profit_per_trade = constraints.get("min_profit_per_trade", 0.0)
 
     # Resample data to higher timeframe
     print(f"Resampling data to higher timeframe ({high_frequency})...")
@@ -89,8 +105,16 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
     all_results_list = []
 
     print("Running MA Crossover Strategy...")
-    ma_results = optimize_ma_parameters(df_high, range(4, 25, 2), range(26, 51, 2))
-    
+    ma_results = optimize_ma_parameters(
+        df_high,
+        range(4, 25, 2),
+        range(26, 51, 2),
+        min_trades_per_day=min_trades_per_day,      # NEW
+        max_trades_per_day=max_trades_per_day,      # NEW
+        min_total_return=min_total_return,           # NEW
+        min_profit_per_trade=min_profit_per_trade    # NEW
+    )
+
     if not ma_results.empty:
         best_ma = ma_results.loc[ma_results['Total_Return'].idxmax()]
         print("Initial MA Crossover parameters:")
@@ -136,10 +160,19 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
         all_results_list.append(ma_results)
     else:
         print("No MA Crossover strategies met the criteria.")
+
     # Run RSI Strategy
     print("Running RSI Strategy...")
-    rsi_results = optimize_rsi_parameters(df_high, range(
-        10, 21, 2), range(65, 81, 5), range(20, 36, 5))
+    rsi_results = optimize_rsi_parameters(
+        df_high,
+        range(10, 21, 2),
+        range(65, 81, 5),
+        range(20, 36, 5),
+        min_trades_per_day=min_trades_per_day,     # NEW
+        max_trades_per_day=max_trades_per_day,     # NEW
+        min_total_return=min_total_return,          # NEW
+        min_profit_per_trade=min_profit_per_trade   # NEW
+    )
     if not rsi_results.empty:
         best_rsi = rsi_results.loc[rsi_results['Total_Return'].idxmax()]
         print("Best RSI parameters:")
@@ -148,10 +181,10 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
         all_results_list.append(rsi_results)
 
         print("Generating trade list for best RSI strategy...")
-        best_rsi_df = calculate_rsi(
-            df_high.copy(), int(best_rsi['RSI_Window']))
-        best_rsi_df = generate_rsi_signals(
-            best_rsi_df, int(best_rsi['Overbought']), int(best_rsi['Oversold']))
+        best_rsi_df = calculate_rsi(df_high.copy(), int(best_rsi['RSI_Window']))
+        best_rsi_df = generate_rsi_signals(best_rsi_df,
+                                           int(best_rsi['Overbought']),
+                                           int(best_rsi['Oversold']))
         rsi_trades = generate_trade_list(best_rsi_df, 'RSI')
         rsi_trades.to_csv('rsi_trades.csv', index=False)
         print("RSI trades saved to 'rsi_trades.csv'")
@@ -163,7 +196,14 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
     bb_param_grid = [{'window': w, 'num_std': s}
                      for w in range(10, 31, 5) for s in [1.5, 2, 2.5]]
     bb_results = optimize_hft_parameters(
-        df_low, 'BB', param_grid=bb_param_grid)
+        df_low,
+        'BB',
+        param_grid=bb_param_grid,
+        min_trades_per_day=min_trades_per_day,     # NEW
+        max_trades_per_day=max_trades_per_day,     # NEW
+        min_total_return=min_total_return,          # NEW
+        min_profit_per_trade=min_profit_per_trade   # NEW
+    )
     if not bb_results.empty:
         best_bb = bb_results.loc[bb_results['Total_Return'].idxmax()]
         print("Best Bollinger Bands parameters:")
@@ -173,7 +213,10 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
 
         print("Generating trade list for best Bollinger Bands strategy...")
         best_bb_df = calculate_bollinger_bands(
-            df_low.copy(), window=int(best_bb['window']), num_std=best_bb['num_std'])
+            df_low.copy(),
+            window=int(best_bb['window']),
+            num_std=best_bb['num_std']
+        )
         best_bb_df = generate_bollinger_band_signals(best_bb_df)
         bb_trades = generate_trade_list(best_bb_df, 'BB')
         bb_trades.to_csv('bb_trades.csv', index=False)
@@ -188,7 +231,14 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
                        for s in [20, 26, 32]
                        for sig in [7, 9, 11]]
     macd_results = optimize_hft_parameters(
-        df_low, 'MACD', param_grid=macd_param_grid)
+        df_low,
+        'MACD',
+        param_grid=macd_param_grid,
+        min_trades_per_day=min_trades_per_day,     # NEW
+        max_trades_per_day=max_trades_per_day,     # NEW
+        min_total_return=min_total_return,          # NEW
+        min_profit_per_trade=min_profit_per_trade   # NEW
+    )
     if not macd_results.empty:
         best_macd = macd_results.loc[macd_results['Total_Return'].idxmax()]
         print("Best MACD parameters:")
@@ -197,10 +247,12 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
         all_results_list.append(macd_results)
 
         print("Generating trade list for best MACD strategy...")
-        best_macd_df = calculate_macd(df_low.copy(),
-                                      fast=int(best_macd['fast']),
-                                      slow=int(best_macd['slow']),
-                                      signal=int(best_macd['signal']))
+        best_macd_df = calculate_macd(
+            df_low.copy(),
+            fast=int(best_macd['fast']),
+            slow=int(best_macd['slow']),
+            signal=int(best_macd['signal'])
+        )
         best_macd_df = generate_macd_signals(best_macd_df)
         macd_trades = generate_trade_list(best_macd_df, 'MACD')
         macd_trades.to_csv('macd_trades.csv', index=False)
@@ -211,7 +263,13 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
     # Run RAMM Strategy
     print("Running RAMM Strategy...")
     ramm_results = optimize_ramm_parameters(
-        df_high, max_iterations=max_iterations)
+        df_high,
+        max_iterations=max_iterations,
+        min_trades_per_day=min_trades_per_day,    # NEW
+        max_trades_per_day=max_trades_per_day,    # NEW
+        min_total_return=min_total_return,         # NEW
+        min_profit_per_trade=min_profit_per_trade  # NEW
+    )
     if not ramm_results.empty:
         best_ramm = ramm_results.loc[ramm_results['Total_Return'].idxmax()]
         print("Best RAMM parameters:")
@@ -237,7 +295,13 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
 
     # Run Adaptive VWMA Strategy
     print("Running Adaptive VWMA Strategy...")
-    adaptive_vwma_results = optimize_adaptive_vwma_parameters(df_high)
+    adaptive_vwma_results = optimize_adaptive_vwma_parameters(
+        df_high,
+        min_trades_per_day=min_trades_per_day,      # NEW
+        max_trades_per_day=max_trades_per_day,      # NEW
+        min_total_return=min_total_return,           # NEW
+        min_profit_per_trade=min_profit_per_trade    # NEW
+    )
     if not adaptive_vwma_results.empty:
         best_adaptive_vwma = adaptive_vwma_results.loc[adaptive_vwma_results['Total_Return'].idxmax()]
         print("Best Adaptive VWMA parameters:")
@@ -254,8 +318,7 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
             best_adaptive_vwma_df,
             vol_scale=best_adaptive_vwma['Volume_Scale']
         )
-        adaptive_vwma_trades = generate_trade_list(
-            best_adaptive_vwma_df, 'Adaptive_VWMA')
+        adaptive_vwma_trades = generate_trade_list(best_adaptive_vwma_df, 'Adaptive_VWMA')
         adaptive_vwma_trades.to_csv('adaptive_vwma_trades.csv', index=False)
         print("Adaptive VWMA trades saved to 'adaptive_vwma_trades.csv'")
     else:
@@ -263,7 +326,6 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
 
     if strategies:
         print("Preparing detailed strategy results...")
-        # Use print_strategy_results from helpers.py
         print_strategy_results(strategies)
 
         print("\nStrategy Comparison:")
@@ -277,13 +339,9 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
         if total_returns:
             best_strategy = max(total_returns.items(), key=lambda x: x[1])[0]
             print(f"\nBest overall strategy: {best_strategy}")
-            print(
-                f"Best strategy Total Return: {total_returns[best_strategy]:.2f}%")
+            print(f"Best strategy Total Return: {total_returns[best_strategy]:.2f}%")
 
             # Save the best strategy parameters to a JSON file
-            best_strategy_params = strategies[best_strategy]
-
-            # Convert any NumPy data types to native Python types
             def convert_types(obj):
                 if isinstance(obj, (np.integer, np.int64)):
                     return int(obj)
@@ -296,7 +354,9 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
                 else:
                     return obj
 
-            best_strategy_params_converted = {key: convert_types(value) for key, value in best_strategy_params.items()}
+            best_strategy_params_converted = {
+                key: convert_types(value) for key, value in strategies[best_strategy].items()
+            }
 
             try:
                 with open('best_strategy.json', 'w') as f:

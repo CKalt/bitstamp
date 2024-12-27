@@ -15,6 +15,28 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(current_dir)
 sys.path.append(parent_dir)
 
+###############################################################################
+# NEW: Function to load config from JSON or use defaults
+###############################################################################
+def load_config(config_path='config.json'):
+    if not os.path.exists(config_path):
+        # Default config if file not present
+        default_config = {
+            "strategy_constraints": {
+                "min_trades_per_day": 1,
+                "max_trades_per_day": 4,
+                "min_total_return": 0.0,
+                "min_profit_per_trade": 0.0
+            }
+        }
+        print(f"Config file '{config_path}' not found. Using default config.")
+        return default_config
+    else:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        print(f"Loaded config from '{config_path}'")
+        return config
+###############################################################################
 
 def parse_arguments():
     """
@@ -186,6 +208,9 @@ def main():
     # Parse arguments
     args = parse_arguments()
 
+    # NEW: Load config
+    config = load_config('config.json')  # <-- # NEW
+
     # Setup metadata and load log file
     file_path = 'btcusd.log'
     setup_metadata(file_path)
@@ -209,7 +234,8 @@ def main():
             df,
             high_frequency=args.high_frequency,
             low_frequency=args.low_frequency,
-            max_iterations=args.max_iterations
+            max_iterations=args.max_iterations,
+            config=config  # <-- # CHANGED: Passing config
         )
 
         # Example: Define detailed strategy results (mocked; replace with actual data from `run_trading_system`)
@@ -276,26 +302,7 @@ def main():
             best_idx = strategy_comparison['Total_Return'].idxmax()
             best_row = strategy_comparison.loc[best_idx]
 
-            # The code above uses columns like 'Final_Balance', 'Total_Return', etc.
-            # We'll unify them to match your desired best_strategy.json fields
-            # Also incorporate the date-range fields from your arguments
-
             best_strategy_json = {
-                # Original version (lines to remove):
-                # "Frequency": args.high_frequency,
-                # "Strategy": best_row['Strategy'],
-                # "Short_Window": best_row.get('Short_Window', 0),
-                # "Long_Window": best_row.get('Long_Window', 0),
-                # "Final_Balance": best_row.get('Final_Balance', 0),
-                # "Total_Return": best_row.get('Total_Return', 0),
-                # "Total_Trades": best_row.get('Total_Trades', 0),
-                # "Profit_Factor": best_row.get('Profit_Factor', 0),
-                # "Sharpe_Ratio": best_row.get('Sharpe_Ratio', 0),
-                # "Average_Trades_Per_Day": best_row.get('Average_Trades_Per_Day', 0),
-                # "start_window_days_back": args.start_window_days_back,
-                # "end_window_days_back": args.end_window_days_back
-
-                # Updated version (lines to insert):
                 "Frequency": args.high_frequency,
                 "Strategy": best_row['Strategy'],
                 "Short_Window": best_row.get('Short_Window', 0),
@@ -323,7 +330,7 @@ def main():
                 elif isinstance(obj, pd.Timestamp):
                     return obj.isoformat()
                 elif pd.isna(obj):
-                    return None  # or "NaN", depending on preference
+                    return None  # or "NaN"
                 return obj
 
             best_strategy_json = {

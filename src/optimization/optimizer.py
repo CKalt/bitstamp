@@ -23,9 +23,17 @@ from indicators.technical_indicators import (
 from strategies.ramm_strategy import calculate_ramm_signals
 
 
+###############################################################################
+# CHANGED: added optional constraints to each function
+###############################################################################
 def optimize_adaptive_vwma_parameters(df,
                                       base_window_range=range(5, 21, 3),
-                                      vol_scale_range=np.arange(0.8, 1.4, 0.1)):
+                                      vol_scale_range=np.arange(0.8, 1.4, 0.1),
+                                      min_trades_per_day=1,         # NEW
+                                      max_trades_per_day=4,         # NEW
+                                      min_total_return=0.0,         # NEW
+                                      min_profit_per_trade=0.0      # NEW
+                                      ):
     """
     Optimize Adaptive VWMA parameters
     """
@@ -40,18 +48,26 @@ def optimize_adaptive_vwma_parameters(df,
                 df_test = df.copy()
 
                 # Calculate adaptive VWMA
-                df_test = calculate_adaptive_vwma(
-                    df_test, base_window=base_window)
+                df_test = calculate_adaptive_vwma(df_test, base_window=base_window)
 
                 # Generate signals
-                df_test = generate_adaptive_vwma_signals(
-                    df_test, vol_scale=vol_scale)
+                df_test = generate_adaptive_vwma_signals(df_test, vol_scale=vol_scale)
 
                 # Run backtest
                 metrics = backtest(df_test, 'Adaptive_VWMA')
                 average_trades_per_day = metrics['Average_Trades_Per_Day']
+                total_return = metrics['Total_Return']  # in percent
+                total_trades = metrics['Total_Trades']
 
-                if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
+                # Compute optional profit-per-trade if needed
+                if total_trades > 0:
+                    profit_per_trade = (metrics['Final_Balance'] - 10000) / total_trades
+                else:
+                    profit_per_trade = 0
+
+                if (min_trades_per_day <= average_trades_per_day <= max_trades_per_day and
+                        total_return >= min_total_return and
+                        profit_per_trade >= min_profit_per_trade):
                     results.append({
                         'Strategy': 'Adaptive_VWMA',
                         'Base_Window': base_window,
@@ -64,7 +80,13 @@ def optimize_adaptive_vwma_parameters(df,
     return pd.DataFrame(results)
 
 
-def optimize_ramm_parameters(df, max_iterations=50):
+def optimize_ramm_parameters(df, 
+                             max_iterations=50,
+                             min_trades_per_day=1,    # NEW
+                             max_trades_per_day=4,    # NEW
+                             min_total_return=0.0,    # NEW
+                             min_profit_per_trade=0.0 # NEW
+                             ):
     """
     Optimize RAMM strategy parameters using grid search
     """
@@ -103,7 +125,18 @@ def optimize_ramm_parameters(df, max_iterations=50):
         )
 
         metrics = backtest(df_test, 'RAMM')
-        if 1 <= metrics['Average_Trades_Per_Day'] <= 4 and metrics['Total_Return'] > 0:
+        average_trades_per_day = metrics['Average_Trades_Per_Day']
+        total_return = metrics['Total_Return']
+        total_trades = metrics['Total_Trades']
+
+        if total_trades > 0:
+            profit_per_trade = (metrics['Final_Balance'] - 10000) / total_trades
+        else:
+            profit_per_trade = 0
+
+        if (min_trades_per_day <= average_trades_per_day <= max_trades_per_day and
+                total_return >= min_total_return and
+                profit_per_trade >= min_profit_per_trade):
             results.append({
                 'Strategy': 'RAMM',
                 'MA_Short': ma_short,
@@ -118,7 +151,12 @@ def optimize_ramm_parameters(df, max_iterations=50):
     return pd.DataFrame(results)
 
 
-def optimize_ma_parameters(df, short_range, long_range):
+def optimize_ma_parameters(df, short_range, long_range,
+                           min_trades_per_day=1,    # NEW
+                           max_trades_per_day=4,    # NEW
+                           min_total_return=0.0,    # NEW
+                           min_profit_per_trade=0.0 # NEW
+                           ):
     results = []
     for short_window in short_range:
         for long_window in long_range:
@@ -128,7 +166,17 @@ def optimize_ma_parameters(df, short_range, long_range):
             df_test = generate_ma_signals(df_test)
             metrics = backtest(df_test, 'MA')
             average_trades_per_day = metrics['Average_Trades_Per_Day']
-            if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
+            total_return = metrics['Total_Return']
+            total_trades = metrics['Total_Trades']
+
+            if total_trades > 0:
+                profit_per_trade = (metrics['Final_Balance'] - 10000) / total_trades
+            else:
+                profit_per_trade = 0
+
+            if (min_trades_per_day <= average_trades_per_day <= max_trades_per_day and
+                    total_return >= min_total_return and
+                    profit_per_trade >= min_profit_per_trade):
                 results.append({
                     'Strategy': 'MA',
                     'Short_Window': short_window,
@@ -138,7 +186,12 @@ def optimize_ma_parameters(df, short_range, long_range):
     return pd.DataFrame(results)
 
 
-def optimize_rsi_parameters(df, window_range, overbought_range, oversold_range):
+def optimize_rsi_parameters(df, window_range, overbought_range, oversold_range,
+                            min_trades_per_day=1,    # NEW
+                            max_trades_per_day=4,    # NEW
+                            min_total_return=0.0,    # NEW
+                            min_profit_per_trade=0.0 # NEW
+                            ):
     results = []
     for window in window_range:
         for overbought in overbought_range:
@@ -149,7 +202,17 @@ def optimize_rsi_parameters(df, window_range, overbought_range, oversold_range):
                 df_test = generate_rsi_signals(df_test, overbought, oversold)
                 metrics = backtest(df_test, 'RSI')
                 average_trades_per_day = metrics['Average_Trades_Per_Day']
-                if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
+                total_return = metrics['Total_Return']
+                total_trades = metrics['Total_Trades']
+
+                if total_trades > 0:
+                    profit_per_trade = (metrics['Final_Balance'] - 10000) / total_trades
+                else:
+                    profit_per_trade = 0
+
+                if (min_trades_per_day <= average_trades_per_day <= max_trades_per_day and
+                        total_return >= min_total_return and
+                        profit_per_trade >= min_profit_per_trade):
                     results.append({
                         'Strategy': 'RSI',
                         'RSI_Window': window,
@@ -160,9 +223,13 @@ def optimize_rsi_parameters(df, window_range, overbought_range, oversold_range):
     return pd.DataFrame(results)
 
 
-def optimize_hft_parameters(df, strategy, **kwargs):
+def optimize_hft_parameters(df, strategy, param_grid,
+                            min_trades_per_day=1,    # NEW
+                            max_trades_per_day=4,    # NEW
+                            min_total_return=0.0,    # NEW
+                            min_profit_per_trade=0.0 # NEW
+                            ):
     results = []
-    param_grid = kwargs['param_grid']
     for params in param_grid:
         df_test = df.copy()
         if strategy == 'BB':
@@ -175,9 +242,20 @@ def optimize_hft_parameters(df, strategy, **kwargs):
             df_test = generate_macd_signals(df_test)
         else:
             continue  # Skip if strategy not recognized
+
         metrics = backtest(df_test, strategy)
         average_trades_per_day = metrics['Average_Trades_Per_Day']
-        if 1 <= average_trades_per_day <= 4 and metrics['Total_Return'] > 0:
+        total_return = metrics['Total_Return']
+        total_trades = metrics['Total_Trades']
+
+        if total_trades > 0:
+            profit_per_trade = (metrics['Final_Balance'] - 10000) / total_trades
+        else:
+            profit_per_trade = 0
+
+        if (min_trades_per_day <= average_trades_per_day <= max_trades_per_day and
+                total_return >= min_total_return and
+                profit_per_trade >= min_profit_per_trade):
             results.append({
                 'Strategy': strategy,
                 **params,
@@ -207,6 +285,7 @@ def optimize_ma_frequency(df, base_parameters):
     print("Debug: Columns available in DataFrame before frequency tests:", df.columns)
     print("Debug: DataFrame index type:", df.index)
 
+    from tqdm import tqdm  # Already imported at top, but just ensuring
     with tqdm(total=len(frequencies), desc="Optimizing Trading Frequency") as pbar:
         for freq in frequencies:
             # Resample data to current frequency
@@ -227,7 +306,7 @@ def optimize_ma_frequency(df, base_parameters):
                 df_resampled.copy(),
                 short_window=base_parameters['Short_Window'],
                 long_window=base_parameters['Long_Window'],
-                price_col='price'  # Specify the price column name
+                price_col='price'
             )
             df_strategy = generate_ma_signals(df_strategy)
 
