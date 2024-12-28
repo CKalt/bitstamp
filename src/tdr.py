@@ -1,3 +1,5 @@
+# src/tdr.py
+
 #!/usr/bin/env python
 # src/tdr.py
 
@@ -386,19 +388,22 @@ class MACrossoverStrategy:
         data_manager,
         short_window,
         long_window,
-        amount,
+        amount,  # [ORIGINAL] - We'll keep it, though we now track BTC/USD separately
         symbol,
         logger,
         live_trading=False,
         max_trades_per_day=5,
-        initial_position=0
+        initial_position=0,
+        # [ADDED] New fields for separate BTC/USD balances:
+        initial_balance_btc=0.0,  # [ADDED]
+        initial_balance_usd=0.0   # [ADDED]
     ):
         self.data_manager = data_manager
         self.order_placer = data_manager.order_placer
         self.short_window = short_window
         self.long_window = long_window
-        self.initial_amount = amount
-        self.current_amount = amount
+        self.initial_amount = amount   # [ORIGINAL variable, kept for minimal changes]
+        self.current_amount = amount   # [ORIGINAL logic, but may not be used the same way]
         self.symbol = symbol
         self.logger = logger
         self.position = initial_position
@@ -415,9 +420,14 @@ class MACrossoverStrategy:
         self.df_ma = pd.DataFrame()
         self.strategy_start_time = datetime.now()
 
-        # Balance tracking
-        self.initial_balance = amount
-        self.current_balance = amount
+        # [ORIGINAL balance tracking - we keep them, but we won't rely on them exclusively]
+        self.initial_balance = amount  # [ORIGINAL]
+        self.current_balance = amount  # [ORIGINAL]
+
+        # [ADDED] Separate BTC & USD balances:
+        self.balance_btc = initial_balance_btc
+        self.balance_usd = initial_balance_usd
+
         self.fee_percentage = 0.0012
         self.last_trade_price = None
         self.total_fees_paid = 0
@@ -475,36 +485,79 @@ class MACrossoverStrategy:
     def update_balance(self, trade_type, price, amount):
         """
         Update balance after a trade is executed (including fees and P&L).
+        - 'buy' => we spend USD, acquire BTC
+        - 'sell' => we spend BTC, acquire USD
         """
         fee = self.calculate_fee(amount, price)
         self.total_fees_paid += fee
 
-        if self.last_trade_price is not None:
-            # P&L if closing a position
-            if trade_type == "sell" and self.position == 1:  # closing long
-                profit = amount * (price - self.last_trade_price) - fee
-                self.current_balance += profit
-                self.total_profit_loss += profit
-                if profit > 0:
-                    self.profitable_trades += 1
-            elif trade_type == "buy" and self.position == -1:  # closing short
+        # [MODIFIED] Instead of only adjusting a "current_balance", we also keep track
+        # of separate BTC and USD amounts. We do minimal changes but incorporate both.
+        if trade_type == "buy":
+            # Cost of the BTC in USD:
+            cost_usd = amount * price
+            total_cost_usd = cost_usd + fee
+
+            if total_cost_usd > self.balance_usd:
+                # Not enough USD to buy 'amount' BTC plus fee => scale down
+                # cost_usd' = (amount' * price), fee' = cost_usd' * fee_percentage
+                # cost_usd' + fee' = balance_usd
+                # amount' * price * (1 + fee_percentage) = balance_usd
+                possible_btc = self.balance_usd / (price * (1 + self.fee_percentage))
+                amount = possible_btc
+                cost_usd = amount * price
+                fee = self.calculate_fee(amount, price)
+                total_cost_usd = cost_usd + fee
+
+            self.balance_usd -= total_cost_usd
+            self.balance_btc += amount
+
+            # If we previously had a short, we are effectively "closing" some or all
+            if self.last_trade_price is not None and self.position == -1:
                 profit = amount * (self.last_trade_price - price) - fee
                 self.current_balance += profit
                 self.total_profit_loss += profit
                 if profit > 0:
                     self.profitable_trades += 1
 
+        elif trade_type == "sell":
+            # Proceeds from selling 'amount' BTC:
+            proceeds_usd = amount * price
+            fee_sell = proceeds_usd * self.fee_percentage
+            # For consistency, we reassign 'fee' but minimal changes:
+            fee = fee_sell
+            net_usd = proceeds_usd - fee
+
+            if amount > self.balance_btc:
+                amount = self.balance_btc
+                proceeds_usd = amount * price
+                fee = proceeds_usd * self.fee_percentage
+                net_usd = proceeds_usd - fee
+
+            self.balance_btc -= amount
+            self.balance_usd += net_usd
+
+            # If we previously had a long, we are effectively "closing"
+            if self.last_trade_price is not None and self.position == 1:
+                profit = amount * (price - self.last_trade_price) - fee
+                self.current_balance += profit
+                self.total_profit_loss += profit
+                if profit > 0:
+                    self.profitable_trades += 1
+
+        # [ORIGINAL updates from existing code remain to track 'last_trade_price', etc.]
         self.last_trade_price = price
         self.trades_executed += 1
 
-        # Adjust self.current_amount based on new balance
-        balance_ratio = self.current_balance / self.initial_balance
+        # Adjust self.current_amount to maintain backward compat with original code
+        balance_ratio = self.current_balance / self.initial_balance if self.initial_balance != 0 else 1
         self.current_amount = self.initial_amount * balance_ratio
-        
+
         self.logger.info(
             f"Trade completed - Balance: ${self.current_balance:.2f}, "
             f"Fees: ${fee:.2f}, Next trade amount: {self.current_amount:.8f}, "
-            f"Total P&L: ${self.total_profit_loss:.2f}"
+            f"Total P&L: ${self.total_profit_loss:.2f} || "
+            f"[BTC Balance: {self.balance_btc:.8f}, USD Balance: {self.balance_usd:.2f}]"
         )
 
     def run_strategy_loop(self):
@@ -673,7 +726,7 @@ class MACrossoverStrategy:
         trade_info = Trade(
             trade_type,
             self.symbol,
-            self.current_amount,
+            self.current_amount,  # [ORIGINAL usage - though actual BTC/fee logic is in update_balance]
             price,
             datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S'),
             self.last_trade_reason,
@@ -724,9 +777,11 @@ class MACrossoverStrategy:
             'current_trends': self.current_trends,
             'ma_difference': None,
             'ma_slope_difference': None,
-            'initial_balance': self.initial_balance,
-            'current_balance': self.current_balance,
-            'total_return_pct': ((self.current_balance / self.initial_balance) - 1) * 100,
+            'initial_balance': self.initial_balance,        # [ORIGINAL]
+            'current_balance': self.current_balance,        # [ORIGINAL]
+            'balance_btc': self.balance_btc,               # [ADDED]
+            'balance_usd': self.balance_usd,               # [ADDED]
+            'total_return_pct': ((self.current_balance / self.initial_balance) - 1) * 100 if self.initial_balance != 0 else 0,
             'total_fees_paid': self.total_fees_paid,
             'trades_executed': self.trades_executed,
             'profitable_trades': self.profitable_trades,
@@ -939,7 +994,7 @@ class CryptoShell(cmd.Cmd):
             'example': 'example price',
             'limit_buy': 'limit_buy btcusd 0.001 50000 daily_order=true',
             'limit_sell': 'limit_sell btcusd 0.001 60000 ioc_order=true',
-            'auto_trade': 'auto_trade 2 long',
+            'auto_trade': 'auto_trade 2.47btc long',
             'stop_auto_trade': 'stop_auto_trade',
             'status': 'status',
             'chart': 'chart btcusd 1H'
@@ -1170,35 +1225,50 @@ class CryptoShell(cmd.Cmd):
     def do_auto_trade(self, arg):
         """
         Start auto-trading using the best strategy from best_strategy.json.
-        
+
+        [MODIFIED docstring]
         Usage:
-          auto_trade <amount> [<current_position>]
-          
-        <amount> = how many BTC to trade (float).
-        <current_position> = optional, one of 'long', 'short', or 'neutral'.
+          auto_trade <amount><btc|usd> <long|short|neutral>
+        
+        Examples:
+          auto_trade 2.47btc long
+          auto_trade 234462usd short
         """
+        # [MODIFIED] Extended logic to parse <amount><btc|usd> rather than float only.
         if self.auto_trader and self.auto_trader.running:
             print("Auto-trading is already running. Stop it first.")
             return
 
         args_list = arg.split()
-        if len(args_list) < 1 or len(args_list) > 2:
-            print("Usage: auto_trade <amount> [long|short|neutral]")
+        if len(args_list) != 2:
+            print("Usage: auto_trade <amount><btc|usd> <long|short|neutral>")
             return
 
-        try:
-            amount = float(args_list[0])
-        except ValueError:
-            print("Amount must be numeric.")
+        balance_str = args_list[0].lower()  # e.g. "2.47btc", "234462usd", ...
+        pos_str = args_list[1].lower()      # e.g. "long", "short", "neutral"
+
+        desired_position = self.parse_position_str(pos_str)
+        if desired_position is None:
+            print("Position must be 'long', 'short', or 'neutral'.")
             return
 
-        # See if the user specified their actual position
-        user_current_pos = None
-        if len(args_list) == 2:
-            user_current_pos = self.parse_position_str(args_list[1])
-            if user_current_pos is None:
-                print("Invalid position. Must be 'long', 'short', or 'neutral'.")
-                return
+        import re
+        pattern = re.compile(r'^(\d+(\.\d+)?)(btc|usd)$')
+        match = pattern.match(balance_str)
+        if not match:
+            print("Balance argument must be like 2.47btc or 234462usd.")
+            return
+
+        amount_num = float(match.group(1))
+        amount_unit = match.group(3)  # "btc" or "usd"
+
+        # Enforce rule: if user says Xbtc => must be 'long'; Xusd => must be 'short'
+        if amount_unit == 'btc' and desired_position != 1:
+            print("Error: If specifying BTC balance, you must start in a 'long' position.")
+            return
+        if amount_unit == 'usd' and desired_position != -1:
+            print("Error: If specifying USD balance, you must start in a 'short' position.")
+            return
 
         file_path = os.path.abspath('best_strategy.json')
         if not os.path.exists(file_path):
@@ -1218,7 +1288,6 @@ class CryptoShell(cmd.Cmd):
         do_live      = best_strategy_params.get('do_live_trades', False)
         max_trades_day = best_strategy_params.get('max_trades_per_day', 5)
 
-        # 1) We see what historical MAs suggest for the final position
         df = self.data_manager.get_price_dataframe('btcusd').copy()
         if 'close' not in df.columns and 'price' in df.columns:
             df.rename(columns={'price': 'close'}, inplace=True)
@@ -1227,42 +1296,37 @@ class CryptoShell(cmd.Cmd):
         else:
             hist_position = determine_initial_position(df, short_window, long_window)
 
-        # 2) If user specified a current position, that means physically they are in that position.
-        #    If user didn't specify, we assume user_current_pos is None => we just start with hist_position.
-        if user_current_pos is not None:
-            # We override the initial position to the user's actual position
-            initial_position = user_current_pos
-        else:
-            # We default to whatever historical data says
-            initial_position = hist_position
+        # Initialize new fields for BTC or USD
+        initial_balance_btc = 0.0
+        initial_balance_usd = 0.0
+        if desired_position == 1:
+            initial_balance_btc = amount_num
+        elif desired_position == -1:
+            initial_balance_usd = amount_num
 
-        # 3) Create the strategy
         self.auto_trader = MACrossoverStrategy(
             self.data_manager,
             short_window,
             long_window,
-            amount,
+            amount_num,       # [We pass it here to preserve original usage]
             'btcusd',
             self.logger,
             live_trading=do_live,
             max_trades_per_day=max_trades_day,
-            initial_position=initial_position
+            initial_position=desired_position,
+            initial_balance_btc=initial_balance_btc,  # [ADDED]
+            initial_balance_usd=initial_balance_usd   # [ADDED]
         )
 
-        # 4) If there's a mismatch (e.g. user says "long" but hist says "short"), 
-        #    do an immediate "check_for_signals" to bring position in line:
-        last_price = self.data_manager.get_current_price('btcusd') or 0.0
-        # We'll treat the "historical position" as a new signal for immediate alignment
-        if (user_current_pos is not None) and (hist_position != user_current_pos):
-            # We simulate a quick "signal" to let the strategy fix the position
-            # if needed.  We'll do an artificial signal_time = now
+        # If there's a mismatch between hist_position & desired_position, optionally align:
+        if hist_position != desired_position:
+            last_price = self.data_manager.get_current_price('btcusd') or 0.0
             signal_time = datetime.now()
             self.auto_trader.check_for_signals(hist_position, last_price, signal_time)
 
-        # 5) Start the strategy
         self.auto_trader.start()
-        print(f"Auto-trading started with amount {amount}, using MA strategy "
-              f"(Short={short_window}, Long={long_window}). do_live_trades={do_live}")
+        print(f"Auto-trading started with {balance_str}, position={pos_str}, "
+              f"MA strategy (Short={short_window}, Long={long_window}), do_live_trades={do_live}")
 
     def do_stop_auto_trade(self, arg):
         """
@@ -1288,9 +1352,12 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Position: {pos_str}")
             print(f"  • Daily Trades: {status['trade_count_today']}/{self.auto_trader.max_trades_per_day}")
             print(f"  • Remaining Trades Today: {status['remaining_trades_today']}")
+
             print("\nBalance and Performance:")
             print(f"  • Initial Balance: ${status['initial_balance']:.2f}")
             print(f"  • Current Balance: ${status['current_balance']:.2f}")
+            print(f"  • BTC Balance: {status['balance_btc']:.8f}")   # [ADDED]
+            print(f"  • USD Balance: ${status['balance_usd']:.2f}") # [ADDED]
             print(f"  • Total Return: {status['total_return_pct']:.2f}%")
             print(f"  • Total P&L: ${status['total_profit_loss']:.2f}")
             print(f"  • Current Trade Amount: {status['current_trade_amount']:.8f}")
