@@ -316,6 +316,7 @@ class OrderPlacer:
     def place_order(self, order_type, currency_pair, amount, price=None, **kwargs):
         """
         Place a buy/sell or market/limit order using the Bitstamp REST API.
+        NOTE: 'amount' here should be in BTC if currency_pair=btcusd.
         """
         import time
         import uuid
@@ -388,7 +389,7 @@ class MACrossoverStrategy:
         data_manager,
         short_window,
         long_window,
-        amount,  # We'll keep this for backward compatibility
+        amount,
         symbol,
         logger,
         live_trading=False,
@@ -486,6 +487,8 @@ class MACrossoverStrategy:
         Update balance after a trade is executed (including fees and P&L).
         - 'buy' => spend USD, acquire BTC
         - 'sell' => spend BTC, acquire USD
+
+        NOTE: 'amount' is always in BTC units for BTCUSD.
         """
         fee = self.calculate_fee(amount, price)
         self.total_fees_paid += fee
@@ -678,23 +681,40 @@ class MACrossoverStrategy:
         if self.last_signal_time == signal_time:
             return
 
-        # If new signal is 1 => want to be long
         if latest_signal == 1 and self.position <= 0:
+            # [MODIFIED] We compute BTC to buy (rather than using self.current_amount as USD).
             self.logger.info(f"Buy signal triggered at {current_price}")
             self.position = 1
             self.last_trade_reason = "MA Crossover: short above long."
-            self.execute_trade("buy", current_price, timestamp, signal_time)
+
+            # [ADDED] For a buy, let's buy as much BTC as we can based on self.balance_usd:
+            trade_btc = self.balance_usd / current_price  # Might be scaled down in update_balance
+            self.execute_trade("buy", current_price, timestamp, signal_time, trade_btc)
+
             self.last_signal_time = signal_time
+
         elif latest_signal == -1 and self.position >= 0:
+            # [MODIFIED] We compute BTC to sell.
             self.logger.info(f"Sell signal triggered at {current_price}")
             self.position = -1
             self.last_trade_reason = "MA Crossover: short below long."
-            self.execute_trade("sell", current_price, timestamp, signal_time)
+
+            # [ADDED] For a sell, we sell whatever BTC we have:
+            trade_btc = self.balance_btc
+            self.execute_trade("sell", current_price, timestamp, signal_time, trade_btc)
+
             self.last_signal_time = signal_time
 
-    def execute_trade(self, trade_type, price, timestamp, signal_timestamp):
+    # [MODIFIED signature] Accept trade_btc as a parameter:
+    def execute_trade(self, trade_type, price, timestamp, signal_timestamp, trade_btc):
         """
         Execute a buy or sell, respecting daily and hourly trade limits.
+
+        :param trade_type: 'buy' or 'sell'
+        :param price: float
+        :param timestamp: str
+        :param signal_timestamp: datetime index of the signal
+        :param trade_btc: float (BTC units)
         """
         today = datetime.utcnow().date()
         if today != self.current_day:
@@ -713,10 +733,11 @@ class MACrossoverStrategy:
             return
 
         data_source = 'historical' if signal_timestamp < self.strategy_start_time else 'live'
+
         trade_info = Trade(
             trade_type,
             self.symbol,
-            self.current_amount,
+            trade_btc,  # [MODIFIED] pass BTC amount
             price,
             datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S'),
             self.last_trade_reason,
@@ -729,19 +750,20 @@ class MACrossoverStrategy:
         self.last_trade_signal_timestamp = signal_timestamp
 
         if self.live_trading:
+            # [MODIFIED] We pass 'trade_btc' as the amount to the exchange
             result = self.order_placer.place_order(
-                f"market-{trade_type}", self.symbol, self.current_amount
+                f"market-{trade_type}", self.symbol, trade_btc
             )
             self.logger.info(f"Executed LIVE {trade_type} order: {result}")
             trade_info.order_result = result
             self.trade_count_today += 1
             self.logger.debug(f"Trade count for {self.current_day}: "
                               f"{self.trade_count_today}/{self.max_trades_per_day}")
-            self.update_balance(trade_type, price, self.current_amount)
+            self.update_balance(trade_type, price, trade_btc)
         else:
             self.logger.info(f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
             self.trade_log.append(trade_info)
-            self.update_balance(trade_type, price, self.current_amount)
+            self.update_balance(trade_type, price, trade_btc)
 
         self.trades_this_hour.append(datetime.utcnow())
 
@@ -820,7 +842,7 @@ class MACrossoverStrategy:
             status['average_fee_per_trade'] = self.total_fees_paid / self.trades_executed
             status['risk_reward_ratio'] = abs(self.total_profit_loss / self.total_fees_paid) if self.total_fees_paid > 0 else 0
 
-        # [ADDED] Compute mark-to-market in USD and BTC:
+        # Mark-to-market in USD and BTC:
         mtm_usd, mtm_btc = self.get_mark_to_market_values()
         status['mark_to_market_usd'] = mtm_usd
         status['mark_to_market_btc'] = mtm_btc
@@ -907,7 +929,7 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
             x_end = df_ma.index.max()
             x_start = x_end - pd.Timedelta(days=7)
 
-        df_visible = df_ma[(df_ma.index >= x_start) and (df_ma.index <= x_end)]
+        df_visible = df_ma[(df_ma.index >= x_start) & (df_ma.index <= x_end)]
         if df_visible.empty:
             df_visible = df_ma
 
@@ -1365,7 +1387,6 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Current Trade Amount: {status['current_trade_amount']:.8f}")
             print(f"  • Total Fees Paid: ${status['total_fees_paid']:.2f}")
 
-            # [ADDED] Show the mark-to-market values from the strategy
             print("\nMark-to-Market Values:")
             print(f"  • Total Notional (USD): ${status['mark_to_market_usd']:.2f}")
             print(f"  • Total Notional (BTC): {status['mark_to_market_btc']:.8f}")

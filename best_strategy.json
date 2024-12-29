@@ -1,14 +1,14 @@
 {
     "Frequency": "1H",
     "Strategy": "MA",
-    "Short_Window": 8,
-    "Long_Window": 46,
-    "Final_Balance": 13386.932202933873,
-    "Total_Return": 33.869322029338726,
+    "Short_Window": 8.0,
+    "Long_Window": 48.0,
+    "Final_Balance": 12423.532297027507,
+    "Total_Return": 24.235322970275064,
     "Total_Trades": 105.0,
-    "Profit_Factor": 1.089118529756082,
-    "Sharpe_Ratio": 0.45409203208615,
-    "Average_Trades_Per_Day": 1.1666666666666667,
+    "Profit_Factor": 1.0675626976703145,
+    "Sharpe_Ratio": 0.3474369504166794,
+    "Average_Trades_Per_Day": 1.1538461538461537,
     "start_window_days_back": 90,
     "end_window_days_back": 0
 }
