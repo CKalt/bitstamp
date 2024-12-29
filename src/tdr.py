@@ -330,10 +330,8 @@ class OrderPlacer:
         nonce = str(uuid.uuid4())
         content_type = 'application/x-www-form-urlencoded'
 
-        # [MODIFIED] Round to 8 decimal places to avoid "no more than 8 decimals" errors
-        amount_rounded = round(amount, 8)  # [ADDED]
-        payload = {'amount': str(amount_rounded)}  # [MODIFIED]
-
+        amount_rounded = round(amount, 8)
+        payload = {'amount': str(amount_rounded)}
         if price:
             payload['price'] = str(price)
 
@@ -504,7 +502,8 @@ class MACrossoverStrategy:
             if total_cost_usd > self.balance_usd:
                 # Scale down the purchase if we don't have enough USD
                 possible_btc = self.balance_usd / (price * (1 + self.fee_percentage))
-                amount = round(possible_btc, 8)  # [MODIFIED] also limit decimal places
+                possible_btc = round(possible_btc, 8) 
+                amount = possible_btc
                 cost_usd = amount * price
                 fee = self.calculate_fee(amount, price)
                 total_cost_usd = cost_usd + fee
@@ -528,7 +527,7 @@ class MACrossoverStrategy:
 
             if amount > self.balance_btc:
                 amount = self.balance_btc
-                amount = round(amount, 8)  # [MODIFIED] for safety
+                amount = round(amount, 8)
                 proceeds_usd = amount * price
                 fee = proceeds_usd * self.fee_percentage
                 net_usd = proceeds_usd - fee
@@ -692,8 +691,17 @@ class MACrossoverStrategy:
             self.last_trade_reason = "MA Crossover: short above long."
 
             trade_btc = self.balance_usd / current_price
-            trade_btc = round(trade_btc, 8)  # [MODIFIED] ensure <=8 decimals
-            self.execute_trade("buy", current_price, timestamp, signal_time, trade_btc)
+            trade_btc = round(trade_btc, 8)
+
+            # [ADDED] Split the buy into two orders if cost > 90% of our USD
+            cost_usd = trade_btc * current_price
+            fee_est  = cost_usd * self.fee_percentage
+            total_cost = cost_usd + fee_est
+            if total_cost > 0.9 * self.balance_usd:
+                self.logger.info("Splitting large buy into two partial orders to avoid 90% rule.")
+                self.split_buy_into_two_orders(trade_btc, current_price, timestamp, signal_time)
+            else:
+                self.execute_trade("buy", current_price, timestamp, signal_time, trade_btc)
 
             self.last_signal_time = signal_time
 
@@ -703,7 +711,9 @@ class MACrossoverStrategy:
             self.last_trade_reason = "MA Crossover: short below long."
 
             trade_btc = self.balance_btc
-            trade_btc = round(trade_btc, 8)  # [MODIFIED]
+            trade_btc = round(trade_btc, 8)
+
+            # For sells, we do not split, as the 90% rule typically applies to USD usage only.
             self.execute_trade("sell", current_price, timestamp, signal_time, trade_btc)
 
             self.last_signal_time = signal_time
@@ -716,7 +726,7 @@ class MACrossoverStrategy:
         :param price: float
         :param timestamp: str
         :param signal_timestamp: datetime index of the signal
-        :param trade_btc: float (BTC units, <= 8 decimals)
+        :param trade_btc: float (BTC units)
         """
         today = datetime.utcnow().date()
         if today != self.current_day:
@@ -735,7 +745,6 @@ class MACrossoverStrategy:
             return
 
         data_source = 'historical' if signal_timestamp < self.strategy_start_time else 'live'
-
         trade_info = Trade(
             trade_type,
             self.symbol,
@@ -752,38 +761,43 @@ class MACrossoverStrategy:
         self.last_trade_signal_timestamp = signal_timestamp
 
         if self.live_trading:
-            # [MODIFIED] We pass 'trade_btc' (rounded to 8 decimals above) to the exchange
             result = self.order_placer.place_order(
                 f"market-{trade_type}", self.symbol, trade_btc
             )
             self.logger.info(f"Executed LIVE {trade_type} order: {result}")
             trade_info.order_result = result
 
-            # [ADDED] Check if the trade failed:
             if result.get("status") == "error":
                 self.logger.error(f"Trade failed: {result}")
-                # Do NOT update balances or count as a trade
-                # or append to trade log as success.
-                # We only log the trade attempt in the JSON file:
                 self._log_failed_trade(trade_info)
                 return
 
-            # Otherwise, success => update:
             self.trade_count_today += 1
-            self.logger.debug(f"Trade count for {self.current_day}: "
-                              f"{self.trade_count_today}/{self.max_trades_per_day}")
             self.update_balance(trade_type, price, trade_btc)
 
         else:
             self.logger.info(f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
-            # Dry-run => treat as success
             self.trade_log.append(trade_info)
             self.update_balance(trade_type, price, trade_btc)
 
         self.trades_this_hour.append(datetime.utcnow())
         self._log_successful_trade(trade_info)
 
-    # [ADDED] Log a failed trade attempt to trades.json, if you wish to see it historically
+    # [ADDED] Helper for splitting a large buy into two partial orders
+    def split_buy_into_two_orders(self, total_btc, price, timestamp, signal_timestamp):
+        """
+        Splits a large buy into two partial orders so that each 
+        one doesn't exceed ~90% of the USD balance.
+        """
+        half_btc_1 = round(total_btc * 0.5, 8)
+        half_btc_2 = round(total_btc - half_btc_1, 8)
+        self.logger.info(f"Order #1: buying {half_btc_1} BTC; then Order #2: buying {half_btc_2} BTC.")
+
+        # Place the first buy
+        self.execute_trade("buy", price, timestamp, signal_timestamp, half_btc_1)
+        # Place the second buy
+        self.execute_trade("buy", price, timestamp, signal_timestamp, half_btc_2)
+
     def _log_failed_trade(self, trade_info):
         try:
             file_path = os.path.abspath(self.trade_log_file)
@@ -793,7 +807,6 @@ class MACrossoverStrategy:
         except Exception as e:
             self.logger.error(f"Failed to write failed trade to log file: {e}")
 
-    # [ADDED] For success, append to trade log JSON
     def _log_successful_trade(self, trade_info):
         try:
             file_path = os.path.abspath(self.trade_log_file)
