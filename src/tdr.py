@@ -316,7 +316,8 @@ class OrderPlacer:
     def place_order(self, order_type, currency_pair, amount, price=None, **kwargs):
         """
         Place a buy/sell or market/limit order using the Bitstamp REST API.
-        NOTE: 'amount' here should be in BTC if currency_pair=btcusd.
+        NOTE: 'amount' here should be in BTC if currency_pair=btcusd,
+        with no more than 8 decimal places.
         """
         import time
         import uuid
@@ -329,7 +330,10 @@ class OrderPlacer:
         nonce = str(uuid.uuid4())
         content_type = 'application/x-www-form-urlencoded'
 
-        payload = {'amount': str(amount)}
+        # [MODIFIED] Round to 8 decimal places to avoid "no more than 8 decimals" errors
+        amount_rounded = round(amount, 8)  # [ADDED]
+        payload = {'amount': str(amount_rounded)}  # [MODIFIED]
+
         if price:
             payload['price'] = str(price)
 
@@ -500,7 +504,7 @@ class MACrossoverStrategy:
             if total_cost_usd > self.balance_usd:
                 # Scale down the purchase if we don't have enough USD
                 possible_btc = self.balance_usd / (price * (1 + self.fee_percentage))
-                amount = possible_btc
+                amount = round(possible_btc, 8)  # [MODIFIED] also limit decimal places
                 cost_usd = amount * price
                 fee = self.calculate_fee(amount, price)
                 total_cost_usd = cost_usd + fee
@@ -524,6 +528,7 @@ class MACrossoverStrategy:
 
             if amount > self.balance_btc:
                 amount = self.balance_btc
+                amount = round(amount, 8)  # [MODIFIED] for safety
                 proceeds_usd = amount * price
                 fee = proceeds_usd * self.fee_percentage
                 net_usd = proceeds_usd - fee
@@ -682,30 +687,27 @@ class MACrossoverStrategy:
             return
 
         if latest_signal == 1 and self.position <= 0:
-            # [MODIFIED] We compute BTC to buy (rather than using self.current_amount as USD).
             self.logger.info(f"Buy signal triggered at {current_price}")
             self.position = 1
             self.last_trade_reason = "MA Crossover: short above long."
 
-            # [ADDED] For a buy, let's buy as much BTC as we can based on self.balance_usd:
-            trade_btc = self.balance_usd / current_price  # Might be scaled down in update_balance
+            trade_btc = self.balance_usd / current_price
+            trade_btc = round(trade_btc, 8)  # [MODIFIED] ensure <=8 decimals
             self.execute_trade("buy", current_price, timestamp, signal_time, trade_btc)
 
             self.last_signal_time = signal_time
 
         elif latest_signal == -1 and self.position >= 0:
-            # [MODIFIED] We compute BTC to sell.
             self.logger.info(f"Sell signal triggered at {current_price}")
             self.position = -1
             self.last_trade_reason = "MA Crossover: short below long."
 
-            # [ADDED] For a sell, we sell whatever BTC we have:
             trade_btc = self.balance_btc
+            trade_btc = round(trade_btc, 8)  # [MODIFIED]
             self.execute_trade("sell", current_price, timestamp, signal_time, trade_btc)
 
             self.last_signal_time = signal_time
 
-    # [MODIFIED signature] Accept trade_btc as a parameter:
     def execute_trade(self, trade_type, price, timestamp, signal_timestamp, trade_btc):
         """
         Execute a buy or sell, respecting daily and hourly trade limits.
@@ -714,7 +716,7 @@ class MACrossoverStrategy:
         :param price: float
         :param timestamp: str
         :param signal_timestamp: datetime index of the signal
-        :param trade_btc: float (BTC units)
+        :param trade_btc: float (BTC units, <= 8 decimals)
         """
         today = datetime.utcnow().date()
         if today != self.current_day:
@@ -737,7 +739,7 @@ class MACrossoverStrategy:
         trade_info = Trade(
             trade_type,
             self.symbol,
-            trade_btc,  # [MODIFIED] pass BTC amount
+            trade_btc,
             price,
             datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S'),
             self.last_trade_reason,
@@ -750,23 +752,49 @@ class MACrossoverStrategy:
         self.last_trade_signal_timestamp = signal_timestamp
 
         if self.live_trading:
-            # [MODIFIED] We pass 'trade_btc' as the amount to the exchange
+            # [MODIFIED] We pass 'trade_btc' (rounded to 8 decimals above) to the exchange
             result = self.order_placer.place_order(
                 f"market-{trade_type}", self.symbol, trade_btc
             )
             self.logger.info(f"Executed LIVE {trade_type} order: {result}")
             trade_info.order_result = result
+
+            # [ADDED] Check if the trade failed:
+            if result.get("status") == "error":
+                self.logger.error(f"Trade failed: {result}")
+                # Do NOT update balances or count as a trade
+                # or append to trade log as success.
+                # We only log the trade attempt in the JSON file:
+                self._log_failed_trade(trade_info)
+                return
+
+            # Otherwise, success => update:
             self.trade_count_today += 1
             self.logger.debug(f"Trade count for {self.current_day}: "
                               f"{self.trade_count_today}/{self.max_trades_per_day}")
             self.update_balance(trade_type, price, trade_btc)
+
         else:
             self.logger.info(f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
+            # Dry-run => treat as success
             self.trade_log.append(trade_info)
             self.update_balance(trade_type, price, trade_btc)
 
         self.trades_this_hour.append(datetime.utcnow())
+        self._log_successful_trade(trade_info)
 
+    # [ADDED] Log a failed trade attempt to trades.json, if you wish to see it historically
+    def _log_failed_trade(self, trade_info):
+        try:
+            file_path = os.path.abspath(self.trade_log_file)
+            with open(file_path, 'a') as f:
+                f.write(json.dumps(trade_info.to_dict()) + '\n')
+            self.logger.debug(f"Failed trade appended to '{file_path}'")
+        except Exception as e:
+            self.logger.error(f"Failed to write failed trade to log file: {e}")
+
+    # [ADDED] For success, append to trade log JSON
+    def _log_successful_trade(self, trade_info):
         try:
             file_path = os.path.abspath(self.trade_log_file)
             with open(file_path, 'a') as f:
@@ -775,15 +803,12 @@ class MACrossoverStrategy:
         except Exception as e:
             self.logger.error(f"Failed to write trade to log file: {e}")
 
-    # [ADDED] A helper to compute total notional in USD/BTC
     def get_mark_to_market_values(self):
         """
         Returns the total notional in USD and BTC, based on the current market price.
         """
         current_price = self.data_manager.get_current_price(self.symbol) or 0.0
-        # Convert all BTC to USD, plus existing USD:
         total_usd_value = self.balance_usd + (self.balance_btc * current_price)
-        # Convert all USD to BTC, plus existing BTC:
         total_btc_value = self.balance_btc + (self.balance_usd / current_price if current_price else 0.0)
         return total_usd_value, total_btc_value
 
@@ -842,7 +867,6 @@ class MACrossoverStrategy:
             status['average_fee_per_trade'] = self.total_fees_paid / self.trades_executed
             status['risk_reward_ratio'] = abs(self.total_profit_loss / self.total_fees_paid) if self.total_fees_paid > 0 else 0
 
-        # Mark-to-market in USD and BTC:
         mtm_usd, mtm_btc = self.get_mark_to_market_values()
         status['mark_to_market_usd'] = mtm_usd
         status['mark_to_market_btc'] = mtm_btc
@@ -921,7 +945,6 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
         df_ma['Buy_Signal_Price'] = np.where(df_ma['Signal_Change'] == 2, df_ma['close'], np.nan)
         df_ma['Sell_Signal_Price'] = np.where(df_ma['Signal_Change'] == -2, df_ma['close'], np.nan)
 
-        # Determine chart range
         if relayout_data and 'xaxis.range[0]' in relayout_data and 'xaxis.range[1]' in relayout_data:
             x_start = pd.to_datetime(relayout_data['xaxis.range[0]'])
             x_end = pd.to_datetime(relayout_data['xaxis.range[1]'])
