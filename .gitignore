@@ -26,3 +26,4 @@ foo*
 
 # Ignore files in any __pycache__ directory
 __pycache__/
+/best_strategy.json
