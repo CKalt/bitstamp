@@ -690,18 +690,8 @@ class MACrossoverStrategy:
             self.position = 1
             self.last_trade_reason = "MA Crossover: short above long."
 
-            trade_btc = self.balance_usd / current_price
-            trade_btc = round(trade_btc, 8)
-
-            # [ADDED] Split the buy into two orders if cost > 90% of our USD
-            cost_usd = trade_btc * current_price
-            fee_est  = cost_usd * self.fee_percentage
-            total_cost = cost_usd + fee_est
-            if total_cost > 0.9 * self.balance_usd:
-                self.logger.info("Splitting large buy into two partial orders to avoid 90% rule.")
-                self.split_buy_into_two_orders(trade_btc, current_price, timestamp, signal_time)
-            else:
-                self.execute_trade("buy", current_price, timestamp, signal_time, trade_btc)
+            # We'll attempt to buy using 3 partial transactions:
+            self.buy_in_three_parts(current_price, timestamp, signal_time)
 
             self.last_signal_time = signal_time
 
@@ -712,11 +702,41 @@ class MACrossoverStrategy:
 
             trade_btc = self.balance_btc
             trade_btc = round(trade_btc, 8)
-
-            # For sells, we do not split, as the 90% rule typically applies to USD usage only.
             self.execute_trade("sell", current_price, timestamp, signal_time, trade_btc)
 
             self.last_signal_time = signal_time
+
+    # [ADDED] A new method to do 3 partial buys at 89% each time
+    def buy_in_three_parts(self, price, timestamp, signal_time):
+        """
+        Perform 3 partial buy transactions, each using 89% of the 
+        *current* USD balance (including leftover after each partial fill).
+        """
+        # First partial buy
+        partial_btc_1 = self.get_89pct_btc_of_usd(price)
+        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1)
+
+        # Second partial buy
+        partial_btc_2 = self.get_89pct_btc_of_usd(price)
+        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_2)
+
+        # Third partial buy
+        partial_btc_3 = self.get_89pct_btc_of_usd(price)
+        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_3)
+
+    def get_89pct_btc_of_usd(self, price):
+        """
+        Return the BTC quantity that corresponds to 89% of self.balance_usd, 
+        given the current price. We also factor in the fee so we avoid overshoot.
+        """
+        # 89% of leftover USD
+        available_usd = self.balance_usd * 0.89
+        # We'll do a quick estimate of the cost in BTC, factoring in fees:
+        # cost_usd = (btc_amount * price) + (btc_amount * price * fee%)
+        # cost_usd = btc_amount * price * (1 + fee_percentage)
+        # => btc_amount = available_usd / [ price * (1 + fee_percentage) ]
+        btc_approx = available_usd / (price * (1 + self.fee_percentage))
+        return round(btc_approx, 8)
 
     def execute_trade(self, trade_type, price, timestamp, signal_timestamp, trade_btc):
         """
@@ -782,21 +802,6 @@ class MACrossoverStrategy:
 
         self.trades_this_hour.append(datetime.utcnow())
         self._log_successful_trade(trade_info)
-
-    # [ADDED] Helper for splitting a large buy into two partial orders
-    def split_buy_into_two_orders(self, total_btc, price, timestamp, signal_timestamp):
-        """
-        Splits a large buy into two partial orders so that each 
-        one doesn't exceed ~90% of the USD balance.
-        """
-        half_btc_1 = round(total_btc * 0.5, 8)
-        half_btc_2 = round(total_btc - half_btc_1, 8)
-        self.logger.info(f"Order #1: buying {half_btc_1} BTC; then Order #2: buying {half_btc_2} BTC.")
-
-        # Place the first buy
-        self.execute_trade("buy", price, timestamp, signal_timestamp, half_btc_1)
-        # Place the second buy
-        self.execute_trade("buy", price, timestamp, signal_timestamp, half_btc_2)
 
     def _log_failed_trade(self, trade_info):
         try:
