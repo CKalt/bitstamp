@@ -422,11 +422,11 @@ class MACrossoverStrategy:
         self.df_ma = pd.DataFrame()
         self.strategy_start_time = datetime.now()
 
-        # Original balance tracking
+        # Balance tracking used for performance (original usage)
         self.initial_balance = amount
         self.current_balance = amount
 
-        # Separate BTC and USD balances
+        # Separate BTC & USD tracking
         self.balance_btc = initial_balance_btc
         self.balance_usd = initial_balance_usd
 
@@ -499,10 +499,10 @@ class MACrossoverStrategy:
             cost_usd = amount * price
             total_cost_usd = cost_usd + fee
 
+            # If we don't have enough USD, scale down
             if total_cost_usd > self.balance_usd:
-                # Scale down the purchase if we don't have enough USD
                 possible_btc = self.balance_usd / (price * (1 + self.fee_percentage))
-                possible_btc = round(possible_btc, 8) 
+                possible_btc = round(possible_btc, 8)
                 amount = possible_btc
                 cost_usd = amount * price
                 fee = self.calculate_fee(amount, price)
@@ -511,7 +511,7 @@ class MACrossoverStrategy:
             self.balance_usd -= total_cost_usd
             self.balance_btc += amount
 
-            # If we previously had a short
+            # If we previously had a short position, compute any P&L
             if self.last_trade_price is not None and self.position == -1:
                 profit = amount * (self.last_trade_price - price) - fee
                 self.current_balance += profit
@@ -535,7 +535,7 @@ class MACrossoverStrategy:
             self.balance_btc -= amount
             self.balance_usd += net_usd
 
-            # If we previously had a long
+            # If we previously had a long position, compute any P&L
             if self.last_trade_price is not None and self.position == 1:
                 profit = amount * (price - self.last_trade_price) - fee
                 self.current_balance += profit
@@ -546,7 +546,7 @@ class MACrossoverStrategy:
         self.last_trade_price = price
         self.trades_executed += 1
 
-        # Keep old logic for backward compatibility
+        # For backward compatibility in original code:
         balance_ratio = self.current_balance / self.initial_balance if self.initial_balance != 0 else 1
         self.current_amount = self.initial_amount * balance_ratio
 
@@ -678,75 +678,63 @@ class MACrossoverStrategy:
 
     def check_for_signals(self, latest_signal, current_price, signal_time):
         """
-        If the new signal differs from our current position, execute trades to
-        get into the correct position.
+        If the new signal differs from our current position, 
+        we take trades to match the new side.
+
+        That is, if the system says 'long' (1) but we are short (<= 0),
+        we buy. If it says 'short' (-1) but we are long (>= 0), we sell.
+        Otherwise do nothing.
         """
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if self.last_signal_time == signal_time:
             return
 
+        # If new signal = 1 (long), but we are short or neutral
         if latest_signal == 1 and self.position <= 0:
             self.logger.info(f"Buy signal triggered at {current_price}")
             self.position = 1
             self.last_trade_reason = "MA Crossover: short above long."
-
-            # We'll attempt to buy using 3 partial transactions:
             self.buy_in_three_parts(current_price, timestamp, signal_time)
-
             self.last_signal_time = signal_time
 
+        # If new signal = -1 (short), but we are long or neutral
         elif latest_signal == -1 and self.position >= 0:
             self.logger.info(f"Sell signal triggered at {current_price}")
             self.position = -1
             self.last_trade_reason = "MA Crossover: short below long."
-
             trade_btc = self.balance_btc
             trade_btc = round(trade_btc, 8)
             self.execute_trade("sell", current_price, timestamp, signal_time, trade_btc)
-
             self.last_signal_time = signal_time
 
-    # [ADDED] A new method to do 3 partial buys at 89% each time
+    # Logic to split into partial buys
     def buy_in_three_parts(self, price, timestamp, signal_time):
         """
-        Perform 3 partial buy transactions, each using 89% of the 
-        *current* USD balance (including leftover after each partial fill).
+        Perform 3 partial buy transactions, each using ~89% 
+        of current USD leftover.
         """
-        # First partial buy
         partial_btc_1 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1)
 
-        # Second partial buy
         partial_btc_2 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_2)
 
-        # Third partial buy
         partial_btc_3 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_3)
 
     def get_89pct_btc_of_usd(self, price):
         """
-        Return the BTC quantity that corresponds to 89% of self.balance_usd, 
-        given the current price. We also factor in the fee so we avoid overshoot.
+        Convert 89% of our current self.balance_usd into BTC, 
+        factoring in the fee.  So cost_usd = (btc_amount * price) + fee,
+        ~ cost_usd = btc_amount * price * (1 + fee_percentage).
         """
-        # 89% of leftover USD
         available_usd = self.balance_usd * 0.89
-        # We'll do a quick estimate of the cost in BTC, factoring in fees:
-        # cost_usd = (btc_amount * price) + (btc_amount * price * fee%)
-        # cost_usd = btc_amount * price * (1 + fee_percentage)
-        # => btc_amount = available_usd / [ price * (1 + fee_percentage) ]
         btc_approx = available_usd / (price * (1 + self.fee_percentage))
         return round(btc_approx, 8)
 
     def execute_trade(self, trade_type, price, timestamp, signal_timestamp, trade_btc):
         """
         Execute a buy or sell, respecting daily and hourly trade limits.
-
-        :param trade_type: 'buy' or 'sell'
-        :param price: float
-        :param timestamp: str
-        :param signal_timestamp: datetime index of the signal
-        :param trade_btc: float (BTC units)
         """
         today = datetime.utcnow().date()
         if today != self.current_day:
@@ -781,9 +769,7 @@ class MACrossoverStrategy:
         self.last_trade_signal_timestamp = signal_timestamp
 
         if self.live_trading:
-            result = self.order_placer.place_order(
-                f"market-{trade_type}", self.symbol, trade_btc
-            )
+            result = self.order_placer.place_order(f"market-{trade_type}", self.symbol, trade_btc)
             self.logger.info(f"Executed LIVE {trade_type} order: {result}")
             trade_info.order_result = result
 
@@ -794,7 +780,6 @@ class MACrossoverStrategy:
 
             self.trade_count_today += 1
             self.update_balance(trade_type, price, trade_btc)
-
         else:
             self.logger.info(f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
             self.trade_log.append(trade_info)
@@ -1363,6 +1348,10 @@ class CryptoShell(cmd.Cmd):
         else:
             hist_position = determine_initial_position(df, short_window, long_window)
 
+        # [MODIFIED] We do NOT force re-alignment with hist_position. 
+        # If user says they are "long" and hist says "short," 
+        # we do NOT override them with a forced trade. 
+
         initial_balance_btc = 0.0
         initial_balance_usd = 0.0
         if desired_position == 1:
@@ -1384,10 +1373,7 @@ class CryptoShell(cmd.Cmd):
             initial_balance_usd=initial_balance_usd
         )
 
-        if hist_position != desired_position:
-            last_price = self.data_manager.get_current_price('btcusd') or 0.0
-            signal_time = datetime.now()
-            self.auto_trader.check_for_signals(hist_position, last_price, signal_time)
+        # [REMOVED] No forced alignment calls here.
 
         self.auto_trader.start()
         print(f"Auto-trading started with {balance_str}, position={pos_str}, "
@@ -1689,7 +1675,3 @@ def main():
             shell.auto_trader.stop()
         if shell.chart_process and shell.chart_process.is_alive():
             shell.stop_dash_app()
-
-if __name__ == '__main__':
-    set_start_method('spawn')
-    main()
