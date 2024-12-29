@@ -388,22 +388,21 @@ class MACrossoverStrategy:
         data_manager,
         short_window,
         long_window,
-        amount,  # [ORIGINAL] - We'll keep it, though we now track BTC/USD separately
+        amount,  # We'll keep this for backward compatibility
         symbol,
         logger,
         live_trading=False,
         max_trades_per_day=5,
         initial_position=0,
-        # [ADDED] New fields for separate BTC/USD balances:
-        initial_balance_btc=0.0,  # [ADDED]
-        initial_balance_usd=0.0   # [ADDED]
+        initial_balance_btc=0.0,
+        initial_balance_usd=0.0
     ):
         self.data_manager = data_manager
         self.order_placer = data_manager.order_placer
         self.short_window = short_window
         self.long_window = long_window
-        self.initial_amount = amount   # [ORIGINAL variable, kept for minimal changes]
-        self.current_amount = amount   # [ORIGINAL logic, but may not be used the same way]
+        self.initial_amount = amount
+        self.current_amount = amount
         self.symbol = symbol
         self.logger = logger
         self.position = initial_position
@@ -420,11 +419,11 @@ class MACrossoverStrategy:
         self.df_ma = pd.DataFrame()
         self.strategy_start_time = datetime.now()
 
-        # [ORIGINAL balance tracking - we keep them, but we won't rely on them exclusively]
-        self.initial_balance = amount  # [ORIGINAL]
-        self.current_balance = amount  # [ORIGINAL]
+        # Original balance tracking
+        self.initial_balance = amount
+        self.current_balance = amount
 
-        # [ADDED] Separate BTC & USD balances:
+        # Separate BTC and USD balances
         self.balance_btc = initial_balance_btc
         self.balance_usd = initial_balance_usd
 
@@ -485,24 +484,18 @@ class MACrossoverStrategy:
     def update_balance(self, trade_type, price, amount):
         """
         Update balance after a trade is executed (including fees and P&L).
-        - 'buy' => we spend USD, acquire BTC
-        - 'sell' => we spend BTC, acquire USD
+        - 'buy' => spend USD, acquire BTC
+        - 'sell' => spend BTC, acquire USD
         """
         fee = self.calculate_fee(amount, price)
         self.total_fees_paid += fee
 
-        # [MODIFIED] Instead of only adjusting a "current_balance", we also keep track
-        # of separate BTC and USD amounts. We do minimal changes but incorporate both.
         if trade_type == "buy":
-            # Cost of the BTC in USD:
             cost_usd = amount * price
             total_cost_usd = cost_usd + fee
 
             if total_cost_usd > self.balance_usd:
-                # Not enough USD to buy 'amount' BTC plus fee => scale down
-                # cost_usd' = (amount' * price), fee' = cost_usd' * fee_percentage
-                # cost_usd' + fee' = balance_usd
-                # amount' * price * (1 + fee_percentage) = balance_usd
+                # Scale down the purchase if we don't have enough USD
                 possible_btc = self.balance_usd / (price * (1 + self.fee_percentage))
                 amount = possible_btc
                 cost_usd = amount * price
@@ -512,7 +505,7 @@ class MACrossoverStrategy:
             self.balance_usd -= total_cost_usd
             self.balance_btc += amount
 
-            # If we previously had a short, we are effectively "closing" some or all
+            # If we previously had a short
             if self.last_trade_price is not None and self.position == -1:
                 profit = amount * (self.last_trade_price - price) - fee
                 self.current_balance += profit
@@ -521,10 +514,8 @@ class MACrossoverStrategy:
                     self.profitable_trades += 1
 
         elif trade_type == "sell":
-            # Proceeds from selling 'amount' BTC:
             proceeds_usd = amount * price
             fee_sell = proceeds_usd * self.fee_percentage
-            # For consistency, we reassign 'fee' but minimal changes:
             fee = fee_sell
             net_usd = proceeds_usd - fee
 
@@ -537,7 +528,7 @@ class MACrossoverStrategy:
             self.balance_btc -= amount
             self.balance_usd += net_usd
 
-            # If we previously had a long, we are effectively "closing"
+            # If we previously had a long
             if self.last_trade_price is not None and self.position == 1:
                 profit = amount * (price - self.last_trade_price) - fee
                 self.current_balance += profit
@@ -545,11 +536,10 @@ class MACrossoverStrategy:
                 if profit > 0:
                     self.profitable_trades += 1
 
-        # [ORIGINAL updates from existing code remain to track 'last_trade_price', etc.]
         self.last_trade_price = price
         self.trades_executed += 1
 
-        # Adjust self.current_amount to maintain backward compat with original code
+        # Keep old logic for backward compatibility
         balance_ratio = self.current_balance / self.initial_balance if self.initial_balance != 0 else 1
         self.current_amount = self.initial_amount * balance_ratio
 
@@ -726,7 +716,7 @@ class MACrossoverStrategy:
         trade_info = Trade(
             trade_type,
             self.symbol,
-            self.current_amount,  # [ORIGINAL usage - though actual BTC/fee logic is in update_balance]
+            self.current_amount,
             price,
             datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S'),
             self.last_trade_reason,
@@ -763,6 +753,18 @@ class MACrossoverStrategy:
         except Exception as e:
             self.logger.error(f"Failed to write trade to log file: {e}")
 
+    # [ADDED] A helper to compute total notional in USD/BTC
+    def get_mark_to_market_values(self):
+        """
+        Returns the total notional in USD and BTC, based on the current market price.
+        """
+        current_price = self.data_manager.get_current_price(self.symbol) or 0.0
+        # Convert all BTC to USD, plus existing USD:
+        total_usd_value = self.balance_usd + (self.balance_btc * current_price)
+        # Convert all USD to BTC, plus existing BTC:
+        total_btc_value = self.balance_btc + (self.balance_usd / current_price if current_price else 0.0)
+        return total_usd_value, total_btc_value
+
     def get_status(self):
         """
         Return a dictionary summarizing the current status of this strategy.
@@ -777,10 +779,10 @@ class MACrossoverStrategy:
             'current_trends': self.current_trends,
             'ma_difference': None,
             'ma_slope_difference': None,
-            'initial_balance': self.initial_balance,        # [ORIGINAL]
-            'current_balance': self.current_balance,        # [ORIGINAL]
-            'balance_btc': self.balance_btc,               # [ADDED]
-            'balance_usd': self.balance_usd,               # [ADDED]
+            'initial_balance': self.initial_balance,
+            'current_balance': self.current_balance,
+            'balance_btc': self.balance_btc,
+            'balance_usd': self.balance_usd,
             'total_return_pct': ((self.current_balance / self.initial_balance) - 1) * 100 if self.initial_balance != 0 else 0,
             'total_fees_paid': self.total_fees_paid,
             'trades_executed': self.trades_executed,
@@ -817,6 +819,11 @@ class MACrossoverStrategy:
         if self.trades_executed > 0:
             status['average_fee_per_trade'] = self.total_fees_paid / self.trades_executed
             status['risk_reward_ratio'] = abs(self.total_profit_loss / self.total_fees_paid) if self.total_fees_paid > 0 else 0
+
+        # [ADDED] Compute mark-to-market in USD and BTC:
+        mtm_usd, mtm_btc = self.get_mark_to_market_values()
+        status['mark_to_market_usd'] = mtm_usd
+        status['mark_to_market_btc'] = mtm_btc
 
         return status
 
@@ -900,7 +907,7 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
             x_end = df_ma.index.max()
             x_start = x_end - pd.Timedelta(days=7)
 
-        df_visible = df_ma[(df_ma.index >= x_start) & (df_ma.index <= x_end)]
+        df_visible = df_ma[(df_ma.index >= x_start) and (df_ma.index <= x_end)]
         if df_visible.empty:
             df_visible = df_ma
 
@@ -1226,7 +1233,6 @@ class CryptoShell(cmd.Cmd):
         """
         Start auto-trading using the best strategy from best_strategy.json.
 
-        [MODIFIED docstring]
         Usage:
           auto_trade <amount><btc|usd> <long|short|neutral>
         
@@ -1234,7 +1240,6 @@ class CryptoShell(cmd.Cmd):
           auto_trade 2.47btc long
           auto_trade 234462usd short
         """
-        # [MODIFIED] Extended logic to parse <amount><btc|usd> rather than float only.
         if self.auto_trader and self.auto_trader.running:
             print("Auto-trading is already running. Stop it first.")
             return
@@ -1244,8 +1249,8 @@ class CryptoShell(cmd.Cmd):
             print("Usage: auto_trade <amount><btc|usd> <long|short|neutral>")
             return
 
-        balance_str = args_list[0].lower()  # e.g. "2.47btc", "234462usd", ...
-        pos_str = args_list[1].lower()      # e.g. "long", "short", "neutral"
+        balance_str = args_list[0].lower()
+        pos_str = args_list[1].lower()
 
         desired_position = self.parse_position_str(pos_str)
         if desired_position is None:
@@ -1262,7 +1267,6 @@ class CryptoShell(cmd.Cmd):
         amount_num = float(match.group(1))
         amount_unit = match.group(3)  # "btc" or "usd"
 
-        # Enforce rule: if user says Xbtc => must be 'long'; Xusd => must be 'short'
         if amount_unit == 'btc' and desired_position != 1:
             print("Error: If specifying BTC balance, you must start in a 'long' position.")
             return
@@ -1296,7 +1300,6 @@ class CryptoShell(cmd.Cmd):
         else:
             hist_position = determine_initial_position(df, short_window, long_window)
 
-        # Initialize new fields for BTC or USD
         initial_balance_btc = 0.0
         initial_balance_usd = 0.0
         if desired_position == 1:
@@ -1308,17 +1311,16 @@ class CryptoShell(cmd.Cmd):
             self.data_manager,
             short_window,
             long_window,
-            amount_num,       # [We pass it here to preserve original usage]
+            amount_num,
             'btcusd',
             self.logger,
             live_trading=do_live,
             max_trades_per_day=max_trades_day,
             initial_position=desired_position,
-            initial_balance_btc=initial_balance_btc,  # [ADDED]
-            initial_balance_usd=initial_balance_usd   # [ADDED]
+            initial_balance_btc=initial_balance_btc,
+            initial_balance_usd=initial_balance_usd
         )
 
-        # If there's a mismatch between hist_position & desired_position, optionally align:
         if hist_position != desired_position:
             last_price = self.data_manager.get_current_price('btcusd') or 0.0
             signal_time = datetime.now()
@@ -1356,12 +1358,17 @@ class CryptoShell(cmd.Cmd):
             print("\nBalance and Performance:")
             print(f"  • Initial Balance: ${status['initial_balance']:.2f}")
             print(f"  • Current Balance: ${status['current_balance']:.2f}")
-            print(f"  • BTC Balance: {status['balance_btc']:.8f}")   # [ADDED]
-            print(f"  • USD Balance: ${status['balance_usd']:.2f}") # [ADDED]
+            print(f"  • BTC Balance: {status['balance_btc']:.8f}")
+            print(f"  • USD Balance: ${status['balance_usd']:.2f}")
             print(f"  • Total Return: {status['total_return_pct']:.2f}%")
             print(f"  • Total P&L: ${status['total_profit_loss']:.2f}")
             print(f"  • Current Trade Amount: {status['current_trade_amount']:.8f}")
             print(f"  • Total Fees Paid: ${status['total_fees_paid']:.2f}")
+
+            # [ADDED] Show the mark-to-market values from the strategy
+            print("\nMark-to-Market Values:")
+            print(f"  • Total Notional (USD): ${status['mark_to_market_usd']:.2f}")
+            print(f"  • Total Notional (BTC): {status['mark_to_market_btc']:.8f}")
 
             print("\nTrading Statistics:")
             print(f"  • Total Trades: {status['trades_executed']}")
