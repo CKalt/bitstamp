@@ -369,7 +369,7 @@ class OrderPlacer:
         amount_rounded = round(amount, 8)
         payload = {'amount': str(amount_rounded)}
         if price:
-            payload['price'] = str(price]
+            payload['price'] = str(price)
 
         for key, value in kwargs.items():
             if value is not None:
