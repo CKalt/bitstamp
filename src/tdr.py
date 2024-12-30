@@ -47,17 +47,13 @@ from indicators.technical_indicators import (
     generate_macd_signals,
 )
 
-HIGH_FREQUENCY = '1H'  # Default bar size for run_strategy_loop()
+HIGH_FREQUENCY = '1H'  # Default bar size
 
 ###############################################################################
-# [ADDED] detect if more than 2 minutes have passed since last update
-# if so, we attempt a reconnect
+# If more than 2 minutes pass with no trades, attempt reconnect (stale feed).
 ###############################################################################
-STALE_FEED_SECONDS = 120  # 2 minutes
+STALE_FEED_SECONDS = 120
 
-###############################################################################
-# Helper to find final MA-based position from historical data
-###############################################################################
 def determine_initial_position(df: pd.DataFrame, short_window: int, long_window: int) -> int:
     """
     Computes the final short/long MA crossover on df to decide 
@@ -65,14 +61,12 @@ def determine_initial_position(df: pd.DataFrame, short_window: int, long_window:
     """
     if len(df) < long_window:
         return 0
-
     df_copy = ensure_datetime_index(df.copy())
     df_copy['Short_MA'] = df_copy['close'].rolling(short_window).mean()
     df_copy['Long_MA'] = df_copy['close'].rolling(long_window).mean()
     df_copy.dropna(inplace=True)
     if df_copy.empty:
         return 0
-
     last_short = df_copy.iloc[-1]['Short_MA']
     last_long  = df_copy.iloc[-1]['Long_MA']
     if last_short > last_long:
@@ -83,30 +77,32 @@ def determine_initial_position(df: pd.DataFrame, short_window: int, long_window:
         return 0
 
 ###############################################################################
-# Classes: CryptoDataManager, Trade, MACrossoverStrategy, etc.
+# CryptoDataManager
 ###############################################################################
-
 class CryptoDataManager:
     """
-    Handles storage of trades and candle data, plus management for 
-    historical data vs. live data.
+    Stores and manages trade data and candle data for both historical and live data.
     """
     def __init__(self, symbols, logger, verbose=False):
-        self.data = {symbol: pd.DataFrame(columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trades'
-        ]) for symbol in symbols}
+        self.data = {
+            symbol: pd.DataFrame(
+                columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'trades']
+            ) for symbol in symbols
+        }
         self.candlesticks = {symbol: {} for symbol in symbols}
         self.candlestick_observers = []
         self.trade_observers = []
         self.logger = logger
         self.verbose = verbose
+
+        # Will hold the most recent "close" price
         self.last_price = {symbol: None for symbol in symbols}
         self.order_placer = None
         self.last_trade = {symbol: None for symbol in symbols}
         self.next_trigger = {symbol: None for symbol in symbols}
         self.current_trends = {symbol: {} for symbol in symbols}
 
-        # [ADDED] For staleness detection: store the last trade time for each symbol
+        # For staleness detection: track last trade time
         self.last_trade_time = {symbol: None for symbol in symbols}
 
     def load_historical_data(self, data_dict):
@@ -118,9 +114,10 @@ class CryptoDataManager:
             self.data[symbol] = df.reset_index(drop=True)
             if not df.empty:
                 self.last_price[symbol] = df.iloc[-1]['close']
-                self.logger.debug("Loaded historical data for {}, last price: {}".format(
-                    symbol, self.last_price[symbol]))
-            print("Loaded historical data for {} ({}/{})".format(symbol, idx, total_symbols))
+                self.logger.debug(
+                    f"Loaded historical data for {symbol}, last price: {self.last_price[symbol]}"
+                )
+            print(f"Loaded historical data for {symbol} ({idx}/{total_symbols})")
 
     def add_candlestick_observer(self, callback):
         """
@@ -166,8 +163,8 @@ class CryptoDataManager:
             candle['close'] = price
             candle['trades'] += 1
 
+        # Update last price and trade time
         self.last_price[symbol] = price
-        # [ADDED] update last_trade_time to dt for staleness checks
         self.last_trade_time[symbol] = dt
 
         # Notify trade observers
@@ -176,13 +173,24 @@ class CryptoDataManager:
 
     def get_current_price(self, symbol):
         """
-        Return the last known 'close' price for the given symbol from historical data.
+        Return the *most recent* known price (live trades if available).
+
+        1) Prefer self.last_price[symbol], which is updated on each trade.
+        2) Fallback to the last row in self.data[symbol], if exist.
         """
+        # [ADDED] This ensures we see the actual last trade price from the feed
+        if self.last_price[symbol] is not None:
+            return self.last_price[symbol]
+
+        # fallback
         if not self.data[symbol].empty:
             return self.data[symbol].iloc[-1]['close']
         return None
 
     def get_price_range(self, symbol, minutes):
+        """
+        Return the min and max price in the last 'minutes' of data.
+        """
         now = pd.Timestamp.now()
         start_time = now - pd.Timedelta(minutes=minutes)
         df = self.data[symbol]
@@ -219,8 +227,6 @@ class CryptoDataManager:
         """
         return len(self.data[symbol])
 
-###############################################################################
-# The Trade class remains unchanged
 ###############################################################################
 class Trade:
     """
@@ -270,8 +276,6 @@ class Trade:
         return trade_info
 
 ###############################################################################
-# Enhanced subscribe_to_websocket with staleness detection
-###############################################################################
 async def subscribe_to_websocket(url: str, symbol: str, data_manager, stop_event):
     """
     Async function to subscribe to the Bitstamp WebSocket for a given symbol,
@@ -290,15 +294,12 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager, stop_event
 
                 subscribe_message = {
                     "event": "bts:subscribe",
-                    "data": {
-                        "channel": channel
-                    }
+                    "data": {"channel": channel}
                 }
                 await websocket.send(json.dumps(subscribe_message))
                 data_manager.logger.info(f"{symbol}: Subscribed to channel: {channel}")
 
                 while not stop_event.is_set():
-                    # Check staleness
                     now = datetime.utcnow()
                     seconds_since_last = (now - last_message_time).total_seconds()
                     if seconds_since_last > STALE_FEED_SECONDS:
@@ -308,7 +309,7 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager, stop_event
                         break
 
                     try:
-                        # Wait for message up to 10s; if none, loop again to check staleness
+                        # Wait for data up to 10s
                         message = await asyncio.wait_for(websocket.recv(), timeout=10)
                     except asyncio.TimeoutError:
                         continue
@@ -332,9 +333,6 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager, stop_event
             data_manager.logger.error(f"{symbol}: An error occurred: {str(e)}")
             await asyncio.sleep(5)
 
-
-###############################################################################
-# The OrderPlacer class remains as originally
 ###############################################################################
 class OrderPlacer:
     """
@@ -369,6 +367,7 @@ class OrderPlacer:
         amount_rounded = round(amount, 8)
         payload = {'amount': str(amount_rounded)}
         if price:
+            # fix syntax error by removing trailing bracket
             payload['price'] = str(price)
 
         for key, value in kwargs.items():
@@ -403,7 +402,6 @@ class OrderPlacer:
 
         url = f"https://www.bitstamp.net{endpoint}"
         r = requests.post(url, headers=headers, data=payload_string)
-
         if r.status_code == 200:
             return json.loads(r.content.decode('utf-8'))
         else:
@@ -416,9 +414,6 @@ class OrderPlacer:
     def place_limit_sell_order(self, currency_pair, amount, price, **kwargs):
         return self.place_order('sell', currency_pair, amount, price, **kwargs)
 
-
-###############################################################################
-# MACrossoverStrategy remains as originally, with minimal changes if needed
 ###############################################################################
 class MACrossoverStrategy:
     """
@@ -461,7 +456,7 @@ class MACrossoverStrategy:
         self.df_ma = pd.DataFrame()
         self.strategy_start_time = datetime.now()
 
-        # Original balance tracking for performance metrics
+        # Original balance tracking
         self.initial_balance = amount
         self.current_balance = amount
 
@@ -482,7 +477,6 @@ class MACrossoverStrategy:
         self.current_day = datetime.utcnow().date()
         self.logger.debug(f"Trade limit set to {self.max_trades_per_day} trades/day.")
 
-        # Track trades this hour for any per-hour limitations
         self.trades_this_hour = []
 
         # Real-time callback
@@ -523,8 +517,6 @@ class MACrossoverStrategy:
     def update_balance(self, trade_type, price, amount):
         """
         Update balance after a trade is executed (including fees and P&L).
-        - 'buy' => spend USD, acquire BTC
-        - 'sell' => spend BTC, acquire USD
         """
         fee = self.calculate_fee(amount, price)
         self.total_fees_paid += fee
@@ -539,7 +531,6 @@ class MACrossoverStrategy:
                 cost_usd = amount * price
                 fee = self.calculate_fee(amount, price)
                 total_cost_usd = cost_usd + fee
-
             self.balance_usd -= total_cost_usd
             self.balance_btc += amount
 
@@ -576,7 +567,7 @@ class MACrossoverStrategy:
         self.last_trade_price = price
         self.trades_executed += 1
 
-        balance_ratio = self.current_balance / self.initial_balance if self.initial_balance != 0 else 1
+        balance_ratio = self.current_balance / self.initial_balance if self.initial_balance else 1
         self.current_amount = self.initial_amount * balance_ratio
 
         self.logger.info(
@@ -588,8 +579,7 @@ class MACrossoverStrategy:
 
     def run_strategy_loop(self):
         """
-        Strategy loop that checks for signals every minute
-        (or checks real-time if you prefer).
+        Strategy loop that checks for signals every minute.
         """
         while self.running:
             df = self.data_manager.get_price_dataframe(self.symbol)
@@ -631,7 +621,7 @@ class MACrossoverStrategy:
 
     def determine_next_trigger(self, df_ma):
         """
-        Look at the latest signals, produce a text explanation.
+        Return text describing the potential next trigger, if signals changed.
         """
         if len(df_ma) < 2:
             return None
@@ -662,12 +652,12 @@ class MACrossoverStrategy:
             'Short_MA_Slope': 'Upwards' if short_ma_slope > 0 else 'Downwards',
             'Long_MA_Slope': 'Upwards' if long_ma_slope > 0 else 'Downwards',
             'Price_Trend': 'Bullish' if short_ma_curr > long_ma_curr else 'Bearish',
-            'Trend_Strength': abs(short_ma_curr - long_ma_curr) / long_ma_curr * 100 if long_ma_curr != 0 else 0
+            'Trend_Strength': abs(short_ma_curr - long_ma_curr) / long_ma_curr * 100 if long_ma_curr else 0
         }
 
     def check_instant_signal(self, symbol, price, timestamp, trade_reason):
         """
-        Real-time callback for each new trade. If there's a new crossover, act immediately.
+        Real-time callback for each new trade. If there's a new crossover, act.
         """
         if not self.running:
             return
@@ -706,8 +696,7 @@ class MACrossoverStrategy:
 
     def check_for_signals(self, latest_signal, current_price, signal_time):
         """
-        If new signal = 1 => we want to be long. 
-        If new signal = -1 => we want to be short.
+        If the new MA signal differs from our current position, execute trades.
         """
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if self.last_signal_time == signal_time:
@@ -730,9 +719,6 @@ class MACrossoverStrategy:
             self.last_signal_time = signal_time
 
     def buy_in_three_parts(self, price, timestamp, signal_time):
-        """
-        We do 3 partial buy transactions, each 89% of the leftover USD.
-        """
         partial_btc_1 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1)
 
@@ -743,10 +729,6 @@ class MACrossoverStrategy:
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_3)
 
     def get_89pct_btc_of_usd(self, price):
-        """
-        Convert ~89% of self.balance_usd into BTC, factoring in fees.
-        cost_usd = btc * price + fee => approx cost_usd = btc * price * (1 + fee%)
-        """
         available_usd = self.balance_usd * 0.89
         btc_approx = available_usd / (price * (1 + self.fee_percentage))
         return round(btc_approx, 8)
@@ -790,15 +772,12 @@ class MACrossoverStrategy:
             )
             self.logger.info(f"Executed LIVE {trade_type} order: {result}")
             trade_info.order_result = result
-
             if result.get("status") == "error":
                 self.logger.error(f"Trade failed: {result}")
                 self._log_failed_trade(trade_info)
                 return
-
             self.trade_count_today += 1
             self.update_balance(trade_type, price, trade_btc)
-
         else:
             self.logger.info(f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
             self.trade_log.append(trade_info)
@@ -827,7 +806,7 @@ class MACrossoverStrategy:
 
     def get_mark_to_market_values(self):
         """
-        Returns the total notional in USD and BTC, based on the current market price.
+        Returns total notional in USD and BTC, based on the current market price.
         """
         current_price = self.data_manager.get_current_price(self.symbol) or 0.0
         total_usd_value = self.balance_usd + (self.balance_btc * current_price)
@@ -895,9 +874,8 @@ class MACrossoverStrategy:
 
         return status
 
-
 ###############################################################################
-# The interactive cmd-based shell, etc.
+# The interactive cmd-based shell
 ###############################################################################
 import cmd
 from flask import Flask, request
@@ -1032,7 +1010,6 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
 
     app.run_server(debug=False, use_reloader=False)
 
-
 class CryptoShell(cmd.Cmd):
     """
     An interactive command-based shell for controlling the Crypto trading system.
@@ -1104,14 +1081,12 @@ class CryptoShell(cmd.Cmd):
             print("Usage: price <symbol>")
             return
         price = self.data_manager.get_current_price(symbol)
-        if price:
-            # [ADDED] Show last websocket update time
+        if price is not None:
             last_update_time = self.data_manager.last_trade_time.get(symbol)
             if last_update_time:
                 update_str = last_update_time.strftime('%Y-%m-%d %H:%M:%S')
             else:
                 update_str = "unknown (no trades yet)"
-
             print(f"Current price of {symbol}: ${price:.2f} (last update: {update_str})")
         else:
             print(f"No data for {symbol}")
@@ -1188,22 +1163,22 @@ class CryptoShell(cmd.Cmd):
 
     def candlestick_callback(self, symbol, minute, candle):
         """
-        Callback that prints candlestick data if toggled on via candles <symbol>.
+        Callback for candlestick updates if toggled on via candles <symbol>.
         """
         if symbol in self.candlestick_output:
-            timestamp = datetime.fromtimestamp(candle['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
-            print(f"{symbol} - {timestamp}: "
+            ts_str = datetime.fromtimestamp(candle['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+            print(f"{symbol} - {ts_str}: "
                   f"Open={candle['open']:.2f}, High={candle['high']:.2f}, "
                   f"Low={candle['low']:.2f}, Close={candle['close']:.2f}, "
                   f"Volume={candle['volume']}, Trades={candle['trades']}")
 
     def trade_callback(self, symbol, price, timestamp, trade_reason):
         """
-        Callback that prints real-time trades if toggled on via ticker <symbol>.
+        Callback for trade updates if toggled on via ticker <symbol>.
         """
         if symbol in self.ticker_output:
-            time_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
-            print(f"{symbol} - {time_str}: Price=${price:.2f}")
+            ts_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+            print(f"{symbol} - {ts_str}: Price=${price:.2f}")
 
     def do_verbose(self, arg):
         """
@@ -1213,8 +1188,10 @@ class CryptoShell(cmd.Cmd):
         if not arg:
             if not self.verbose:
                 self.logger.setLevel(logging.DEBUG)
-                debug_handlers = [h for h in self.logger.handlers
-                                  if isinstance(h, logging.StreamHandler) and h.level == logging.DEBUG]
+                debug_handlers = [
+                    h for h in self.logger.handlers
+                    if isinstance(h, logging.StreamHandler) and h.level == logging.DEBUG
+                ]
                 if not debug_handlers:
                     debug_stream_handler = logging.StreamHandler(sys.stderr)
                     debug_stream_handler.setLevel(logging.DEBUG)
@@ -1308,7 +1285,7 @@ class CryptoShell(cmd.Cmd):
     def do_auto_trade(self, arg):
         """
         Start auto-trading using the best strategy from best_strategy.json.
-
+        
         Usage:
           auto_trade <amount><btc|usd> <long|short|neutral>
           
@@ -1341,8 +1318,7 @@ class CryptoShell(cmd.Cmd):
             return
 
         amount_num = float(match.group(1))
-        amount_unit = match.group(3)  # "btc" or "usd"
-
+        amount_unit = match.group(3)
         if amount_unit == 'btc' and desired_position != 1:
             print("Error: If specifying BTC balance, you must start in a 'long' position.")
             return
@@ -1579,10 +1555,9 @@ class CryptoShell(cmd.Cmd):
         print("Dash app is running at http://127.0.0.1:8050/")
         time.sleep(1)
 
-
 def run_websocket(url, symbols, data_manager, stop_event):
     """
-    Launch a separate event loop to handle multiple subscribe tasks, 
+    Launch a separate event loop to handle multiple subscribe tasks,
     including staleness detection.
     """
     loop = asyncio.new_event_loop()
@@ -1598,7 +1573,6 @@ def run_websocket(url, symbols, data_manager, stop_event):
         data_manager.logger.error(f"WebSocket encountered error: {e}")
     finally:
         loop.close()
-
 
 def setup_logging(verbose):
     logger = logging.getLogger("CryptoShellLogger")
@@ -1616,7 +1590,6 @@ def setup_logging(verbose):
     logger.addHandler(file_handler)
 
     return logger
-
 
 def main():
     """
@@ -1703,7 +1676,6 @@ def main():
             shell.auto_trader.stop()
         if shell.chart_process and shell.chart_process.is_alive():
             shell.stop_dash_app()
-
 
 if __name__ == '__main__':
     set_start_method('spawn')
