@@ -48,11 +48,7 @@ from indicators.technical_indicators import (
 )
 
 HIGH_FREQUENCY = '1H'  # Default bar size
-
-###############################################################################
-# If more than 2 minutes pass with no trades, attempt reconnect (stale feed).
-###############################################################################
-STALE_FEED_SECONDS = 120
+STALE_FEED_SECONDS = 120  # If more than 2 minutes pass with no trades, attempt reconnect.
 
 def determine_initial_position(df: pd.DataFrame, short_window: int, long_window: int) -> int:
     """
@@ -174,15 +170,10 @@ class CryptoDataManager:
     def get_current_price(self, symbol):
         """
         Return the *most recent* known price (live trades if available).
-
-        1) Prefer self.last_price[symbol], which is updated on each trade.
-        2) Fallback to the last row in self.data[symbol], if exist.
         """
-        # [ADDED] This ensures we see the actual last trade price from the feed
         if self.last_price[symbol] is not None:
             return self.last_price[symbol]
 
-        # fallback
         if not self.data[symbol].empty:
             return self.data[symbol].iloc[-1]['close']
         return None
@@ -367,7 +358,6 @@ class OrderPlacer:
         amount_rounded = round(amount, 8)
         payload = {'amount': str(amount_rounded)}
         if price:
-            # fix syntax error by removing trailing bracket
             payload['price'] = str(price)
 
         for key, value in kwargs.items():
@@ -456,11 +446,19 @@ class MACrossoverStrategy:
         self.df_ma = pd.DataFrame()
         self.strategy_start_time = datetime.now()
 
-        # Original balance tracking
+        # ---------------------------------------------------------------------
+        # Storing the user's "initial BTC balance" and "initial USD balance"
+        # separately. We also keep an internal 'amount' but that is used 
+        # for the internal P&L logic.  
+        # ---------------------------------------------------------------------
+        self.initial_balance_btc = initial_balance_btc
+        self.initial_balance_usd = initial_balance_usd
+
+        # For backward-compat with existing P&L logic:
         self.initial_balance = amount
         self.current_balance = amount
 
-        # separate BTC & USD
+        # Actual live/dry-run wallet balances:
         self.balance_btc = initial_balance_btc
         self.balance_usd = initial_balance_usd
 
@@ -479,7 +477,7 @@ class MACrossoverStrategy:
 
         self.trades_this_hour = []
 
-        # Real-time callback
+        # Register real-time callback
         data_manager.add_trade_observer(self.check_instant_signal)
 
     def _clean_up_hourly_trades(self):
@@ -610,6 +608,7 @@ class MACrossoverStrategy:
                         self.current_trends = self.get_current_trends(df_ma)
                         self.df_ma = df_ma
 
+                        # Check the signals (crossover logic)
                         self.check_for_signals(latest_signal, current_price, signal_time)
                     else:
                         self.logger.debug("Not enough data to compute MAs.")
@@ -697,28 +696,65 @@ class MACrossoverStrategy:
     def check_for_signals(self, latest_signal, current_price, signal_time):
         """
         If the new MA signal differs from our current position, execute trades.
+        Now also controls the daily trade-limit check, so that multi-part buys
+        only count as a single daily trade.
         """
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        # --- Fix #2: Moved daily-trade-limit logic here so partial trades
+        #             only consume 1 daily trade count. Also resets daily
+        #             if a new day is detected.
+        today = datetime.utcnow().date()
+        if today != self.current_day:
+            self.current_day = today
+            self.trade_count_today = 0
+            self.logger.debug("New day, resetting daily trade count.")
+
         if self.last_signal_time == signal_time:
             return
 
+        # If we see a BUY signal
         if latest_signal == 1 and self.position <= 0:
+            # Check daily trade limit once
+            if self.trade_count_today >= self.max_trades_per_day:
+                self.logger.info(
+                    f"Reached daily trade limit {self.max_trades_per_day}, skipping trade."
+                )
+                return
+
             self.logger.info(f"Buy signal triggered at {current_price}")
             self.position = 1
             self.last_trade_reason = "MA Crossover: short above long."
-            self.buy_in_three_parts(current_price, timestamp, signal_time)
+            self.buy_in_three_parts(current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time)
+
+            # Count all partial buys as ONE daily trade
+            self.trade_count_today += 1
             self.last_signal_time = signal_time
 
+        # If we see a SELL signal
         elif latest_signal == -1 and self.position >= 0:
+            # Check daily trade limit once
+            if self.trade_count_today >= self.max_trades_per_day:
+                self.logger.info(
+                    f"Reached daily trade limit {self.max_trades_per_day}, skipping trade."
+                )
+                return
+
             self.logger.info(f"Sell signal triggered at {current_price}")
             self.position = -1
             self.last_trade_reason = "MA Crossover: short below long."
             trade_btc = self.balance_btc
             trade_btc = round(trade_btc, 8)
-            self.execute_trade("sell", current_price, timestamp, signal_time, trade_btc)
+            self.execute_trade("sell", current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time, trade_btc)
+
+            # Count the single sell as ONE daily trade
+            self.trade_count_today += 1
             self.last_signal_time = signal_time
 
     def buy_in_three_parts(self, price, timestamp, signal_time):
+        """
+        Simulate a multi-part buy so we can keep within Bitstamp's 90% rule,
+        but still only count as a single daily trade.
+        """
         partial_btc_1 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1)
 
@@ -734,16 +770,12 @@ class MACrossoverStrategy:
         return round(btc_approx, 8)
 
     def execute_trade(self, trade_type, price, timestamp, signal_timestamp, trade_btc):
-        today = datetime.utcnow().date()
-        if today != self.current_day:
-            self.current_day = today
-            self.trade_count_today = 0
-            self.logger.debug("New day, resetting daily trade count.")
-
-        if self.trade_count_today >= self.max_trades_per_day:
-            self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping trade.")
-            return
-
+        """
+        Execute a single trade. Note that daily-limit checking and incrementing
+        are now handled in check_for_signals() so that multi-part buys only 
+        count as a single daily trade. We *do* still enforce the hourly limit.
+        """
+        # Keep hourly limit check (unchanged)
         self._clean_up_hourly_trades()
         max_trades_per_hour = 3
         if len(self.trades_this_hour) >= max_trades_per_hour:
@@ -776,7 +808,7 @@ class MACrossoverStrategy:
                 self.logger.error(f"Trade failed: {result}")
                 self._log_failed_trade(trade_info)
                 return
-            self.trade_count_today += 1
+            # No daily limit increment here; we do it in check_for_signals().
             self.update_balance(trade_type, price, trade_btc)
         else:
             self.logger.info(f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
@@ -827,8 +859,15 @@ class MACrossoverStrategy:
             'current_trends': self.current_trends,
             'ma_difference': None,
             'ma_slope_difference': None,
+
+            # Now we store them separately for a proper display.
+            'initial_balance_btc': self.initial_balance_btc,
+            'initial_balance_usd': self.initial_balance_usd,
+
+            # We keep these for backward-compat.
             'initial_balance': self.initial_balance,
             'current_balance': self.current_balance,
+
             'balance_btc': self.balance_btc,
             'balance_usd': self.balance_usd,
             'total_return_pct': ((self.current_balance / self.initial_balance) - 1) * 100 if self.initial_balance != 0 else 0,
@@ -836,7 +875,7 @@ class MACrossoverStrategy:
             'trades_executed': self.trades_executed,
             'profitable_trades': self.profitable_trades,
             'win_rate': (self.profitable_trades / self.trades_executed * 100) if self.trades_executed else 0,
-            'current_trade_amount': self.current_amount,
+            'current_amount': self.current_amount,
             'total_profit_loss': self.total_profit_loss,
             'average_profit_per_trade': (self.total_profit_loss / self.trades_executed) if self.trades_executed else 0,
             'trade_count_today': self.trade_count_today,
@@ -1389,7 +1428,9 @@ class CryptoShell(cmd.Cmd):
 
     def do_status(self, arg):
         """
-        Show status of auto-trading, including balance, P&L, and open position.
+        Show status of auto-trading, including balances, P&L, and open position.
+        
+        Now displays separate Initial/Current BTC & USD, removing the old "Current Balance" line.
         """
         if self.auto_trader and self.auto_trader.running:
             status = self.auto_trader.get_status()
@@ -1403,13 +1444,20 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Remaining Trades Today: {status['remaining_trades_today']}")
 
             print("\nBalance and Performance:")
-            print(f"  • Initial Balance: ${status['initial_balance']:.2f}")
-            print(f"  • Current Balance: ${status['current_balance']:.2f}")
-            print(f"  • BTC Balance: {status['balance_btc']:.8f}")
-            print(f"  • USD Balance: ${status['balance_usd']:.2f}")
+
+            # --- Fix #1: Properly show Initial and Current balances in USD/BTC
+            print(f"  • Initial USD Balance: ${status['initial_balance_usd']:.2f}")
+            print(f"  • Initial BTC Balance: {status['initial_balance_btc']:.8f}")
+
+            # Remove the old single-line "Current Balance" 
+            # and show separate current balances:
+            print(f"  • Current USD Balance: ${status['balance_usd']:.2f}")
+            print(f"  • Current BTC Balance: {status['balance_btc']:.8f}")
+
+            # The rest remain the same:
             print(f"  • Total Return: {status['total_return_pct']:.2f}%")
             print(f"  • Total P&L: ${status['total_profit_loss']:.2f}")
-            print(f"  • Current Trade Amount: {status['current_trade_amount']:.8f}")
+            print(f"  • Current Trade Amount: {status['current_amount']:.8f}")
             print(f"  • Total Fees Paid: ${status['total_fees_paid']:.2f}")
 
             print("\nMark-to-Market Values:")
