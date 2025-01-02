@@ -480,16 +480,16 @@ class MACrossoverStrategy:
         # Register real-time callback
         data_manager.add_trade_observer(self.check_instant_signal)
 
-        # NEW FIELD for synthetic entry price if we start with a position
+        # Synthetic entry price if we start with a position
         self.initial_fill_price = 0.0
 
-        # NEW FIELDS: Track max/min for USD and BTC balances for drawdown metrics
+        # Track max/min for USD and BTC balances
         self.max_balance_usd = self.balance_usd
         self.min_balance_usd = self.balance_usd
         self.max_balance_btc = self.balance_btc
         self.min_balance_btc = self.balance_btc
 
-        # We can also track max/min mark-to-market. We'll initialize them here:
+        # Also track max/min mark-to-market
         mtm_usd, _ = self.get_mark_to_market_values()
         self.max_mtm_usd = mtm_usd
         self.min_mtm_usd = mtm_usd
@@ -639,7 +639,6 @@ class MACrossoverStrategy:
                         self.current_trends = self.get_current_trends(df_ma)
                         self.df_ma = df_ma
 
-                        # Check signals
                         self.check_for_signals(latest_signal, current_price, signal_time)
                     else:
                         self.logger.debug("Not enough data to compute MAs.")
@@ -972,6 +971,8 @@ class MACrossoverStrategy:
 # The interactive cmd-based shell
 ###############################################################################
 import cmd
+import atexit       # NEW
+import readline     # NEW
 from flask import Flask, request
 import requests
 
@@ -1104,10 +1105,6 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
 
     app.run_server(debug=False, use_reloader=False)
 
-import cmd
-import atexit        # NEW
-import readline      # NEW
-
 class CryptoShell(cmd.Cmd):
     """
     An interactive command-based shell for controlling the Crypto trading system.
@@ -1154,17 +1151,18 @@ class CryptoShell(cmd.Cmd):
         self.data_manager.add_candlestick_observer(self.candlestick_callback)
         self.data_manager.add_trade_observer(self.trade_callback)
 
-        # NEW: Load / persist history from file or environment variable:
-        self.history_file = os.environ.get('HISTFILE', os.path.join(os.getcwd(), '.tdr_history'))
+        # NEW: Use TDR_HISTFILE environment variable
+        self.history_file = os.environ.get('TDR_HISTFILE', os.path.join(os.getcwd(), '.tdr_history'))
         try:
             readline.read_history_file(self.history_file)
         except FileNotFoundError:
             pass
+
         atexit.register(self.save_history)
 
     def save_history(self):
         """
-        Write out the shell history to the user's specified or default file.
+        Write out the shell history to the user-specified or default file.
         """
         try:
             readline.write_history_file(self.history_file)
