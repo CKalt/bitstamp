@@ -480,6 +480,12 @@ class MACrossoverStrategy:
         # Register real-time callback
         data_manager.add_trade_observer(self.check_instant_signal)
 
+        # ---------------------------------------------------------------------
+        # NEW FIELD for synthetic entry price if we start with a position.
+        # This helps track "entry price" if no trades have executed yet.
+        # ---------------------------------------------------------------------
+        self.initial_fill_price = 0.0
+
     def _clean_up_hourly_trades(self):
         one_hour_ago = datetime.utcnow() - timedelta(hours=1)
         self.trades_this_hour = [t for t in self.trades_this_hour if t > one_hour_ago]
@@ -847,7 +853,8 @@ class MACrossoverStrategy:
 
     def get_status(self):
         """
-        Return a dictionary summarizing the current status of this strategy.
+        Return a dictionary summarizing the current status of this strategy,
+        with a new 'position_info' block to show the current position in USD or BTC.
         """
         status = {
             'running': self.running,
@@ -859,15 +866,10 @@ class MACrossoverStrategy:
             'current_trends': self.current_trends,
             'ma_difference': None,
             'ma_slope_difference': None,
-
-            # Now we store them separately for a proper display.
             'initial_balance_btc': self.initial_balance_btc,
             'initial_balance_usd': self.initial_balance_usd,
-
-            # We keep these for backward-compat.
             'initial_balance': self.initial_balance,
             'current_balance': self.current_balance,
-
             'balance_btc': self.balance_btc,
             'balance_usd': self.balance_usd,
             'total_return_pct': ((self.current_balance / self.initial_balance) - 1) * 100 if self.initial_balance != 0 else 0,
@@ -910,6 +912,51 @@ class MACrossoverStrategy:
         mtm_usd, mtm_btc = self.get_mark_to_market_values()
         status['mark_to_market_usd'] = mtm_usd
         status['mark_to_market_btc'] = mtm_btc
+
+        ############################################################################
+        # NEW: "position_info" block with synthetic entry handling if no trades
+        # have been made, but we started in a position. 
+        ############################################################################
+        position_info = {
+            'current_price': self.data_manager.get_current_price(self.symbol) or 0.0,
+            'entry_price': self.initial_fill_price,  # Our synthetic entry if no real trades
+            'position_size_btc': 0.0,
+            'position_size_usd': 0.0,
+            'unrealized_pnl': 0.0,
+        }
+
+        cp = position_info['current_price']
+        ep = position_info['entry_price']
+
+        if self.position == 1:
+            # LONG
+            position_info['position_size_btc'] = self.balance_btc
+            position_info['position_size_usd'] = self.balance_btc * cp
+
+            if ep > 0:
+                cost_basis = self.balance_btc * ep
+                mark_value = self.balance_btc * cp
+                position_info['unrealized_pnl'] = mark_value - cost_basis
+
+        elif self.position == -1:
+            # SHORT
+            # We'll interpret short as holding self.balance_usd, effectively.
+            # For a synthetic approach, show how many BTC you'd need to buy back
+            # at current price, plus approximate unrealized PnL.
+            btc_needed_to_close = 0.0
+            if cp > 0:
+                btc_needed_to_close = self.balance_usd / cp
+            position_info['position_size_btc'] = -btc_needed_to_close
+            position_info['position_size_usd'] = self.balance_usd
+
+            if ep > 0 and self.initial_balance_usd > 0:
+                initial_btc = self.initial_balance_usd / ep  # synthetic "borrowed" BTC at entry
+                position_info['unrealized_pnl'] = (initial_btc - btc_needed_to_close) * cp
+
+        # else neutral => everything is zero in position_info
+
+        status['position_info'] = position_info
+        ############################################################################
 
         return status
 
@@ -1412,6 +1459,15 @@ class CryptoShell(cmd.Cmd):
             initial_balance_usd=initial_balance_usd
         )
 
+        # ---------------------------------------------------------------------
+        # MINIMAL CHANGE: If we start with a position (1 or -1), set
+        # self.initial_fill_price to the current market price. 
+        # This helps us handle "synthetic entry" for status reporting.
+        # ---------------------------------------------------------------------
+        current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
+        if (desired_position != 0) and (current_market_price > 0):
+            self.auto_trader.initial_fill_price = current_market_price
+
         self.auto_trader.start()
         print(f"Auto-trading started with {balance_str}, position={pos_str}, "
               f"MA strategy (Short={short_window}, Long={long_window}), do_live_trades={do_live}")
@@ -1444,17 +1500,10 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Remaining Trades Today: {status['remaining_trades_today']}")
 
             print("\nBalance and Performance:")
-
-            # --- Fix #1: Properly show Initial and Current balances in USD/BTC
             print(f"  • Initial USD Balance: ${status['initial_balance_usd']:.2f}")
             print(f"  • Initial BTC Balance: {status['initial_balance_btc']:.8f}")
-
-            # Remove the old single-line "Current Balance" 
-            # and show separate current balances:
             print(f"  • Current USD Balance: ${status['balance_usd']:.2f}")
             print(f"  • Current BTC Balance: {status['balance_btc']:.8f}")
-
-            # The rest remain the same:
             print(f"  • Total Return: {status['total_return_pct']:.2f}%")
             print(f"  • Total P&L: ${status['total_profit_loss']:.2f}")
             print(f"  • Current Trade Amount: {status['current_amount']:.8f}")
@@ -1478,6 +1527,21 @@ class CryptoShell(cmd.Cmd):
                 print(f"  • Reason: {status['last_trade']}")
                 print(f"  • Data Source: {status['last_trade_data_source']}")
                 print(f"  • Signal Time: {status['last_trade_signal_timestamp']}")
+
+            # NEW: Print the "Position Status" from position_info
+            pos_info = status.get('position_info', {})
+            print("\nPosition Status:")
+            print(f"  • Current Price: ${pos_info.get('current_price', 0.0):.2f}")
+            print(f"  • Entry Price:   ${pos_info.get('entry_price', 0.0):.2f}")
+            if status['position'] == 1:
+                print(f"  • Position Size: {pos_info.get('position_size_btc', 0.0):.8f} BTC")
+                print(f"  • Position Value (USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
+            elif status['position'] == -1:
+                print(f"  • Short Size: {pos_info.get('position_size_btc', 0.0):.8f} BTC (negative means short)")
+                print(f"  • USD Held:   ${pos_info.get('position_size_usd', 0.0):.2f}")
+            else:
+                print("  • Neutral position, no open BTC or short.")
+            print(f"  • Unrealized PnL: ${pos_info.get('unrealized_pnl', 0.0):.2f}")
 
             print("\nTechnical Analysis:")
             if status['next_trigger']:
