@@ -480,16 +480,21 @@ class MACrossoverStrategy:
         # Register real-time callback
         data_manager.add_trade_observer(self.check_instant_signal)
 
-        # Synthetic entry price if we start with a position
+        # ---------------------------------------------------------------------
+        # NEW FIELD for synthetic entry price if we start with a position.
+        # This helps track "entry price" if no trades have executed yet.
+        # ---------------------------------------------------------------------
         self.initial_fill_price = 0.0
 
-        # Track max/min for USD and BTC balances
+        # ---------------------------------------------------------------------
+        # NEW FIELDS: Track max/min for USD and BTC balances for drawdown metrics
+        # ---------------------------------------------------------------------
         self.max_balance_usd = self.balance_usd
         self.min_balance_usd = self.balance_usd
         self.max_balance_btc = self.balance_btc
         self.min_balance_btc = self.balance_btc
 
-        # Also track max/min mark-to-market
+        # We can also track max/min mark-to-market. We'll initialize them here:
         mtm_usd, _ = self.get_mark_to_market_values()
         self.max_mtm_usd = mtm_usd
         self.min_mtm_usd = mtm_usd
@@ -582,7 +587,7 @@ class MACrossoverStrategy:
         balance_ratio = self.current_balance / self.initial_balance if self.initial_balance else 1
         self.current_amount = self.initial_amount * balance_ratio
 
-        # Update max/min for USD and BTC
+        # Update the max/min for USD and BTC after each trade
         if self.balance_usd > self.max_balance_usd:
             self.max_balance_usd = self.balance_usd
         if self.balance_usd < self.min_balance_usd:
@@ -639,6 +644,7 @@ class MACrossoverStrategy:
                         self.current_trends = self.get_current_trends(df_ma)
                         self.df_ma = df_ma
 
+                        # Check the signals (crossover logic)
                         self.check_for_signals(latest_signal, current_price, signal_time)
                     else:
                         self.logger.debug("Not enough data to compute MAs.")
@@ -726,8 +732,13 @@ class MACrossoverStrategy:
     def check_for_signals(self, latest_signal, current_price, signal_time):
         """
         If the new MA signal differs from our current position, execute trades.
-        Also daily trade-limit checks, partial buys only count as one trade, etc.
+        Now also controls the daily trade-limit check, so that multi-part buys
+        only count as a single daily trade.
         """
+
+        # --- Fix #2: Moved daily-trade-limit logic here so partial trades
+        #             only consume 1 daily trade count. Also resets daily
+        #             if a new day is detected.
         today = datetime.utcnow().date()
         if today != self.current_day:
             self.current_day = today
@@ -737,7 +748,9 @@ class MACrossoverStrategy:
         if self.last_signal_time == signal_time:
             return
 
+        # If we see a BUY signal
         if latest_signal == 1 and self.position <= 0:
+            # Check daily trade limit once
             if self.trade_count_today >= self.max_trades_per_day:
                 self.logger.info(
                     f"Reached daily trade limit {self.max_trades_per_day}, skipping trade."
@@ -749,10 +762,13 @@ class MACrossoverStrategy:
             self.last_trade_reason = "MA Crossover: short above long."
             self.buy_in_three_parts(current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time)
 
+            # Count all partial buys as ONE daily trade
             self.trade_count_today += 1
             self.last_signal_time = signal_time
 
+        # If we see a SELL signal
         elif latest_signal == -1 and self.position >= 0:
+            # Check daily trade limit once
             if self.trade_count_today >= self.max_trades_per_day:
                 self.logger.info(
                     f"Reached daily trade limit {self.max_trades_per_day}, skipping trade."
@@ -766,6 +782,7 @@ class MACrossoverStrategy:
             trade_btc = round(trade_btc, 8)
             self.execute_trade("sell", current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time, trade_btc)
 
+            # Count the single sell as ONE daily trade
             self.trade_count_today += 1
             self.last_signal_time = signal_time
 
@@ -790,8 +807,11 @@ class MACrossoverStrategy:
 
     def execute_trade(self, trade_type, price, timestamp, signal_timestamp, trade_btc):
         """
-        Execute a single trade. We also respect the max trades/hour logic here.
+        Execute a single trade. Note that daily-limit checking and incrementing
+        are now handled in check_for_signals() so that multi-part buys only 
+        count as a single daily trade. We *do* still enforce the hourly limit.
         """
+        # Keep hourly limit check (unchanged)
         self._clean_up_hourly_trades()
         max_trades_per_hour = 3
         if len(self.trades_this_hour) >= max_trades_per_hour:
@@ -824,6 +844,7 @@ class MACrossoverStrategy:
                 self.logger.error(f"Trade failed: {result}")
                 self._log_failed_trade(trade_info)
                 return
+            # No daily limit increment here; we do it in check_for_signals().
             self.update_balance(trade_type, price, trade_btc)
         else:
             self.logger.info(f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
@@ -863,7 +884,8 @@ class MACrossoverStrategy:
     def get_status(self):
         """
         Return a dictionary summarizing the current status of this strategy,
-        including balances, position info, and technical indicators.
+        with a new 'position_info' block to show the current position in USD or BTC.
+        Now also includes max/min for account balances and mark-to-market.
         """
         status = {
             'running': self.running,
@@ -922,12 +944,13 @@ class MACrossoverStrategy:
         status['mark_to_market_usd'] = mtm_usd
         status['mark_to_market_btc'] = mtm_btc
 
-        # Update max/min MTM if user calls status frequently
+        # Update max/min MTM on each status call, in case user calls frequently
         if mtm_usd > self.max_mtm_usd:
             self.max_mtm_usd = mtm_usd
         if mtm_usd < self.min_mtm_usd:
             self.min_mtm_usd = mtm_usd
 
+        # Record them as well
         status['max_balance_usd'] = self.max_balance_usd
         status['min_balance_usd'] = self.min_balance_usd
         status['max_balance_btc'] = self.max_balance_btc
@@ -935,25 +958,33 @@ class MACrossoverStrategy:
         status['max_mtm_usd'] = self.max_mtm_usd
         status['min_mtm_usd'] = self.min_mtm_usd
 
-        # position_info block
+        ############################################################################
+        # "position_info" block with synthetic entry handling if no trades
+        # have been made, but we started in a position. 
+        ############################################################################
         position_info = {
             'current_price': self.data_manager.get_current_price(self.symbol) or 0.0,
-            'entry_price': self.initial_fill_price,
+            'entry_price': self.initial_fill_price,  # Our synthetic entry if no real trades
             'position_size_btc': 0.0,
             'position_size_usd': 0.0,
             'unrealized_pnl': 0.0,
         }
+
         cp = position_info['current_price']
         ep = position_info['entry_price']
 
         if self.position == 1:
+            # LONG
             position_info['position_size_btc'] = self.balance_btc
             position_info['position_size_usd'] = self.balance_btc * cp
+
             if ep > 0:
                 cost_basis = self.balance_btc * ep
                 mark_value = self.balance_btc * cp
                 position_info['unrealized_pnl'] = mark_value - cost_basis
+
         elif self.position == -1:
+            # SHORT
             btc_needed_to_close = 0.0
             if cp > 0:
                 btc_needed_to_close = self.balance_usd / cp
@@ -961,18 +992,18 @@ class MACrossoverStrategy:
             position_info['position_size_usd'] = self.balance_usd
 
             if ep > 0 and self.initial_balance_usd > 0:
-                initial_btc = self.initial_balance_usd / ep
+                initial_btc = self.initial_balance_usd / ep  # synthetic "borrowed" BTC at entry
                 position_info['unrealized_pnl'] = (initial_btc - btc_needed_to_close) * cp
 
         status['position_info'] = position_info
+        ############################################################################
+
         return status
 
 ###############################################################################
 # The interactive cmd-based shell
 ###############################################################################
 import cmd
-import atexit       # NEW
-import readline     # NEW
 from flask import Flask, request
 import requests
 
@@ -1150,24 +1181,6 @@ class CryptoShell(cmd.Cmd):
         # Register callbacks
         self.data_manager.add_candlestick_observer(self.candlestick_callback)
         self.data_manager.add_trade_observer(self.trade_callback)
-
-        # NEW: Use TDR_HISTFILE environment variable
-        self.history_file = os.environ.get('TDR_HISTFILE', os.path.join(os.getcwd(), '.tdr_history'))
-        try:
-            readline.read_history_file(self.history_file)
-        except FileNotFoundError:
-            pass
-
-        atexit.register(self.save_history)
-
-    def save_history(self):
-        """
-        Write out the shell history to the user-specified or default file.
-        """
-        try:
-            readline.write_history_file(self.history_file)
-        except Exception as e:
-            self.logger.error(f"Failed to write history file: {e}")
 
     def emptyline(self):
         pass
@@ -1486,6 +1499,7 @@ class CryptoShell(cmd.Cmd):
             initial_balance_usd=initial_balance_usd
         )
 
+        # If we start with a position (1 or -1), set self.initial_fill_price 
         current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
         if (desired_position != 0) and (current_market_price > 0):
             self.auto_trader.initial_fill_price = current_market_price
@@ -1507,11 +1521,24 @@ class CryptoShell(cmd.Cmd):
     def do_status(self, arg):
         """
         Show status of auto-trading, including balances, P&L, and open position.
+        
+        Re-organized for clarity:
+          1) Auto-Trading Status
+          2) Account Balances & Performance
+          3) Mark-to-Market & Drawdowns
+          4) Position Details
+          5) Trading Statistics
+          6) Last Trade Info
+          7) Technical Analysis
+          8) Session Duration & Warnings
         """
         if self.auto_trader and self.auto_trader.running:
             status = self.auto_trader.get_status()
             pos_str = {1:'Long', -1:'Short', 0:'Neutral'}.get(status['position'], 'Unknown')
 
+            # -----------------------------------------------------------------
+            # 1) Auto-Trading Status
+            # -----------------------------------------------------------------
             print("\nAuto-Trading Status:")
             print("━"*50)
             print(f"  • Running: {status['running']}")
@@ -1519,6 +1546,9 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Daily Trades: {status['trade_count_today']}/{self.auto_trader.max_trades_per_day}")
             print(f"  • Remaining Trades Today: {status['remaining_trades_today']}")
 
+            # -----------------------------------------------------------------
+            # 2) Account Balances & Performance
+            # -----------------------------------------------------------------
             print("\nAccount Balances & Performance:")
             print(f"  • Initial USD Balance: ${status['initial_balance_usd']:.2f}")
             print(f"  • Initial BTC Balance: {status['initial_balance_btc']:.8f}")
@@ -1529,6 +1559,9 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Current Trade Amount: {status['current_amount']:.8f}")
             print(f"  • Total Fees Paid: ${status['total_fees_paid']:.2f}")
 
+            # -----------------------------------------------------------------
+            # 3) Mark-to-Market & Drawdowns
+            # -----------------------------------------------------------------
             print("\nMark-to-Market & Drawdowns:")
             print(f"  • Current MTM (USD): ${status['mark_to_market_usd']:.2f}")
             print(f"  • Current MTM (BTC): {status['mark_to_market_btc']:.8f}")
@@ -1541,6 +1574,9 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Max BTC Balance: {status['max_balance_btc']:.8f}")
             print(f"  • Min BTC Balance: {status['min_balance_btc']:.8f}")
 
+            # -----------------------------------------------------------------
+            # 4) Position Details
+            # -----------------------------------------------------------------
             pos_info = status.get('position_info', {})
             print("\nPosition Details:")
             print(f"  • Current Price:  ${pos_info.get('current_price', 0.0):.2f}")
@@ -1555,21 +1591,31 @@ class CryptoShell(cmd.Cmd):
                 print("  • Neutral position, no open BTC or short.")
             print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
 
+            # -----------------------------------------------------------------
+            # 5) Trading Statistics
+            # -----------------------------------------------------------------
             print("\nTrading Statistics:")
             print(f"  • Total Trades: {status['trades_executed']}")
             print(f"  • Profitable Trades: {status['profitable_trades']}")
             print(f"  • Win Rate: {status['win_rate']:.1f}%")
+
             if status['trades_executed'] > 0:
                 print(f"  • Avg Profit/Trade: ${status['average_profit_per_trade']:.2f}")
                 print(f"  • Avg Fee/Trade: ${status['average_fee_per_trade']:.2f}")
                 print(f"  • Risk/Reward Ratio: {status['risk_reward_ratio']:.2f}")
 
+            # -----------------------------------------------------------------
+            # 6) Last Trade Info
+            # -----------------------------------------------------------------
             if status['last_trade']:
                 print("\nLast Trade Info:")
                 print(f"  • Reason: {status['last_trade']}")
                 print(f"  • Data Source: {status['last_trade_data_source']}")
                 print(f"  • Signal Time: {status['last_trade_signal_timestamp']}")
 
+            # -----------------------------------------------------------------
+            # 7) Technical Analysis
+            # -----------------------------------------------------------------
             print("\nTechnical Analysis:")
             if status['next_trigger']:
                 print(f"  • {status['next_trigger']}")
@@ -1588,6 +1634,9 @@ class CryptoShell(cmd.Cmd):
             if 'momentum_alignment' in status:
                 print(f"  • Momentum Alignment: {status['momentum_alignment']}")
 
+            # -----------------------------------------------------------------
+            # 8) Session Duration & Warnings
+            # -----------------------------------------------------------------
             if status['trades_executed'] == 0:
                 print("\nNo trades yet, stats are limited.")
             elif status['win_rate'] < 40:
