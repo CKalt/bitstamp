@@ -7,6 +7,7 @@ import time
 import logging
 import threading
 import requests
+import os  # <-- ADDED THIS IMPORT to fix the "NameError: name 'os' is not defined"
 from datetime import datetime
 from flask import Flask, request
 from multiprocessing import Process, Manager
