@@ -9,7 +9,17 @@ import threading
 from datetime import datetime, timedelta
 
 # We reuse indicators:
-from indicators.technical_indicators import ensure_datetime_index
+from indicators.technical_indicators import (
+    ensure_datetime_index,
+    add_moving_averages,        # <-- ADDED THIS IMPORT
+    generate_ma_signals,        # <-- AND THIS ONE
+    calculate_rsi,
+    generate_rsi_signals,
+    calculate_bollinger_bands,
+    generate_bollinger_band_signals,
+    calculate_macd,
+    generate_macd_signals
+)
 
 ###############################################################################
 class MACrossoverStrategy:
@@ -237,7 +247,13 @@ class MACrossoverStrategy:
                     }).dropna()
 
                     if len(df_resampled) >= self.long_window:
-                        df_ma = add_moving_averages(df_resampled.copy(), self.short_window, self.long_window, price_col='close')
+                        # We now have add_moving_averages and generate_ma_signals properly imported:
+                        df_ma = add_moving_averages(
+                            df_resampled.copy(),
+                            self.short_window,
+                            self.long_window,
+                            price_col='close'
+                        )
                         df_ma = generate_ma_signals(df_ma)
 
                         latest_signal = df_ma.iloc[-1]['MA_Signal']

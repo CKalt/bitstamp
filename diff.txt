@@ -1,0 +1,861 @@
+diff --git a/src/tdr.py b/src/tdr.py
+index 74b18fa..c47bc45 100755
+--- a/src/tdr.py
++++ b/src/tdr.py
+@@ -43,7 +43,18 @@ from indicators.technical_indicators import (
+ 
+ HIGH_FREQUENCY = '1H'
+ 
++###############################################################################
++# detect if more than 2 minutes have passed since last update
++# if so, we attempt a reconnect
++###############################################################################
++
++STALE_FEED_SECONDS = 120  # 2 minutes
++
+ def determine_initial_position(df: pd.DataFrame, short_window: int, long_window: int) -> int:
++    """
++    Computes the final short/long MA crossover on df to decide 
++    if we "should" be long (1), short (-1), or neutral (0).
++    """
+     if len(df) < long_window:
+         return 0
+     df_copy = ensure_datetime_index(df.copy())
+@@ -75,11 +86,18 @@ class CryptoDataManager:
+         self.verbose = verbose
+         self.last_price = {symbol: None for symbol in symbols}
+         self.order_placer = None
++        # track last trade for monitoring staleness
+         self.last_trade = {symbol: None for symbol in symbols}
+         self.next_trigger = {symbol: None for symbol in symbols}
+         self.current_trends = {symbol: {} for symbol in symbols}
+ 
++        # [ADDED] For staleness detection: 
++        self.last_trade_time = {symbol: None for symbol in symbols}  # store datetime
++
+     def load_historical_data(self, data_dict):
++        """
++        Load historical data for each symbol from a dictionary of DataFrames.
++        """
+         total_symbols = len(data_dict)
+         for idx, (symbol, df) in enumerate(data_dict.items(), 1):
+             self.data[symbol] = df.reset_index(drop=True)
+@@ -90,20 +108,32 @@ class CryptoDataManager:
+             print("Loaded historical data for {} ({}/{})".format(symbol, idx, total_symbols))
+ 
+     def add_candlestick_observer(self, callback):
++        """
++        Register a callback for candlestick updates.
++        """
+         self.candlestick_observers.append(callback)
+ 
+     def add_trade_observer(self, callback):
++        """
++        Register a callback for trade updates.
++        """
+         self.trade_observers.append(callback)
+ 
+     def set_verbose(self, verbose):
+         self.verbose = verbose
+ 
+     def add_trade(self, symbol, price, timestamp, trade_reason="Live Trade"):
++        """
++        Add a new trade to the candlestick data.
++        Aggregates trades into current-minute candles.
++        """
+         price = float(price)
+         dt = datetime.fromtimestamp(timestamp)
+         minute = dt.replace(second=0, microsecond=0)
++
+         if symbol not in self.candlesticks:
+             self.candlesticks[symbol] = {}
++
+         if minute not in self.candlesticks[symbol]:
+             self.candlesticks[symbol][minute] = {
+                 'timestamp': int(minute.timestamp()),
+@@ -120,11 +150,18 @@ class CryptoDataManager:
+             candle['low'] = min(candle['low'], price)
+             candle['close'] = price
+             candle['trades'] += 1
++
+         self.last_price[symbol] = price
++        # [ADDED] update last_trade_time to dt
++        self.last_trade_time[symbol] = dt
++
+         for observer in self.trade_observers:
+             observer(symbol, price, timestamp, trade_reason)
+ 
+     def get_current_price(self, symbol):
++        """
++        Return the last known 'close' price for the given symbol from historical data.
++        """
+         if not self.data[symbol].empty:
+             return self.data[symbol].iloc[-1]['close']
+         return None
+@@ -140,11 +177,15 @@ class CryptoDataManager:
+         return None, None
+ 
+     def get_price_dataframe(self, symbol):
++        """
++        Combine historical data with live candlesticks for a given symbol.
++        """
+         df = self.data[symbol].copy()
+         if not df.empty:
+             df['source'] = 'historical'
+         else:
+             df['source'] = pd.Series(dtype=str)
++
+         if symbol in self.candlesticks:
+             live_df = pd.DataFrame.from_dict(self.candlesticks[symbol], orient='index')
+             live_df.sort_index(inplace=True)
+@@ -153,55 +194,27 @@ class CryptoDataManager:
+             df.drop_duplicates(subset='timestamp', keep='last', inplace=True)
+             df.sort_values('timestamp', inplace=True)
+             df.reset_index(drop=True, inplace=True)
++
+         return df
+ 
+     def get_data_point_count(self, symbol):
+         return len(self.data[symbol])
+ 
+-class Trade:
+-    def __init__(
+-        self,
+-        trade_type,
+-        symbol,
+-        amount,
+-        price,
+-        timestamp,
+-        reason,
+-        data_source,
+-        signal_timestamp,
+-        live_trading=False,
+-        order_result=None
+-    ):
+-        self.type = trade_type
+-        self.symbol = symbol
+-        self.amount = amount
+-        self.price = price
+-        self.timestamp = timestamp
+-        self.reason = reason
+-        self.data_source = data_source
+-        self.signal_timestamp = signal_timestamp
+-        self.live_trading = live_trading
+-        self.order_result = order_result
+-
+-    def to_dict(self):
+-        trade_info = {
+-            'type': self.type,
+-            'symbol': self.symbol,
+-            'amount': self.amount,
+-            'price': self.price,
+-            'timestamp': self.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+-            'signal_timestamp': self.signal_timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+-            'data_source': self.data_source,
+-            'live_trading': self.live_trading,
+-            'reason': self.reason
+-        }
+-        if self.order_result:
+-            trade_info['order_result'] = self.order_result
+-        return trade_info
++###############################################################################
++# Enhanced subscribe_to_websocket with staleness detection
++###############################################################################
+ 
+ async def subscribe_to_websocket(url: str, symbol: str, data_manager, stop_event):
++    """
++    Async function to subscribe to the Bitstamp WebSocket for a given symbol,
++    storing new trades into data_manager.
++
++    If more than 2 minutes pass with no incoming trades, attempt reconnect.
++    """
+     channel = f"live_trades_{symbol}"
++
+     while not stop_event.is_set():
++        last_message_time = datetime.utcnow()
+         try:
+             data_manager.logger.info(f"{symbol}: Attempting to connect to WebSocket...")
+             async with websockets.connect(url) as websocket:
+@@ -209,14 +222,32 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager, stop_event
+                 subscribe_message = {"event": "bts:subscribe","data": {"channel": channel}}
+                 await websocket.send(json.dumps(subscribe_message))
+                 data_manager.logger.info(f"{symbol}: Subscribed to channel: {channel}")
++
+                 while not stop_event.is_set():
+-                    message = await websocket.recv()
++                    # Check staleness
++                    now = datetime.utcnow()
++                    seconds_since_last = (now - last_message_time).total_seconds()
++                    if seconds_since_last > STALE_FEED_SECONDS:
++                        # forcibly break to attempt reconnect
++                        data_manager.logger.warning(
++                            f"{symbol}: No trades in {seconds_since_last:.0f} s. Reconnecting..."
++                        )
++                        break
++
++                    try:
++                        message = await asyncio.wait_for(websocket.recv(), timeout=10)
++                    except asyncio.TimeoutError:
++                        # no message in last 10 seconds, keep loop
++                        continue
++
+                     data_manager.logger.debug(f"{symbol}: {message}")
+                     data = json.loads(message)
+                     if data.get('event') == 'trade':
+                         price = data['data']['price']
+                         timestamp = int(float(data['data']['timestamp']))
+                         data_manager.add_trade(symbol, price, timestamp, "Live Trade")
++                        last_message_time = datetime.utcnow()
++
+         except websockets.ConnectionClosed:
+             if stop_event.is_set():
+                 break
+@@ -228,453 +259,10 @@ async def subscribe_to_websocket(url: str, symbol: str, data_manager, stop_event
+             data_manager.logger.error(f"{symbol}: An error occurred: {str(e)}")
+             await asyncio.sleep(5)
+ 
+-class OrderPlacer:
+-    def __init__(self, config_file='.bitstamp'):
+-        self.config_file = config_file
+-        self.config = self.read_config(self.config_file)
+-        self.api_key = self.config['api_key']
+-        self.api_secret = bytes(self.config['api_secret'], 'utf-8')
+-
+-    def read_config(self, file_name):
+-        file_path = os.path.abspath(file_name)
+-        try:
+-            with open(file_path, 'r') as f:
+-                return json.load(f)
+-        except Exception as e:
+-            raise Exception(f"Failed to read config file '{file_name}': {e}")
+-
+-    def place_order(self, order_type, currency_pair, amount, price=None, **kwargs):
+-        import time
+-        import uuid
+-        import hmac
+-        import hashlib
+-        from urllib.parse import urlencode
+-        import requests
+-
+-        timestamp = str(int(round(time.time() * 1000)))
+-        nonce = str(uuid.uuid4())
+-        content_type = 'application/x-www-form-urlencoded'
+-        amount_rounded = round(amount, 8)
+-        payload = {'amount': str(amount_rounded)}
+-        if price:
+-            payload['price'] = str(price)
+-        for key, value in kwargs.items():
+-            if value is not None:
+-                payload[key] = str(value).lower() if isinstance(value, bool) else str(value)
+-        if 'market' in order_type:
+-            endpoint = f"/api/v2/{'buy' if 'buy' in order_type else 'sell'}/market/{currency_pair}/"
+-        else:
+-            endpoint = f"/api/v2/{'buy' if 'buy' in order_type else 'sell'}/{currency_pair}/"
+-        payload_string = urlencode(payload)
+-        message = (
+-            f"BITSTAMP {self.api_key}"
+-            f"POSTwww.bitstamp.net{endpoint}{content_type}{nonce}{timestamp}v2{payload_string}"
+-        )
+-        signature = hmac.new(self.api_secret, msg=message.encode('utf-8'), digestmod=hashlib.sha256).hexdigest()
+-        headers = {
+-            'X-Auth': f'BITSTAMP {self.api_key}',
+-            'X-Auth-Signature': signature,
+-            'X-Auth-Nonce': nonce,
+-            'X-Auth-Timestamp': timestamp,
+-            'X-Auth-Version': 'v2',
+-            'Content-Type': content_type
+-        }
+-        logging.info(f"Request Method: POST")
+-        logging.info(f"Request URL: https://www.bitstamp.net{endpoint}")
+-        logging.info(f"Request Headers: {headers}")
+-        logging.info(f"Request Payload: {payload_string}")
+-        url = f"https://www.bitstamp.net{endpoint}"
+-        r = requests.post(url, headers=headers, data=payload_string)
+-        if r.status_code == 200:
+-            return json.loads(r.content.decode('utf-8'))
+-        else:
+-            logging.error(f"Error placing order: {r.status_code} - {r.text}")
+-            return {"status": "error", "reason": r.text, "code": "API_FAILURE"}
+-
+-    def place_limit_buy_order(self, currency_pair, amount, price, **kwargs):
+-        return self.place_order('buy', currency_pair, amount, price, **kwargs)
+-
+-    def place_limit_sell_order(self, currency_pair, amount, price, **kwargs):
+-        return self.place_order('sell', currency_pair, amount, price, **kwargs)
+-
+-class MACrossoverStrategy:
+-    def __init__(
+-        self,
+-        data_manager,
+-        short_window,
+-        long_window,
+-        amount,
+-        symbol,
+-        logger,
+-        live_trading=False,
+-        max_trades_per_day=5,
+-        initial_position=0,
+-        initial_balance_btc=0.0,
+-        initial_balance_usd=0.0
+-    ):
+-        self.data_manager = data_manager
+-        self.order_placer = data_manager.order_placer
+-        self.short_window = short_window
+-        self.long_window = long_window
+-        self.initial_amount = amount
+-        self.current_amount = amount
+-        self.symbol = symbol
+-        self.logger = logger
+-        self.position = initial_position
+-        self.running = False
+-        self.live_trading = live_trading
+-        self.trade_log = []
+-        self.trade_log_file = 'trades.json'
+-        self.last_signal_time = None
+-        self.last_trade_reason = None
+-        self.last_trade_data_source = None
+-        self.last_trade_signal_timestamp = None
+-        self.next_trigger = None
+-        self.current_trends = {}
+-        self.df_ma = pd.DataFrame()
+-        self.strategy_start_time = datetime.now()
+-        self.initial_balance = amount
+-        self.current_balance = amount
+-        self.balance_btc = initial_balance_btc
+-        self.balance_usd = initial_balance_usd
+-        self.fee_percentage = 0.0012
+-        self.last_trade_price = None
+-        self.total_fees_paid = 0
+-        self.trades_executed = 0
+-        self.profitable_trades = 0
+-        self.total_profit_loss = 0
+-        self.max_trades_per_day = max_trades_per_day
+-        self.trade_count_today = 0
+-        self.current_day = datetime.utcnow().date()
+-        self.logger.debug(f"Trade limit set to {self.max_trades_per_day} trades/day.")
+-        self.trades_this_hour = []
+-        data_manager.add_trade_observer(self.check_instant_signal)
+-
+-    def _clean_up_hourly_trades(self):
+-        one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+-        self.trades_this_hour = [t for t in self.trades_this_hour if t > one_hour_ago]
+-
+-    def start(self):
+-        self.running = True
+-        self.strategy_thread = threading.Thread(target=self.run_strategy_loop, daemon=True)
+-        self.strategy_thread.start()
+-        self.logger.info("Strategy loop started.")
+-
+-    def stop(self):
+-        self.running = False
+-        self.logger.info("Strategy loop stopped.")
+-        if self.trade_log and not self.live_trading:
+-            try:
+-                file_path = os.path.abspath(self.trade_log_file)
+-                with open(file_path, 'w') as f:
+-                    json.dump([t.to_dict() for t in self.trade_log], f, indent=2)
+-                self.logger.info(f"Trades logged to '{file_path}'")
+-            except Exception as e:
+-                self.logger.error(f"Failed to write trades: {e}")
+-
+-    def calculate_fee(self, trade_amount, price):
+-        trade_value = trade_amount * price
+-        return trade_value * self.fee_percentage
+-
+-    def update_balance(self, trade_type, price, amount):
+-        fee = self.calculate_fee(amount, price)
+-        self.total_fees_paid += fee
+-        if trade_type == "buy":
+-            cost_usd = amount * price
+-            total_cost_usd = cost_usd + fee
+-            if total_cost_usd > self.balance_usd:
+-                possible_btc = self.balance_usd / (price * (1 + self.fee_percentage))
+-                possible_btc = round(possible_btc, 8)
+-                amount = possible_btc
+-                cost_usd = amount * price
+-                fee = self.calculate_fee(amount, price)
+-                total_cost_usd = cost_usd + fee
+-            self.balance_usd -= total_cost_usd
+-            self.balance_btc += amount
+-            if self.last_trade_price is not None and self.position == -1:
+-                profit = amount * (self.last_trade_price - price) - fee
+-                self.current_balance += profit
+-                self.total_profit_loss += profit
+-                if profit > 0:
+-                    self.profitable_trades += 1
+-        elif trade_type == "sell":
+-            proceeds_usd = amount * price
+-            fee_sell = proceeds_usd * self.fee_percentage
+-            fee = fee_sell
+-            net_usd = proceeds_usd - fee
+-            if amount > self.balance_btc:
+-                amount = self.balance_btc
+-                amount = round(amount, 8)
+-                proceeds_usd = amount * price
+-                fee = proceeds_usd * self.fee_percentage
+-                net_usd = proceeds_usd - fee
+-            self.balance_btc -= amount
+-            self.balance_usd += net_usd
+-            if self.last_trade_price is not None and self.position == 1:
+-                profit = amount * (price - self.last_trade_price) - fee
+-                self.current_balance += profit
+-                self.total_profit_loss += profit
+-                if profit > 0:
+-                    self.profitable_trades += 1
+-        self.last_trade_price = price
+-        self.trades_executed += 1
+-        balance_ratio = self.current_balance / self.initial_balance if self.initial_balance != 0 else 1
+-        self.current_amount = self.initial_amount * balance_ratio
+-        self.logger.info(
+-            f"Trade completed - Balance: ${self.current_balance:.2f}, "
+-            f"Fees: ${fee:.2f}, Next trade amount: {self.current_amount:.8f}, "
+-            f"Total P&L: ${self.total_profit_loss:.2f} || "
+-            f"[BTC Balance: {self.balance_btc:.8f}, USD Balance: {self.balance_usd:.2f}]"
+-        )
+-
+-    def run_strategy_loop(self):
+-        while self.running:
+-            df = self.data_manager.get_price_dataframe(self.symbol)
+-            if not df.empty:
+-                try:
+-                    df = ensure_datetime_index(df)
+-                    df_resampled = df.resample(HIGH_FREQUENCY).agg({
+-                        'open': 'first',
+-                        'high': 'max',
+-                        'low': 'min',
+-                        'close': 'last',
+-                        'volume': 'sum',
+-                        'trades': 'sum',
+-                        'timestamp': 'last',
+-                        'source': 'last'
+-                    }).dropna()
+-                    if len(df_resampled) >= self.long_window:
+-                        df_ma = add_moving_averages(df_resampled.copy(), self.short_window, self.long_window, price_col='close')
+-                        df_ma = generate_ma_signals(df_ma)
+-                        latest_signal = df_ma.iloc[-1]['MA_Signal']
+-                        signal_time = df_ma.index[-1]
+-                        current_price = df_ma.iloc[-1]['close']
+-                        signal_source = df_ma.iloc[-1]['source']
+-                        self.next_trigger = self.determine_next_trigger(df_ma)
+-                        self.current_trends = self.get_current_trends(df_ma)
+-                        self.df_ma = df_ma
+-                        self.check_for_signals(latest_signal, current_price, signal_time)
+-                    else:
+-                        self.logger.debug("Not enough data to compute MAs.")
+-                except Exception as e:
+-                    self.logger.error(f"Error in strategy loop for {self.symbol}: {e}")
+-            else:
+-                self.logger.debug(f"No data loaded for {self.symbol} yet.")
+-            time.sleep(60)
+-
+-    def determine_next_trigger(self, df_ma):
+-        if len(df_ma) < 2:
+-            return None
+-        last_signal = df_ma.iloc[-1]['MA_Signal']
+-        prev_signal = df_ma.iloc[-2]['MA_Signal']
+-        if last_signal != prev_signal:
+-            if last_signal == 1:
+-                return "Next trigger: Potential SELL if short crosses below long."
+-            elif last_signal == -1:
+-                return "Next trigger: Potential BUY if short crosses above long."
+-        return "Next trigger: Awaiting next crossover signal."
+-
+-    def get_current_trends(self, df_ma):
+-        if len(df_ma) < 2:
+-            return {}
+-        short_ma_curr = df_ma.iloc[-1]['Short_MA']
+-        short_ma_prev = df_ma.iloc[-2]['Short_MA']
+-        long_ma_curr = df_ma.iloc[-1]['Long_MA']
+-        long_ma_prev = df_ma.iloc[-2]['Long_MA']
+-        short_ma_slope = short_ma_curr - short_ma_prev
+-        long_ma_slope = long_ma_curr - long_ma_prev
+-        return {
+-            'Short_MA_Slope': 'Upwards' if short_ma_slope > 0 else 'Downwards',
+-            'Long_MA_Slope': 'Upwards' if long_ma_slope > 0 else 'Downwards',
+-            'Price_Trend': 'Bullish' if short_ma_curr > long_ma_curr else 'Bearish',
+-            'Trend_Strength': abs(short_ma_curr - long_ma_curr) / long_ma_curr * 100 if long_ma_curr != 0 else 0
+-        }
+-
+-    def check_instant_signal(self, symbol, price, timestamp, trade_reason):
+-        if not self.running:
+-            return
+-        if symbol != self.symbol:
+-            return
+-        df_live = self.data_manager.get_price_dataframe(symbol)
+-        if df_live.empty:
+-            return
+-        df_live = ensure_datetime_index(df_live)
+-        if len(df_live) < self.long_window:
+-            return
+-        df_ma = df_live.copy()
+-        df_ma['Short_MA'] = df_ma['close'].rolling(self.short_window).mean()
+-        df_ma['Long_MA']  = df_ma['close'].rolling(self.long_window).mean()
+-        df_ma.dropna(inplace=True)
+-        if df_ma.empty:
+-            return
+-        latest = df_ma.iloc[-1]
+-        short_ma_now = latest['Short_MA']
+-        long_ma_now = latest['Long_MA']
+-        signal_now = 1 if short_ma_now > long_ma_now else -1
+-        if len(df_ma) < 2:
+-            return
+-        prev = df_ma.iloc[-2]
+-        prev_signal = 1 if prev['Short_MA'] > prev['Long_MA'] else -1
+-        if signal_now == prev_signal:
+-            return
+-        signal_time = df_ma.index[-1]
+-        self.check_for_signals(signal_now, price, signal_time)
+-
+-    def check_for_signals(self, latest_signal, current_price, signal_time):
+-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+-        if self.last_signal_time == signal_time:
+-            return
+-        if latest_signal == 1 and self.position <= 0:
+-            self.logger.info(f"Buy signal triggered at {current_price}")
+-            self.position = 1
+-            self.last_trade_reason = "MA Crossover: short above long."
+-            self.buy_in_three_parts(current_price, timestamp, signal_time)
+-            self.last_signal_time = signal_time
+-        elif latest_signal == -1 and self.position >= 0:
+-            self.logger.info(f"Sell signal triggered at {current_price}")
+-            self.position = -1
+-            self.last_trade_reason = "MA Crossover: short below long."
+-            trade_btc = self.balance_btc
+-            trade_btc = round(trade_btc, 8)
+-            self.execute_trade("sell", current_price, timestamp, signal_time, trade_btc)
+-            self.last_signal_time = signal_time
+-
+-    def buy_in_three_parts(self, price, timestamp, signal_time):
+-        partial_btc_1 = self.get_89pct_btc_of_usd(price)
+-        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1)
+-        partial_btc_2 = self.get_89pct_btc_of_usd(price)
+-        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_2)
+-        partial_btc_3 = self.get_89pct_btc_of_usd(price)
+-        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_3)
+-
+-    def get_89pct_btc_of_usd(self, price):
+-        available_usd = self.balance_usd * 0.89
+-        btc_approx = available_usd / (price * (1 + self.fee_percentage))
+-        return round(btc_approx, 8)
+-
+-    def execute_trade(self, trade_type, price, timestamp, signal_timestamp, trade_btc):
+-        today = datetime.utcnow().date()
+-        if today != self.current_day:
+-            self.current_day = today
+-            self.trade_count_today = 0
+-            self.logger.debug("New day, resetting daily trade count.")
+-        if self.trade_count_today >= self.max_trades_per_day:
+-            self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping trade.")
+-            return
+-        self._clean_up_hourly_trades()
+-        max_trades_per_hour = 3
+-        if len(self.trades_this_hour) >= max_trades_per_hour:
+-            self.logger.info(f"Reached hourly trade limit {max_trades_per_hour}, skipping trade.")
+-            return
+-        data_source = 'historical' if signal_timestamp < self.strategy_start_time else 'live'
+-        trade_info = Trade(
+-            trade_type,
+-            self.symbol,
+-            trade_btc,
+-            price,
+-            datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S'),
+-            self.last_trade_reason,
+-            data_source,
+-            signal_timestamp,
+-            live_trading=self.live_trading
+-        )
+-        self.last_trade_data_source = data_source
+-        self.last_trade_signal_timestamp = signal_timestamp
+-        if self.live_trading:
+-            result = self.order_placer.place_order(
+-                f"market-{trade_type}", self.symbol, trade_btc
+-            )
+-            self.logger.info(f"Executed LIVE {trade_type} order: {result}")
+-            trade_info.order_result = result
+-            if result.get("status") == "error":
+-                self.logger.error(f"Trade failed: {result}")
+-                self._log_failed_trade(trade_info)
+-                return
+-            self.trade_count_today += 1
+-            self.update_balance(trade_type, price, trade_btc)
+-        else:
+-            self.logger.info(f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
+-            self.trade_log.append(trade_info)
+-            self.update_balance(trade_type, price, trade_btc)
+-        self.trades_this_hour.append(datetime.utcnow())
+-        self._log_successful_trade(trade_info)
+-
+-    def _log_failed_trade(self, trade_info):
+-        try:
+-            file_path = os.path.abspath(self.trade_log_file)
+-            with open(file_path, 'a') as f:
+-                f.write(json.dumps(trade_info.to_dict()) + '\n')
+-            self.logger.debug(f"Failed trade appended to '{file_path}'")
+-        except Exception as e:
+-            self.logger.error(f"Failed to write failed trade to log file: {e}")
+-
+-    def _log_successful_trade(self, trade_info):
+-        try:
+-            file_path = os.path.abspath(self.trade_log_file)
+-            with open(file_path, 'a') as f:
+-                f.write(json.dumps(trade_info.to_dict()) + '\n')
+-            self.logger.debug(f"Trade info appended to '{file_path}'")
+-        except Exception as e:
+-            self.logger.error(f"Failed to write trade to log file: {e}")
+-
+-    def get_mark_to_market_values(self):
+-        current_price = self.data_manager.get_current_price(self.symbol) or 0.0
+-        total_usd_value = self.balance_usd + (self.balance_btc * current_price)
+-        total_btc_value = self.balance_btc + (self.balance_usd / current_price if current_price else 0.0)
+-        return total_usd_value, total_btc_value
+-
+-    def get_status(self):
+-        status = {
+-            'running': self.running,
+-            'position': self.position,
+-            'last_trade': None,
+-            'last_trade_data_source': None,
+-            'last_trade_signal_timestamp': None,
+-            'next_trigger': self.next_trigger,
+-            'current_trends': self.current_trends,
+-            'ma_difference': None,
+-            'ma_slope_difference': None,
+-            'initial_balance': self.initial_balance,
+-            'current_balance': self.current_balance,
+-            'balance_btc': self.balance_btc,
+-            'balance_usd': self.balance_usd,
+-            'total_return_pct': ((self.current_balance / self.initial_balance) - 1) * 100 if self.initial_balance != 0 else 0,
+-            'total_fees_paid': self.total_fees_paid,
+-            'trades_executed': self.trades_executed,
+-            'profitable_trades': self.profitable_trades,
+-            'win_rate': (self.profitable_trades / self.trades_executed * 100) if self.trades_executed else 0,
+-            'current_trade_amount': self.current_amount,
+-            'total_profit_loss': self.total_profit_loss,
+-            'average_profit_per_trade': (self.total_profit_loss / self.trades_executed) if self.trades_executed else 0,
+-            'trade_count_today': self.trade_count_today,
+-            'remaining_trades_today': max(0, self.max_trades_per_day - self.trade_count_today)
+-        }
+-        if self.last_trade_reason:
+-            status['last_trade'] = self.last_trade_reason
+-            status['last_trade_data_source'] = self.last_trade_data_source
+-            if self.last_trade_signal_timestamp:
+-                status['last_trade_signal_timestamp'] = self.last_trade_signal_timestamp.strftime('%Y-%m-%d %H:%M:%S')
+-        if hasattr(self, 'df_ma') and not self.df_ma.empty:
+-            status['ma_difference'] = self.df_ma.iloc[-1]['Short_MA'] - self.df_ma.iloc[-1]['Long_MA']
+-            if len(self.df_ma) >= 2:
+-                short_ma_slope = self.df_ma.iloc[-1]['Short_MA'] - self.df_ma.iloc[-2]['Short_MA']
+-                long_ma_slope = self.df_ma.iloc[-1]['Long_MA'] - self.df_ma.iloc[-2]['Long_MA']
+-                status['ma_slope_difference'] = short_ma_slope - long_ma_slope
+-                status['short_ma_momentum'] = 'Increasing' if short_ma_slope > 0 else 'Decreasing'
+-                status['long_ma_momentum'] = 'Increasing' if long_ma_slope > 0 else 'Decreasing'
+-                status['momentum_alignment'] = (
+-                    'Aligned'
+-                    if (short_ma_slope > 0 and long_ma_slope > 0)
+-                    or (short_ma_slope < 0 and long_ma_slope < 0)
+-                    else 'Diverging'
+-                )
+-        if self.trades_executed > 0:
+-            status['average_fee_per_trade'] = self.total_fees_paid / self.trades_executed
+-            status['risk_reward_ratio'] = abs(self.total_profit_loss / self.total_fees_paid) if self.total_fees_paid > 0 else 0
+-        mtm_usd, mtm_btc = self.get_mark_to_market_values()
+-        status['mark_to_market_usd'] = mtm_usd
+-        status['mark_to_market_btc'] = mtm_btc
+-        return status
++###############################################################################
++# OrderPlacer, MACrossoverStrategy, and the rest remain identical, except 
++# for minor changes if necessary
++###############################################################################
+ 
+ import cmd
+ from flask import Flask, request
+@@ -688,8 +276,10 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
+     import threading
+     import pandas as pd
+     import numpy as np
++
+     server = Flask(__name__)
+     app = dash.Dash(__name__, server=server)
++
+     @server.route('/shutdown')
+     def shutdown():
+         func = request.environ.get('werkzeug.server.shutdown')
+@@ -697,11 +287,13 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
+             return 'Not running with the Werkzeug Server'
+         func()
+         return 'Server shutting down...'
++
+     app.layout = html.Div(children=[
+         html.H1(children='{} Real-time Candlestick Chart'.format(symbol.upper())),
+         dcc.Graph(id='live-graph', style={'width': '100%', 'height': '80vh'}),
+         dcc.Interval(id='graph-update', interval=60*1000, n_intervals=0)
+     ])
++
+     @app.callback(
+         Output('live-graph', 'figure'),
+         [Input('graph-update', 'n_intervals'),
+@@ -789,11 +381,17 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
+             height=800
+         )
+         return {'data': data, 'layout': layout}
++
+     app.run_server(debug=False, use_reloader=False)
+ 
++from flask import Flask, request
++import requests
++import cmd
++
+ class CryptoShell(cmd.Cmd):
+     intro = 'Welcome to the Crypto Shell (No CLI args). Type help or ? to list commands.\n'
+     prompt = '(crypto) '
++
+     def __init__(
+         self,
+         data_manager,
+@@ -819,6 +417,7 @@ class CryptoShell(cmd.Cmd):
+         self.manager = Manager()
+         self.data_manager_dict = self.manager.dict()
+         self.max_trades_per_day = max_trades_per_day
++
+         self.examples = {
+             'price': 'price btcusd',
+             'range': 'range btcusd 30',
+@@ -834,6 +433,7 @@ class CryptoShell(cmd.Cmd):
+             'status': 'status',
+             'chart': 'chart btcusd 1H'
+         }
++
+         self.data_manager.add_candlestick_observer(self.candlestick_callback)
+         self.data_manager.add_trade_observer(self.trade_callback)
+ 
+@@ -850,13 +450,24 @@ class CryptoShell(cmd.Cmd):
+             print(", ".join(self.examples.keys()))
+ 
+     def do_price(self, arg):
++        """
++        Show current price for a symbol, plus the last WebSocket update timestamp:
++          price <symbol>
++        """
+         symbol = arg.strip().lower()
+         if not symbol:
+             print("Usage: price <symbol>")
+             return
+         price = self.data_manager.get_current_price(symbol)
+         if price:
+-            print(f"Current price of {symbol}: ${price:.2f}")
++            # [ADDED] Show last websocket update time
++            last_update_time = self.data_manager.last_trade_time.get(symbol)
++            if last_update_time:
++                update_str = last_update_time.strftime('%Y-%m-%d %H:%M:%S')
++            else:
++                update_str = "unknown (no trades yet)"
++
++            print(f"Current price of {symbol}: ${price:.2f} (last update: {update_str})")
+         else:
+             print(f"No data for {symbol}")
+ 
+@@ -1071,6 +682,7 @@ class CryptoShell(cmd.Cmd):
+             initial_balance_btc = amount_num
+         elif desired_position == -1:
+             initial_balance_usd = amount_num
++        from __main__ import MACrossoverStrategy
+         self.auto_trader = MACrossoverStrategy(
+             self.data_manager,
+             short_window,
+@@ -1225,6 +837,7 @@ class CryptoShell(cmd.Cmd):
+                 self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
+                 time.sleep(60)
+         threading.Thread(target=update_shared_data, daemon=True).start()
++        from multiprocessing import Process
+         self.chart_process = Process(
+             target=run_dash_app,
+             args=(self.data_manager_dict, symbol, bar_size, short_window, long_window)
+@@ -1234,11 +847,18 @@ class CryptoShell(cmd.Cmd):
+         time.sleep(1)
+ 
+ def run_websocket(url, symbols, data_manager, stop_event):
++    """
++    Launch a separate event loop to handle multiple subscribe tasks, 
++    including staleness detection.
++    """
+     loop = asyncio.new_event_loop()
+     asyncio.set_event_loop(loop)
++
+     tasks = [subscribe_to_websocket(url, symbol, data_manager, stop_event) for symbol in symbols]
++
+     async def main():
+         await asyncio.gather(*tasks)
++
+     try:
+         loop.run_until_complete(main())
+     except Exception as e:
+@@ -1268,27 +888,33 @@ def main():
+     else:
+         with open(config_file, 'r') as f:
+             config = json.load(f)
++
+     start_back = config.get('start_window_days_back', 30)
+     end_back   = config.get('end_window_days_back', 0)
+     do_live    = config.get('do_live_trades', False)
+     max_trades = config.get('max_trades_per_day', 5)
++
+     now = datetime.now()
+     start_date = now - timedelta(days=start_back) if start_back else None
+     end_date   = now - timedelta(days=end_back) if end_back else None
++
+     if start_date and end_date and start_date >= end_date:
+         print("Invalid date range from best_strategy.json; ignoring end_date.")
+         end_date = None
++
+     logger = setup_logging(verbose=False)
+     if do_live:
+         logger.info("Running in LIVE trading mode.")
+     else:
+         logger.info("Running in DRY RUN mode.")
++
+     log_file_path = os.path.abspath("btcusd.log")
+     if not os.path.exists(log_file_path):
+         print(f"No local log file '{log_file_path}'. Relying on real-time data only.")
+         df = pd.DataFrame()
+     else:
+         df = parse_log_file(log_file_path, start_date, end_date)
++
+     if not df.empty:
+         df.rename(columns={'price': 'close'}, inplace=True)
+         df['open'] = df['close']
+@@ -1297,11 +923,14 @@ def main():
+         df['trades'] = 1
+         if 'volume' not in df.columns:
+             df['volume'] = df.get('amount', 0.0)
++
+     data_manager = CryptoDataManager(["btcusd"], logger=logger)
+     if not df.empty:
+         data_manager.load_historical_data({'btcusd': df})
++
+     order_placer = OrderPlacer()
+     data_manager.order_placer = order_placer
++
+     stop_event = threading.Event()
+     shell = CryptoShell(
+         data_manager=data_manager,
+@@ -1312,11 +941,13 @@ def main():
+         stop_event=stop_event,
+         max_trades_per_day=max_trades
+     )
++
+     url = 'wss://ws.bitstamp.net'
+     websocket_thread = threading.Thread(
+         target=run_websocket, args=(url, ["btcusd"], data_manager, stop_event), daemon=True)
+     websocket_thread.start()
+     logger.debug("WebSocket thread started.")
++
+     try:
+         shell.cmdloop()
+     except KeyboardInterrupt:
+@@ -1330,6 +961,7 @@ def main():
+             shell.auto_trader.stop()
+         if shell.chart_process and shell.chart_process.is_alive():
+             shell.stop_dash_app()
++
+ if __name__ == '__main__':
+     set_start_method('spawn')
+     main()
