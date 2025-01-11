@@ -3,23 +3,16 @@
 # FULL FILE PATH: src/tdr_core/shell.py
 # ----------------------------------------------------------------------------
 # CHANGES MADE:
-#   1) In do_auto_trade(), if the user starts auto-trading with a position 
-#      (e.g., "auto_trade 2.5219btc long") and the historical signal also 
-#      indicates we should be long, we set the strategy's cost basis 
-#      (position_cost_basis) and position_size to the current market price 
-#      * initial BTC. That ensures the "Entry Price" and "Unrealized PnL" 
-#      in the status reflect the actual (latest) price from the moment you 
-#      started auto_trade (instead of 0.00).
+#   1) If user starts with a short position via "auto_trade Xusd short" 
+#      and the strategy also wants to be short, we set a negative BTC 
+#      position_size plus a cost basis to reflect the short entry at 
+#      the current market price. This ensures "Entry Price" and 
+#      "Unrealized PnL" are correct in the status from the moment the 
+#      session starts.
 #
-#   2) We preserve all original comments and logic, only adding a small 
-#      block labeled with (CHANGED)/(NEW) inside `do_auto_trade`.
+#   2) We preserve all original comments and logic unless needed 
+#      for implementing the short fix.
 #
-# NOTE:
-#   - This fix only applies if the user starts a session "in a position" 
-#     (i.e., auto_trade Xbtc long) AND the strategy's historical signal 
-#     aligns with being long as well. If the code sees we "should" be 
-#     neutral, we don't set cost basis. 
-#   - All other logic remains the same.
 # ----------------------------------------------------------------------------
 
 import cmd
@@ -544,18 +537,36 @@ class CryptoShell(cmd.Cmd):
 
         current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
 
-        # (CHANGED) If we "start" auto_trade with a BTC balance and 
-        # the historical signal also indicates we want to be long, 
-        # we set the strategy's cost basis so that "Entry Price" 
-        # is the current market price. This fixes the 0.00 entry price bug 
-        # when the user begins a session already in a position.
+        # (CHANGED) If the user starts "long" and hist_position is also long, 
+        # we set cost basis to the current price. That was the previous fix.
         if desired_position == 1 and hist_position == 1 and current_market_price > 0:
             if self.auto_trader.position_size < 1e-8:  # i.e. 0.0
                 self.auto_trader.position_size = amount_num
                 self.auto_trader.position_cost_basis = amount_num * current_market_price
                 self.logger.info(
                     f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
-                    f"for an initial position of {amount_num} BTC at ${current_market_price:.2f}."
+                    f"for an initial LONG of {amount_num} BTC at ${current_market_price:.2f}."
+                )
+
+        # (NEW) Symmetrical approach for "short" if hist_position == -1:
+        #   We interpret "X usd short" as: 
+        #   position_size = negative BTC = - (usd / price)
+        #   cost_basis is the total "proceeds" from that short in USD
+        if desired_position == -1 and hist_position == -1 and current_market_price > 0:
+            # If the user typed "auto_trade 234462usd short," 
+            # we treat it as if we shorted (234462 / current_market_price) BTC at current_market_price
+            # so position_size is negative that quantity
+            short_btc = amount_num / current_market_price
+            if self.auto_trader.position_size > -1e-8 and short_btc > 0:
+                self.auto_trader.position_size = - short_btc
+                # If we short short_btc BTC at price p, the cost basis is short_btc * p
+                # (the USD we "collected" from the short).
+                self.auto_trader.position_cost_basis = short_btc * current_market_price
+                # We keep cost_basis positive for convenience, while position_size is negative BTC
+                # Then unrealized PnL is cost_basis - (position_size * current_price).
+                self.logger.info(
+                    f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
+                    f"for an initial SHORT of {short_btc:.6f} BTC (=-{short_btc:.6f}) at ${current_market_price:.2f}."
                 )
 
         self.auto_trader.start()
