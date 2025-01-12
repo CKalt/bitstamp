@@ -412,6 +412,9 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
                     best_strategy_params_converted["Last_Signal_Timestamp"] = None
                     best_strategy_params_converted["Last_Signal_Action"] = None
 
+
+            best_strategy_params_converted["do_live_trades"] = False
+
             try:
                 with open('best_strategy.json', 'w') as f:
                     json.dump(best_strategy_params_converted, f, indent=4)

@@ -1,15 +1,16 @@
 {
-    "do_live_trades": true,
     "Frequency": "1H",
     "Strategy": "MA",
-    "Short_Window": 8,
-    "Long_Window": 46,
-    "Final_Balance": 12135.725864646063,
-    "Total_Return": 21.35725864646063,
-    "Total_Trades": 109.0,
-    "Profit_Factor": 1.0617332692570507,
-    "Sharpe_Ratio": 0.31639192547329215,
-    "Average_Trades_Per_Day": 1.211111111111111,
-    "start_window_days_back": 90,
-    "end_window_days_back": 0
+    "Short_Window": 4,
+    "Long_Window": 38,
+    "Final_Balance": 10618.439805174325,
+    "Total_Return": 6.184398051743247,
+    "Total_Trades": 45.0,
+    "Average_Trades_Per_Day": 1.4516129032258065,
+    "Profit_Factor": 1.066809096929261,
+    "Sharpe_Ratio": 0.32466017335103,
+    "Last_Signal_Timestamp": 1736715600,
+    "Last_Signal_Action": "GO LONG",
+    "Last_Trade_Timestamp": 1736718523,
+    "Last_Trade_Price": 94340.0
 }
