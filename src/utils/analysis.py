@@ -104,6 +104,9 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
     strategies = {}
     all_results_list = []
 
+    # NEW: Dictionary to hold final DataFrames used for each "best" strategy
+    strategy_dfs = {}  # We'll store e.g. strategy_dfs['MA'] = best_ma_df, etc.
+
     print("Running MA Crossover Strategy...")
     ma_results = optimize_ma_parameters(
         df_high,
@@ -150,6 +153,9 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
         ma_trades = generate_trade_list(best_ma_df, 'MA')
         ma_trades.to_csv('ma_trades.csv', index=False)
         print("MA Crossover trades saved to 'ma_trades.csv'")
+
+        # NEW: Store this final DataFrame so we can retrieve the last signal
+        strategy_dfs['MA'] = best_ma_df
         
         # Save frequency optimization results if available
         if 'freq_results' in locals() and not freq_results.empty:
@@ -188,6 +194,9 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
         rsi_trades = generate_trade_list(best_rsi_df, 'RSI')
         rsi_trades.to_csv('rsi_trades.csv', index=False)
         print("RSI trades saved to 'rsi_trades.csv'")
+
+        # NEW: Store final RSI DataFrame
+        strategy_dfs['RSI'] = best_rsi_df
     else:
         print("No RSI strategies met the criteria.")
 
@@ -221,6 +230,9 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
         bb_trades = generate_trade_list(best_bb_df, 'BB')
         bb_trades.to_csv('bb_trades.csv', index=False)
         print("Bollinger Bands trades saved to 'bb_trades.csv'")
+
+        # NEW: Store final Bollinger Bands DataFrame
+        strategy_dfs['Bollinger Bands'] = best_bb_df
     else:
         print("No Bollinger Bands strategies met the criteria.")
 
@@ -257,6 +269,9 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
         macd_trades = generate_trade_list(best_macd_df, 'MACD')
         macd_trades.to_csv('macd_trades.csv', index=False)
         print("MACD trades saved to 'macd_trades.csv'")
+
+        # NEW: Store final MACD DataFrame
+        strategy_dfs['MACD'] = best_macd_df
     else:
         print("No MACD strategies met the criteria.")
 
@@ -290,6 +305,9 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
         ramm_trades = generate_trade_list(best_ramm_df, 'RAMM')
         ramm_trades.to_csv('ramm_trades.csv', index=False)
         print("RAMM trades saved to 'ramm_trades.csv'")
+
+        # NEW: Store final RAMM DataFrame
+        strategy_dfs['RAMM'] = best_ramm_df
     else:
         print("No RAMM strategies met the criteria.")
 
@@ -321,6 +339,9 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
         adaptive_vwma_trades = generate_trade_list(best_adaptive_vwma_df, 'Adaptive_VWMA')
         adaptive_vwma_trades.to_csv('adaptive_vwma_trades.csv', index=False)
         print("Adaptive VWMA trades saved to 'adaptive_vwma_trades.csv'")
+
+        # NEW: Store final Adaptive VWMA DataFrame
+        strategy_dfs['Adaptive_VWMA'] = best_adaptive_vwma_df
     else:
         print("No Adaptive VWMA strategies met the criteria.")
 
@@ -357,6 +378,39 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
             best_strategy_params_converted = {
                 key: convert_types(value) for key, value in strategies[best_strategy].items()
             }
+
+            # NEW: Determine the last non-zero signal for the best strategy
+            df_best = strategy_dfs.get(best_strategy, None)
+            if df_best is not None:
+                # Handle naming for signal column
+                if best_strategy == "Bollinger Bands":
+                    signal_col = "BB_Signal"
+                else:
+                    # e.g. "MACD" -> "MACD_Signal", "RAMM" -> "RAMM_Signal", etc.
+                    # "Adaptive_VWMA" -> "Adaptive_VWMA_Signal"
+                    # "MA" -> "MA_Signal"
+                    # "RSI" -> "RSI_Signal"
+                    signal_col = f"{best_strategy}_Signal".replace(" ", "_")
+
+                last_signals = df_best[df_best[signal_col] != 0]
+                if not last_signals.empty:
+                    # Grab the last row with a non-zero signal
+                    last_row = last_signals.iloc[-1]
+                    last_signal_value = last_row[signal_col]
+
+                    # For the timestamp, we can store either the index or the 'timestamp' column
+                    # We'll store the 'timestamp' column (integer Unix time)
+                    best_strategy_params_converted["Last_Signal_Timestamp"] = int(last_row["timestamp"])
+
+                    # Distinguish GO LONG vs GO SHORT
+                    if last_signal_value == 1:
+                        best_strategy_params_converted["Last_Signal_Action"] = "GO LONG"
+                    else:
+                        best_strategy_params_converted["Last_Signal_Action"] = "GO SHORT"
+                else:
+                    # No non-zero signals found
+                    best_strategy_params_converted["Last_Signal_Timestamp"] = None
+                    best_strategy_params_converted["Last_Signal_Action"] = None
 
             try:
                 with open('best_strategy.json', 'w') as f:
