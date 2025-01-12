@@ -1,5 +1,6 @@
 /app-tdr.txt
 /app-bktst.txt
+best_strategy.json
 env
 .bitstamp
 .influxdb
@@ -26,4 +27,3 @@ foo*
 
 # Ignore files in any __pycache__ directory
 __pycache__/
-/best_strategy.json

@@ -4,4 +4,3 @@ python src/bktst.py \
   --high-frequency 1H \
   --low-frequency 15T
 
-mv best_strategy.json best_strategy-run2.json

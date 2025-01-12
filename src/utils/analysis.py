@@ -412,8 +412,15 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
                     best_strategy_params_converted["Last_Signal_Timestamp"] = None
                     best_strategy_params_converted["Last_Signal_Action"] = None
 
-
-            best_strategy_params_converted["do_live_trades"] = False
+            # NEW: Also store the last trade's timestamp and price from the final row of df
+            #      to confirm we are looking at the most recent data that arrived.
+            if not df.empty:
+                best_strategy_params_converted["Last_Trade_Timestamp"] = int(df['timestamp'].iloc[-1])
+                best_strategy_params_converted["Last_Trade_Price"] = float(df['price'].iloc[-1])
+            else:
+                # If df is empty (unlikely), store None
+                best_strategy_params_converted["Last_Trade_Timestamp"] = None
+                best_strategy_params_converted["Last_Trade_Price"] = None
 
             try:
                 with open('best_strategy.json', 'w') as f:
