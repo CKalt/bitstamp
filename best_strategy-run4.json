@@ -1,0 +1,14 @@
+{
+    "Frequency": "1H",
+    "Strategy": "MA",
+    "Short_Window": 8.0,
+    "Long_Window": 46.0,
+    "Final_Balance": 11680.46322111633,
+    "Total_Return": 16.804632211163298,
+    "Total_Trades": 31.0,
+    "Profit_Factor": 1.1859062078285674,
+    "Sharpe_Ratio": 0.8679716266691127,
+    "Average_Trades_Per_Day": 1.0333333333333334,
+    "start_window_days_back": 90,
+    "end_window_days_back": 60
+}

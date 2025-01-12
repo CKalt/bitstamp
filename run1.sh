@@ -3,3 +3,5 @@ python src/bktst.py \
   --end-window-days-back 0 \
   --high-frequency 1H \
   --low-frequency 15T
+
+mv best_strategy.json best_strategy-run1.json

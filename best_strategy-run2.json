@@ -1,5 +1,4 @@
 {
-    "do_live_trades": false,
     "Frequency": "1H",
     "Strategy": "MA",
     "Short_Window": 8,
