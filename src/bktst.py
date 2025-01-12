@@ -295,8 +295,10 @@ def main():
         print("\nResults saved to 'all_strategy_results.csv'.")
 
         ################################################################
-        # NEW LOGIC: Write best_strategy.json in the "new" format
+        # NEW LOGIC (ORIGINALLY) that wrote best_strategy.json
+        # BUGFIX: We now comment it out to avoid overwriting the file
         ################################################################
+        """
         if not strategy_comparison.empty:
             # 1) Identify the best row by total return
             best_idx = strategy_comparison['Total_Return'].idxmax()
@@ -317,7 +319,6 @@ def main():
                 "end_window_days_back": args.end_window_days_back
             }
 
-            # --- BEGIN: Insert these lines to fix JSON serialization errors ---
             def convert_types(obj):
                 import numpy as np
                 import pandas as pd
@@ -330,23 +331,22 @@ def main():
                 elif isinstance(obj, pd.Timestamp):
                     return obj.isoformat()
                 elif pd.isna(obj):
-                    return None  # or "NaN"
+                    return None
                 return obj
 
             best_strategy_json = {
                 key: convert_types(value) for key, value in best_strategy_json.items()
             }
-            # --- END: Insert these lines ---
 
-            # 2) Write this to best_strategy.json
             try:
                 with open("best_strategy.json", "w") as f:
                     json.dump(best_strategy_json, f, indent=4)
-                print("\nWrote best_strategy.json with new fields:")
+                print("\\nWrote best_strategy.json with new fields:")
                 print(best_strategy_json)
             except Exception as e:
                 print("Error writing best_strategy.json:")
                 traceback.print_exc()
+        """
 
     except Exception as e:
         print(f"An error occurred during trading system analysis: {str(e)}")
