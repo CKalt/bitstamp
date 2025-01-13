@@ -1,4 +1,3 @@
-# src/tdr_core/strategies.py
 # ----------------------------------------------------------------------------
 # FULL FILE PATH: src/tdr_core/strategies.py
 # ----------------------------------------------------------------------------
@@ -10,6 +9,10 @@
 #   3) Marked changes with (CHANGED) / (NEW).
 #   4) Preserved all original comments and logic except where necessary to 
 #      incorporate cost-basis logic.
+#   5) (ADDED) In get_status(), now handle the short position block so that
+#      the 'entry_price', 'short size (BTC)', 'USD Held', and 'unrealized_pnl' 
+#      are properly calculated when self.position == -1.
+#
 # ----------------------------------------------------------------------------
 
 import pandas as pd
@@ -33,6 +36,7 @@ from indicators.technical_indicators import (
     calculate_macd,
     generate_macd_signals
 )
+
 
 ###############################################################################
 class MACrossoverStrategy:
@@ -604,7 +608,7 @@ class MACrossoverStrategy:
         #           if position_size > 0 (i.e. a long).
         position_info = {
             'current_price': self.data_manager.get_current_price(self.symbol) or 0.0,
-            'entry_price': 0.0,  # will set below
+            'entry_price': 0.0,
             'position_size_btc': 0.0,
             'position_size_usd': 0.0,
             'unrealized_pnl': 0.0,
@@ -613,7 +617,6 @@ class MACrossoverStrategy:
         cp = position_info['current_price']
 
         if self.position == 1 and self.position_size > 0:
-            # compute average entry from cost basis
             avg_entry_price = self.position_cost_basis / self.position_size if self.position_size else 0.0
             position_info['entry_price'] = avg_entry_price
             position_info['position_size_btc'] = self.position_size
@@ -622,9 +625,31 @@ class MACrossoverStrategy:
             mark_value = self.position_size * cp
             position_info['unrealized_pnl'] = mark_value - cost_basis
 
-        elif self.position == -1:
-            # If short logic is used, do similar but for short cost-basis
-            pass
+        # (ADDED) Now handle short logic so we show correct data in status 
+        # if self.position == -1. 
+        # Replaces the old 'pass' and properly sets entry_price, short size, etc.
+        elif self.position == -1 and self.position_size < 0:
+            # For a short, position_size is negative BTC.  position_cost_basis 
+            # holds the "USD proceeds" collected on entry. We'll call it cost_basis.
+            avg_entry_price = 0.0
+            if abs(self.position_size) > 1e-12:  # avoid division by zero
+                avg_entry_price = self.position_cost_basis / abs(self.position_size)
+
+            position_info['entry_price'] = avg_entry_price
+            # Negative BTC means short
+            position_info['position_size_btc'] = self.position_size
+            # We might treat position_size_usd as "USD Held" or "Short Proceeds".
+            position_info['position_size_usd'] = self.position_cost_basis
+
+            # For a short: unrealized PnL = cost_basis - (current_price * |short_size|)
+            mark_value = abs(self.position_size) * cp
+            position_info['unrealized_pnl'] = self.position_cost_basis - mark_value
 
         status['position_info'] = position_info
         return status
+
+    def _log_successful_trade(self, trade_info):
+        self.logger.info(f"Trade executed successfully: {trade_info.to_dict()}")
+
+    def _log_failed_trade(self, trade_info):
+        self.logger.info(f"Trade failed/canceled: {trade_info.to_dict()}")
