@@ -26,6 +26,7 @@ def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction
     total_trades = df['Trade'].sum()
 
     # Calculate average trades per day
+    from datetime import timedelta
     trading_days = (df.index[-1].date() - df.index[0].date()).days + 1
     average_trades_per_day = total_trades / trading_days if trading_days > 0 else 0
 
@@ -49,21 +50,70 @@ def backtest(df, strategy, initial_balance=10000, position_size=0.1, transaction
     }
 
 def generate_trade_list(df, strategy):
+    """
+    Generate a list of all trades (long AND short) for the given strategy.
+
+    Original logic only tracked long entries (signal==1) and exits (signal==-1),
+    ignoring short trades. We have now expanded this to handle short entries and
+    exits as well.
+
+    The trades list will contain a dictionary for each completed trade:
+    {
+        'Entry Time': ...,
+        'Exit Time': ...,
+        'Entry Price': ...,
+        'Exit Price': ...,
+        'Profit (%)': ...
+    }
+    """
     trades = []
     position = 0
     entry_price = 0
     entry_time = None
 
     for index, row in df.iterrows():
-        signal = row[f'{strategy}_Signal']
+        signal = row.get(f'{strategy}_Signal', 0)
 
-        if signal == 1 and position == 0:  # Enter long position
+        # ----------------------------
+        # LONG ENTRY
+        # ----------------------------
+        if signal == 1 and position == 0:
             position = 1
             entry_price = row['price']
             entry_time = index
-        elif signal == -1 and position == 1:  # Exit long position
+        
+        # ----------------------------
+        # LONG EXIT
+        # ----------------------------
+        elif signal == -1 and position == 1:
             exit_price = row['price']
             profit = (exit_price - entry_price) / entry_price
+            trades.append({
+                'Entry Time': entry_time,
+                'Exit Time': index,
+                'Entry Price': entry_price,
+                'Exit Price': exit_price,
+                'Profit (%)': profit * 100
+            })
+            position = 0
+
+        # ----------------------------
+        # SHORT ENTRY (ADDED)
+        # ----------------------------
+        elif signal == -1 and position == 0:
+            # ADDED: logic for opening a short
+            position = -1
+            entry_price = row['price']
+            entry_time = index
+
+        # ----------------------------
+        # SHORT EXIT (ADDED)
+        # ----------------------------
+        elif signal == 1 and position == -1:
+            # ADDED: logic for closing a short
+            exit_price = row['price']
+            # profit for short is (Entry Price - Exit Price) / Entry Price
+            profit = (entry_price - exit_price) / entry_price
             trades.append({
                 'Entry Time': entry_time,
                 'Exit Time': index,

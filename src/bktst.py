@@ -1,4 +1,5 @@
 # src/bktst.py
+
 from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
 import argparse
@@ -337,6 +338,9 @@ def main():
             best_strategy_json = {
                 key: convert_types(value) for key, value in best_strategy_json.items()
             }
+
+            # NEW: Ensure do_live_trades = false
+            best_strategy_json["do_live_trades"] = False
 
             try:
                 with open("best_strategy.json", "w") as f:
