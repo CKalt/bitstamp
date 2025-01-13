@@ -131,7 +131,6 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
         })
         
         if not freq_results.empty:
-            # Find best frequency result
             best_freq_result = freq_results.loc[freq_results['Total_Return'].idxmax()]
             print("\nBest frequency results:")
             print(best_freq_result)
@@ -352,26 +351,25 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
             print(f"Best strategy Total Return: {total_returns[best_strategy]:.2f}%")
 
             # Save the best strategy parameters to a JSON file
-            def convert_types(obj):
-                if isinstance(obj, (np.integer, np.int64)):
-                    return int(obj)
-                elif isinstance(obj, (np.floating, np.float64)):
-                    return float(obj)
-                elif isinstance(obj, np.ndarray):
-                    return obj.tolist()
-                elif isinstance(obj, pd.Timestamp):
-                    return obj.isoformat()
+            def convert_types(value):
+                if isinstance(value, (np.integer, np.int64)):
+                    return int(value)
+                elif isinstance(value, (np.floating, np.float64)):
+                    return float(value)
+                elif isinstance(value, np.ndarray):
+                    return value.tolist()
+                elif isinstance(value, pd.Timestamp):
+                    return value.isoformat()
                 else:
-                    return obj
+                    return value
 
             best_strategy_params_converted = {
                 key: convert_types(value) for key, value in strategies[best_strategy].items()
             }
 
-            # NEW: Determine the last non-zero signal for the best strategy
+            # Determine the last non-zero signal for the best strategy
             df_best = strategy_dfs.get(best_strategy, None)
             if df_best is not None:
-                # Handle naming for signal column
                 if best_strategy == "Bollinger Bands":
                     signal_col = "BB_Signal"
                 else:
@@ -390,7 +388,7 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
                     best_strategy_params_converted["Last_Signal_Timestamp"] = None
                     best_strategy_params_converted["Last_Signal_Action"] = None
 
-            # Also store the last trade's timestamp and price from the final row of df
+            # Also store the last trade's timestamp and price
             if not df.empty:
                 best_strategy_params_converted["Last_Trade_Timestamp"] = int(df['timestamp'].iloc[-1])
                 best_strategy_params_converted["Last_Trade_Price"] = float(df['price'].iloc[-1])
@@ -409,14 +407,20 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
                 print("An error occurred while writing the best strategy parameters to 'best_strategy.json':")
                 traceback.print_exc()
 
-            # ADDED: Write out a full trade list for the best strategy to best_strategy_trades.json
-            #        This includes both long and short trades, as updated in generate_trade_list.
+            # Write out a full trade list for the best strategy to best_strategy_trades.json
             if df_best is not None:
+                # ADDED custom default function to handle pd.Timestamp
+                def convert_timestamps_for_json(obj):
+                    if isinstance(obj, pd.Timestamp):
+                        return obj.isoformat()
+                    return str(obj)
+
                 try:
                     best_strategy_trades = generate_trade_list(df_best, best_strategy)
                     trades_records = best_strategy_trades.to_dict(orient='records')
+                    # Pass our custom converter in 'json.dump'
                     with open('best_strategy_trades.json', 'w') as f:
-                        json.dump(trades_records, f, indent=4)
+                        json.dump(trades_records, f, indent=4, default=convert_timestamps_for_json)
                     print("\nAll trades for best strategy saved to 'best_strategy_trades.json'")
                 except Exception as e:
                     print("An error occurred while writing best_strategy_trades.json:")

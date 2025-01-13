@@ -87,16 +87,17 @@ def calculate_adaptive_vwma(df, base_window=10, price_col='price'):
     
     # Calculate adaptive VWMA
     df['vol_price'] = df[price_col] * df['volume']
-    
     df['VWMA'] = np.nan
+
+    # FIX to avoid SettingWithCopyWarning
     for i in range(len(df)):
         window_size = int(df['adaptive_window'].iloc[i])
         if i >= window_size:
             vol_price_sum = df['vol_price'].iloc[i-window_size+1:i+1].sum()
             volume_sum = df['volume'].iloc[i-window_size+1:i+1].sum()
-            df['VWMA'].iloc[i] = vol_price_sum / volume_sum if volume_sum != 0 else np.nan
+            df.loc[df.index[i], 'VWMA'] = vol_price_sum / volume_sum if volume_sum != 0 else np.nan
         else:
-            df['VWMA'].iloc[i] = np.nan
+            df.loc[df.index[i], 'VWMA'] = np.nan
     
     # Calculate additional signals
     df['VWMA_slope'] = df['VWMA'].pct_change(periods=3)
@@ -139,13 +140,13 @@ def generate_adaptive_vwma_signals(df, vol_scale=1.0):
         elif regime == 2:  # Volatile regime
             # Quick reversals, very strict volume confirmation
             long_conditions = regime_mask & (
-                (df['price_to_vwma'] < -0.02) &  # Oversold
-                (df['VWMA_slope'].shift(1) < 0) & (df['VWMA_slope'] > 0) &  # Slope reversal
+                (df['price_to_vwma'] < -0.02) &
+                (df['VWMA_slope'].shift(1) < 0) & (df['VWMA_slope'] > 0) &
                 (df['volume_ratio'] > df['vol_threshold'])
             )
             short_conditions = regime_mask & (
-                (df['price_to_vwma'] > 0.02) &  # Overbought
-                (df['VWMA_slope'].shift(1) > 0) & (df['VWMA_slope'] < 0) &  # Slope reversal
+                (df['price_to_vwma'] > 0.02) &
+                (df['VWMA_slope'].shift(1) > 0) & (df['VWMA_slope'] < 0) &
                 (df['volume_ratio'] > df['vol_threshold'])
             )
             
@@ -185,10 +186,8 @@ def add_moving_averages(df, short_window, long_window, price_col='price'):
     """
     Adds short and long moving averages to the DataFrame with consistent column names.
     """
-    # Ensure the DataFrame is indexed by datetime
     df = ensure_datetime_index(df)
     
-    # Add moving averages with standardized column names
     df['Short_MA'] = df[price_col].rolling(window=short_window).mean()
     df['Long_MA'] = df[price_col].rolling(window=long_window).mean()
     
