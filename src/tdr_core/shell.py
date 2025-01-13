@@ -13,11 +13,14 @@
 #   2) We preserve all original comments and logic unless needed 
 #      for implementing the short fix.
 #
-#   3) (NEW) We store a record of the theoretical trade in `self.auto_trader.theoretical_trade`
+#   3) We store a record of the theoretical trade in `self.auto_trader.theoretical_trade`
 #      if the system is already in agreement with the user's requested direction.
-#   4) (NEW) In `do_status`, if `trades_executed == 0` and `theoretical_trade` is not None, 
+#   4) In `do_status`, if `trades_executed == 0` and `theoretical_trade` is not None, 
 #      we print additional lines under "Position Details" showing that it is theoretical,
 #      plus the date/time, direction, and the user's specified amount.
+#   5) (NEW) Once an actual trade is executed (see strategies.py), 
+#      `theoretical_trade` is cleared so that the status will only show 
+#      real trade data.
 
 import cmd
 import sys

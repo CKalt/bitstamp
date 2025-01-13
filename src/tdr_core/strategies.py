@@ -16,6 +16,8 @@
 #      initial trade (if no immediate real trade was made).
 #   7) We return `theoretical_trade` in `get_status()`, so the shell can display it 
 #      if `self.trades_executed == 0`.
+#   8) (NEW) When an actual trade is executed, we clear `self.theoretical_trade`
+#      so the “Position Details” won’t show stale or incorrect data.
 
 import pandas as pd
 import numpy as np
@@ -414,6 +416,11 @@ class MACrossoverStrategy:
 
         self.trades_this_hour.append(datetime.utcnow())
         self._log_successful_trade(trade_info)
+
+        # (NEW) Once an actual trade is executed, clear any leftover theoretical trade.
+        if self.theoretical_trade is not None:
+            self.logger.debug("Clearing theoretical trade because an actual trade occurred.")
+            self.theoretical_trade = None
 
     def update_balance(self, trade_type, fill_price, fill_btc):
         """
