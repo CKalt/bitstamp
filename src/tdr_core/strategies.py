@@ -3,17 +3,19 @@
 # ----------------------------------------------------------------------------
 # CHANGES MADE:
 #   1) Introduced position-based cost-basis tracking to fix the "entry price" and 
-#      "unrealized PnL" inaccuracies in status.
+#      "unrealized PnL" inaccuracies in status. (Already existed previously)
 #   2) Split trade logging into 'trades.json' (for live mode) vs. 
-#      'non-live-trades.json' (for dry-run).
+#      'non-live-trades.json' (for dry-run). (Already existed previously)
 #   3) Marked changes with (CHANGED) / (NEW).
 #   4) Preserved all original comments and logic except where necessary to 
 #      incorporate cost-basis logic.
 #   5) (ADDED) In get_status(), now handle the short position block so that
 #      the 'entry_price', 'short size (BTC)', 'USD Held', and 'unrealized_pnl' 
-#      are properly calculated when self.position == -1.
-#
-# ----------------------------------------------------------------------------
+#      are properly calculated when self.position == -1. (Already existed previously)
+#   6) (NEW) We added `self.theoretical_trade` to store info on a theoretical
+#      initial trade (if no immediate real trade was made).
+#   7) We return `theoretical_trade` in `get_status()`, so the shell can display it 
+#      if `self.trades_executed == 0`.
 
 import pandas as pd
 import numpy as np
@@ -118,13 +120,13 @@ class MACrossoverStrategy:
 
         self.trades_this_hour = []
 
-        # (CHANGED) Removed `self.initial_fill_price = 0.0`. 
-        #           We'll track cost basis more accurately (below).
-
         # (NEW) Fields for cost-basis tracking (averaged if multiple partial buys):
         #       This helps accurately compute entry price & PnL.
         self.position_cost_basis = 0.0   # total USD spent if long
         self.position_size       = 0.0   # total BTC in the open position
+
+        # (NEW) For storing the initial theoretical trade if no real trade is triggered.
+        self.theoretical_trade = None
 
         # Register real-time callback
         data_manager.add_trade_observer(self.check_instant_signal)
@@ -160,8 +162,6 @@ class MACrossoverStrategy:
         if self.trade_log and not self.live_trading:
             try:
                 file_path = os.path.abspath(self.trade_log_file)
-                # (CHANGED) We are now using `self.trade_log_file` which 
-                #           is 'non-live-trades.json' if not in live_trading.
                 with open(file_path, 'w') as f:
                     json.dump([t.to_dict() for t in self.trade_log], f, indent=2)
                 self.logger.info(f"Trades logged to '{file_path}'")
@@ -367,7 +367,6 @@ class MACrossoverStrategy:
         btc_approx = available_usd / (price * (1 + self.fee_percentage))
         return round(btc_approx, 8)
 
-    # (CHANGED) execute_trade calls update_balance to handle cost basis
     def execute_trade(self, trade_type, price, timestamp, signal_timestamp, trade_btc):
         """
         Execute a single trade. Note that daily-limit checking and incrementing
@@ -416,7 +415,6 @@ class MACrossoverStrategy:
         self.trades_this_hour.append(datetime.utcnow())
         self._log_successful_trade(trade_info)
 
-    # (CHANGED) This now includes cost basis logic for the current position.
     def update_balance(self, trade_type, fill_price, fill_btc):
         """
         Update balance after a trade is executed (including fees and P&L).
@@ -445,8 +443,6 @@ class MACrossoverStrategy:
             else:
                 # If we were short (position_size < 0), 
                 # you'd do partial close logic, etc. 
-                # but if your code never does short + buy, 
-                # we keep it minimal.
                 pass
 
             if self.last_trade_price is not None and self.position == -1:
@@ -533,7 +529,8 @@ class MACrossoverStrategy:
         """
         Return a dictionary summarizing the current status of this strategy,
         with a new 'position_info' block to show the current position in USD or BTC.
-        Now also includes cost-basis-based entry price for accurate PnL.
+        Also includes cost-basis-based entry price for accurate PnL.
+        (ADDED) We now also return 'theoretical_trade' if it was set.
         """
         status = {
             'running': self.running,
@@ -560,7 +557,9 @@ class MACrossoverStrategy:
             'total_profit_loss': self.total_profit_loss,
             'average_profit_per_trade': (self.total_profit_loss / self.trades_executed) if self.trades_executed else 0,
             'trade_count_today': self.trade_count_today,
-            'remaining_trades_today': max(0, self.max_trades_per_day - self.trade_count_today)
+            'remaining_trades_today': max(0, self.max_trades_per_day - self.trade_count_today),
+            # (NEW) Theoretical trade info (if any)
+            'theoretical_trade': self.theoretical_trade
         }
 
         if self.last_trade_reason:
@@ -604,8 +603,6 @@ class MACrossoverStrategy:
         status['max_mtm_usd'] = self.max_mtm_usd
         status['min_mtm_usd'] = self.min_mtm_usd
 
-        # (CHANGED) We'll compute average entry price from the cost basis 
-        #           if position_size > 0 (i.e. a long).
         position_info = {
             'current_price': self.data_manager.get_current_price(self.symbol) or 0.0,
             'entry_price': 0.0,
@@ -625,23 +622,14 @@ class MACrossoverStrategy:
             mark_value = self.position_size * cp
             position_info['unrealized_pnl'] = mark_value - cost_basis
 
-        # (ADDED) Now handle short logic so we show correct data in status 
-        # if self.position == -1. 
-        # Replaces the old 'pass' and properly sets entry_price, short size, etc.
         elif self.position == -1 and self.position_size < 0:
-            # For a short, position_size is negative BTC.  position_cost_basis 
-            # holds the "USD proceeds" collected on entry. We'll call it cost_basis.
             avg_entry_price = 0.0
             if abs(self.position_size) > 1e-12:  # avoid division by zero
                 avg_entry_price = self.position_cost_basis / abs(self.position_size)
 
             position_info['entry_price'] = avg_entry_price
-            # Negative BTC means short
             position_info['position_size_btc'] = self.position_size
-            # We might treat position_size_usd as "USD Held" or "Short Proceeds".
             position_info['position_size_usd'] = self.position_cost_basis
-
-            # For a short: unrealized PnL = cost_basis - (current_price * |short_size|)
             mark_value = abs(self.position_size) * cp
             position_info['unrealized_pnl'] = self.position_cost_basis - mark_value
 

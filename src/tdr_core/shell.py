@@ -13,7 +13,11 @@
 #   2) We preserve all original comments and logic unless needed 
 #      for implementing the short fix.
 #
-# ----------------------------------------------------------------------------
+#   3) (NEW) We store a record of the theoretical trade in `self.auto_trader.theoretical_trade`
+#      if the system is already in agreement with the user's requested direction.
+#   4) (NEW) In `do_status`, if `trades_executed == 0` and `theoretical_trade` is not None, 
+#      we print additional lines under "Position Details" showing that it is theoretical,
+#      plus the date/time, direction, and the user's specified amount.
 
 import cmd
 import sys
@@ -538,7 +542,7 @@ class CryptoShell(cmd.Cmd):
         current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
 
         # (CHANGED) If the user starts "long" and hist_position is also long, 
-        # we set cost basis to the current price. That was the previous fix.
+        # we set cost basis to the current price. 
         if desired_position == 1 and hist_position == 1 and current_market_price > 0:
             if self.auto_trader.position_size < 1e-8:  # i.e. 0.0
                 self.auto_trader.position_size = amount_num
@@ -547,27 +551,31 @@ class CryptoShell(cmd.Cmd):
                     f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
                     f"for an initial LONG of {amount_num} BTC at ${current_market_price:.2f}."
                 )
+                # (NEW) Record a theoretical trade since no real trade was triggered
+                self.auto_trader.theoretical_trade = {
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'direction': 'long',
+                    'amount': amount_num,
+                    'theoretical': True
+                }
 
         # (NEW) Symmetrical approach for "short" if hist_position == -1:
-        #   We interpret "X usd short" as: 
-        #   position_size = negative BTC = - (usd / price)
-        #   cost_basis is the total "proceeds" from that short in USD
         if desired_position == -1 and hist_position == -1 and current_market_price > 0:
-            # If the user typed "auto_trade 234462usd short," 
-            # we treat it as if we shorted (234462 / current_market_price) BTC at current_market_price
-            # so position_size is negative that quantity
             short_btc = amount_num / current_market_price
             if self.auto_trader.position_size > -1e-8 and short_btc > 0:
                 self.auto_trader.position_size = - short_btc
-                # If we short short_btc BTC at price p, the cost basis is short_btc * p
-                # (the USD we "collected" from the short).
                 self.auto_trader.position_cost_basis = short_btc * current_market_price
-                # We keep cost_basis positive for convenience, while position_size is negative BTC
-                # Then unrealized PnL is cost_basis - (position_size * current_price).
                 self.logger.info(
                     f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
                     f"for an initial SHORT of {short_btc:.6f} BTC (=-{short_btc:.6f}) at ${current_market_price:.2f}."
                 )
+                # (NEW) Record a theoretical trade
+                self.auto_trader.theoretical_trade = {
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'direction': 'short',
+                    'amount': amount_num,
+                    'theoretical': True
+                }
 
         self.auto_trader.start()
         print(f"Auto-trading started with {balance_str}, position={pos_str}, "
@@ -642,6 +650,15 @@ class CryptoShell(cmd.Cmd):
                 print("  • Neutral position, no open BTC or short.")
             print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
 
+            # (NEW) If no trades have occurred yet but we do have a theoretical trade, show it here.
+            if status['trades_executed'] == 0 and status.get('theoretical_trade'):
+                t = status['theoretical_trade']
+                print(f"\n  This is a theoretical trade (no actual trades yet):")
+                print(f"    • Timestamp:  {t['timestamp']}")
+                print(f"    • Direction:  {t['direction']}")
+                print(f"    • Amount:     {t['amount']}")
+                print(f"    • Theoretical? {t['theoretical']}")
+
             print("\nTrading Statistics:")
             print(f"  • Total Trades: {status['trades_executed']}")
             print(f"  • Profitable Trades: {status['profitable_trades']}")
@@ -649,8 +666,8 @@ class CryptoShell(cmd.Cmd):
 
             if status['trades_executed'] > 0:
                 print(f"  • Avg Profit/Trade: ${status['average_profit_per_trade']:.2f}")
-                print(f"  • Avg Fee/Trade: ${status['average_fee_per_trade']:.2f}")
-                print(f"  • Risk/Reward Ratio: {status['risk_reward_ratio']:.2f}")
+                print(f"  • Avg Fee/Trade: ${status.get('average_fee_per_trade', 0.0):.2f}")
+                print(f"  • Risk/Reward Ratio: {status.get('risk_reward_ratio', 0.0):.2f}")
 
             if status['last_trade']:
                 print("\nLast Trade Info:")
