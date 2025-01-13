@@ -21,6 +21,10 @@
 #   5) (NEW) Once an actual trade is executed (see strategies.py), 
 #      `theoretical_trade` is cleared so that the status will only show 
 #      real trade data.
+#   6) (NEW) If user’s requested position (long/short) does NOT match hist_position, 
+#      we immediately place an actual trade. This fixes the bug where 
+#      “Position Details” remain zero if the system isn’t already aligned with 
+#      the requested direction.
 
 import cmd
 import sys
@@ -544,8 +548,7 @@ class CryptoShell(cmd.Cmd):
 
         current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
 
-        # (CHANGED) If the user starts "long" and hist_position is also long, 
-        # we set cost basis to the current price. 
+        # If user requests "long" AND hist_position also is 1 => theoretical LONG
         if desired_position == 1 and hist_position == 1 and current_market_price > 0:
             if self.auto_trader.position_size < 1e-8:  # i.e. 0.0
                 self.auto_trader.position_size = amount_num
@@ -554,7 +557,6 @@ class CryptoShell(cmd.Cmd):
                     f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
                     f"for an initial LONG of {amount_num} BTC at ${current_market_price:.2f}."
                 )
-                # (NEW) Record a theoretical trade since no real trade was triggered
                 self.auto_trader.theoretical_trade = {
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'direction': 'long',
@@ -562,7 +564,7 @@ class CryptoShell(cmd.Cmd):
                     'theoretical': True
                 }
 
-        # (NEW) Symmetrical approach for "short" if hist_position == -1:
+        # If user requests "short" AND hist_position also is -1 => theoretical SHORT
         if desired_position == -1 and hist_position == -1 and current_market_price > 0:
             short_btc = amount_num / current_market_price
             if self.auto_trader.position_size > -1e-8 and short_btc > 0:
@@ -572,13 +574,42 @@ class CryptoShell(cmd.Cmd):
                     f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
                     f"for an initial SHORT of {short_btc:.6f} BTC (=-{short_btc:.6f}) at ${current_market_price:.2f}."
                 )
-                # (NEW) Record a theoretical trade
                 self.auto_trader.theoretical_trade = {
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'direction': 'short',
                     'amount': amount_num,
                     'theoretical': True
                 }
+
+        # (NEW) Force an immediate real trade if user’s desired position != hist_position.
+        #       This ensures "Position Details" won't be zero.
+        if desired_position == 1 and hist_position != 1 and current_market_price > 0:
+            # We'll buy the user-specified "amount_num / current_price" BTC
+            # so that they end up effectively "long" that USD value in BTC.
+            real_btc = amount_num / current_market_price
+            trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            self.logger.info(f"(auto_trade) Forcing immediate real BUY for {real_btc:.6f} BTC at ${current_market_price:.2f}.")
+            self.auto_trader.execute_trade(
+                "buy",
+                current_market_price,
+                trade_ts,
+                datetime.now(),  # signal_timestamp
+                real_btc
+            )
+
+        elif desired_position == -1 and hist_position != -1 and current_market_price > 0:
+            # We'll short the user-specified "amount_num / current_price" BTC
+            # by placing a SELL for that many BTC from their USD. 
+            real_btc = amount_num / current_market_price
+            trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            self.logger.info(f"(auto_trade) Forcing immediate real SELL for {real_btc:.6f} BTC at ${current_market_price:.2f}.")
+            self.auto_trader.execute_trade(
+                "sell",
+                current_market_price,
+                trade_ts,
+                datetime.now(),  # signal_timestamp
+                real_btc
+            )
 
         self.auto_trader.start()
         print(f"Auto-trading started with {balance_str}, position={pos_str}, "
@@ -711,6 +742,16 @@ class CryptoShell(cmd.Cmd):
             print("━"*50)
         else:
             print("Auto-trading is not running.")
+
+    def do_stop_auto_trade(self, arg):
+        """
+        Stop auto-trading if running.
+        """
+        if self.auto_trader and self.auto_trader.running:
+            self.auto_trader.stop()
+            print("Auto-trading stopped.")
+        else:
+            print("No auto-trading is running.")
 
     def do_quit(self, arg):
         """
