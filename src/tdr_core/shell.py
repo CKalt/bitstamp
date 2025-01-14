@@ -3,12 +3,13 @@
 # FULL FILE PATH: src/tdr_core/shell.py
 # ----------------------------------------------------------------------------
 # CHANGES MADE:
-#   1) Added an optional argument to `do_status()` so that:
-#        - `status` or `status <anything_not_full>` => shows a short version (default).
-#        - `status full` => shows the original long version (the entire block).
-#   2) In both versions, we added a "Direction" line to Position Details.
-#   3) We have preserved all existing comments, logic, and formatting 
-#      except where explicitly needed to accommodate the short/full toggle.
+#   1) The "do_status()" command now checks if the user typed "status long" 
+#      to show the *full* version. Otherwise (including "status" with no arg), 
+#      it shows a *short* version.
+#   2) We have added a “Direction” line in Position Details for both short and long views.
+#   3) We have **restored** the original code that displays "This is a theoretical trade..."
+#      if no real trades have occurred but a theoretical trade exists.
+#   4) All original logic, comments, and structure have been preserved.
 
 import cmd
 import sys
@@ -204,7 +205,7 @@ class CryptoShell(cmd.Cmd):
             'limit_sell': 'limit_sell btcusd 0.001 60000 ioc_order=true',
             'auto_trade': 'auto_trade 2.47btc long',
             'stop_auto_trade': 'stop_auto_trade',
-            'status': 'status [full]',
+            'status': 'status [long]',
             'chart': 'chart btcusd 1H'
         }
 
@@ -606,14 +607,14 @@ class CryptoShell(cmd.Cmd):
 
     def do_status(self, arg):
         """
-        Show status of auto-trading. Usage: status [full]
+        Show status of auto-trading. Usage: status [long]
         
-        By default (status, no argument), we show only a short version:
-          - Position Details with direction 
-        If user types "status full", we show the entire block.
+        By default (no arg or anything not "long"), we show a short version:
+          - Position Details with direction, plus theoretical trade block if relevant.
+        If user types "status long", we show the entire original block.
         """
         sub_arg = arg.strip().lower()
-        show_full = (sub_arg == 'full')
+        show_full = (sub_arg == 'long')
 
         if not self.auto_trader or not self.auto_trader.running:
             print("Auto-trading is not running.")
@@ -641,10 +642,21 @@ class CryptoShell(cmd.Cmd):
             else:
                 print("  • Neutral position, no open BTC or short.")
 
-            print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}\n")
+            print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
+
+            # (RESTORED) The block showing theoretical trade if no real trades yet
+            if status['trades_executed'] == 0 and status.get('theoretical_trade'):
+                t = status['theoretical_trade']
+                print(f"\n  This is a theoretical trade (no actual trades yet):")
+                print(f"    • Timestamp:  {t['timestamp']}")
+                print(f"    • Direction:  {t['direction']}")
+                print(f"    • Amount:     {t['amount']}")
+                print(f"    • Theoretical? {t['theoretical']}")
+
+            print("")
             return
 
-        # Otherwise, show the full (original) status:
+        # Otherwise, show the full (long) status:
         print("\nAuto-Trading Status:")
         print("━"*50)
         print(f"  • Running: {status['running']}")
