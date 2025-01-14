@@ -1,6 +1,7 @@
 /app-tdr.txt
 /app-bktst.txt
 best_strategy.json
+best_strategy_trades.json
 env
 .bitstamp
 .influxdb

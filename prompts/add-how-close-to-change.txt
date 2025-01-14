@@ -1,0 +1,12 @@
+Please analyze this trading system code and suggest ways for including, as part
+of the status command, a description of how close we are to having a trade
+signal. We only implement a ma crossover strategy today (correct me if I'm
+wrong) so you may address your solution for just this strategy as we will be
+adding future strategies that will require a change to this "how close are we"
+description. So your solution should be tailored to expanding for other strategies.
+
+Include this description as part of the "status short" a description for how
+close we are to a change from short to long or a long to short.
+
+
+
