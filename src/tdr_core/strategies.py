@@ -2,22 +2,14 @@
 # FULL FILE PATH: src/tdr_core/strategies.py
 # ----------------------------------------------------------------------------
 # CHANGES MADE:
-#   1) Introduced position-based cost-basis tracking to fix the "entry price" and 
-#      "unrealized PnL" inaccuracies in status. (Already existed previously)
-#   2) Split trade logging into 'trades.json' (for live mode) vs. 
-#      'non-live-trades.json' (for dry-run). (Already existed previously)
-#   3) Marked changes with (CHANGED) / (NEW).
-#   4) Preserved all original comments and logic except where necessary to 
-#      incorporate cost-basis logic.
-#   5) (ADDED) In get_status(), now handle the short position block so that
-#      the 'entry_price', 'short size (BTC)', 'USD Held', and 'unrealized_pnl' 
-#      are properly calculated when self.position == -1. (Already existed previously)
-#   6) (NEW) We added `self.theoretical_trade` to store info on a theoretical
-#      initial trade (if no immediate real trade was made).
-#   7) We return `theoretical_trade` in `get_status()`, so the shell can display it 
-#      if `self.trades_executed == 0`.
-#   8) (NEW) When an actual trade is executed, we clear `self.theoretical_trade`
-#      so the “Position Details” won’t show stale or incorrect data.
+#   1) Introduced position-based cost-basis tracking for accurate entry price & PnL.
+#   2) Distinguish 'trades.json' (live trades) vs 'non-live-trades.json' (dry-run).
+#   3) Return 'theoretical_trade' in get_status() if no real trade executed.
+#   4) Clear self.theoretical_trade after a real trade.
+#   5) (NEW) If live_trading=True, we now append new trades to 'trades.json' in real time
+#      so you don't have to wait for strategy.stop().
+#   6) (NEW) We skip trades if fill_btc < 1e-8, avoiding "zero position" confusion.
+#   7) Preserved all comments and logic unless explicitly changed.
 
 import pandas as pd
 import numpy as np
@@ -25,10 +17,9 @@ import json
 import time
 import logging
 import threading
-import os  # (CHANGED) Added to ensure file I/O for the new non-live trades file
+import os
 from datetime import datetime, timedelta
 
-# We reuse indicators:
 from indicators.technical_indicators import (
     ensure_datetime_index,
     add_moving_averages,
@@ -75,8 +66,7 @@ class MACrossoverStrategy:
         self.live_trading = live_trading
         self.trade_log = []
 
-        # (CHANGED) Decide which trades file to use (live vs. non-live).
-        #           This is to keep real trades separate from the dry-run trades.
+        # Decide which trades file to use (live vs. non-live).
         if self.live_trading:
             self.trade_log_file = 'trades.json'
         else:
@@ -91,19 +81,12 @@ class MACrossoverStrategy:
         self.df_ma = pd.DataFrame()
         self.strategy_start_time = datetime.now()
 
-        # ---------------------------------------------------------------------
-        # Storing the user's "initial BTC balance" and "initial USD balance"
-        # separately. We also keep an internal 'amount' but that is used
-        # for the internal P&L logic.
-        # ---------------------------------------------------------------------
+        # Initial balances for BTC & USD (and legacy "amount" for P&L).
         self.initial_balance_btc = initial_balance_btc
         self.initial_balance_usd = initial_balance_usd
-
-        # For backward-compat with existing P&L logic:
         self.initial_balance = amount
         self.current_balance = amount
 
-        # Actual live/dry-run wallet balances:
         self.balance_btc = initial_balance_btc
         self.balance_usd = initial_balance_usd
 
@@ -122,18 +105,17 @@ class MACrossoverStrategy:
 
         self.trades_this_hour = []
 
-        # (NEW) Fields for cost-basis tracking (averaged if multiple partial buys):
-        #       This helps accurately compute entry price & PnL.
-        self.position_cost_basis = 0.0   # total USD spent if long
-        self.position_size       = 0.0   # total BTC in the open position
+        # Cost basis logic
+        self.position_cost_basis = 0.0
+        self.position_size       = 0.0
 
-        # (NEW) For storing the initial theoretical trade if no real trade is triggered.
+        # For storing an initial theoretical trade if hist_position matches user request
         self.theoretical_trade = None
 
         # Register real-time callback
         data_manager.add_trade_observer(self.check_instant_signal)
 
-        # For staleness detection, etc. (unchanged)
+        # Track staleness detection
         mtm_usd, _ = self.get_mark_to_market_values()
         self.max_mtm_usd = mtm_usd
         self.min_mtm_usd = mtm_usd
@@ -157,16 +139,18 @@ class MACrossoverStrategy:
 
     def stop(self):
         """
-        Stop the strategy loop and (if in dry-run) save trades to file.
+        Stop the strategy loop and, if in dry-run, save trades to file.
+        If in live mode, we assume real trades were appended in real time,
+        but we might still finalize them here if needed.
         """
         self.running = False
         self.logger.info("Strategy loop stopped.")
-        if self.trade_log and not self.live_trading:
+        if not self.live_trading and self.trade_log:
             try:
                 file_path = os.path.abspath(self.trade_log_file)
                 with open(file_path, 'w') as f:
                     json.dump([t.to_dict() for t in self.trade_log], f, indent=2)
-                self.logger.info(f"Trades logged to '{file_path}'")
+                self.logger.info(f"Trades logged to '{file_path}' (dry-run mode).")
             except Exception as e:
                 self.logger.error(f"Failed to write trades: {e}")
 
@@ -207,7 +191,7 @@ class MACrossoverStrategy:
                         self.current_trends = self.get_current_trends(df_ma)
                         self.df_ma = df_ma
 
-                        # Check the signals (crossover logic)
+                        # Check signals (MA crossover)
                         self.check_for_signals(latest_signal, current_price, signal_time)
                     else:
                         self.logger.debug("Not enough data to compute MAs.")
@@ -255,7 +239,7 @@ class MACrossoverStrategy:
 
     def check_instant_signal(self, symbol, price, timestamp, trade_reason):
         """
-        Real-time callback for each new trade. If there's a new crossover, act.
+        Real-time callback for each new trade. If there's a new crossover, act now.
         """
         if not self.running:
             return
@@ -294,11 +278,9 @@ class MACrossoverStrategy:
 
     def check_for_signals(self, latest_signal, current_price, signal_time):
         """
-        If the new MA signal differs from our current position, execute trades.
-        Now also controls the daily trade-limit check, so that multi-part buys
-        only count as a single daily trade.
+        If the new MA signal differs from our current position, place trades.
+        Also checks daily trade-limit; if at max, it skips.
         """
-
         today = datetime.utcnow().date()
         if today != self.current_day:
             self.current_day = today
@@ -311,9 +293,7 @@ class MACrossoverStrategy:
         # If we see a BUY signal
         if latest_signal == 1 and self.position <= 0:
             if self.trade_count_today >= self.max_trades_per_day:
-                self.logger.info(
-                    f"Reached daily trade limit {self.max_trades_per_day}, skipping trade."
-                )
+                self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping trade.")
                 return
 
             self.logger.info(f"Buy signal triggered at {current_price}")
@@ -322,23 +302,19 @@ class MACrossoverStrategy:
             self.buy_in_three_parts(
                 current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time
             )
-
             self.trade_count_today += 1
             self.last_signal_time = signal_time
 
         # If we see a SELL signal
         elif latest_signal == -1 and self.position >= 0:
             if self.trade_count_today >= self.max_trades_per_day:
-                self.logger.info(
-                    f"Reached daily trade limit {self.max_trades_per_day}, skipping trade."
-                )
+                self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping trade.")
                 return
 
             self.logger.info(f"Sell signal triggered at {current_price}")
             self.position = -1
             self.last_trade_reason = "MA Crossover: short below long."
-            trade_btc = self.balance_btc
-            trade_btc = round(trade_btc, 8)
+            trade_btc = round(self.balance_btc, 8)
             self.execute_trade(
                 "sell",
                 current_price,
@@ -346,14 +322,12 @@ class MACrossoverStrategy:
                 signal_time,
                 trade_btc
             )
-
             self.trade_count_today += 1
             self.last_signal_time = signal_time
 
     def buy_in_three_parts(self, price, timestamp, signal_time):
         """
-        Simulate a multi-part buy so we can keep within Bitstamp's 90% rule,
-        but still only count as a single daily trade.
+        Simulate a multi-part buy so we can keep within a 90% rule but only 1 daily trade.
         """
         partial_btc_1 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1)
@@ -371,18 +345,21 @@ class MACrossoverStrategy:
 
     def execute_trade(self, trade_type, price, timestamp, signal_timestamp, trade_btc):
         """
-        Execute a single trade. Note that daily-limit checking and incrementing
-        are now handled in check_for_signals() so that multi-part buys only 
-        count as a single daily trade. We *do* still enforce the hourly limit.
+        Execute a single trade. 
+        (NEW) If trade_btc < 1e-8, skip to avoid confusion with 0.0 updates.
+        (NEW) If live_trading=True, append to trades.json immediately.
         """
+        if trade_btc < 1e-8:
+            self.logger.debug(f"Skipping trade because fill_btc is too small: {trade_btc}")
+            return
+
         self._clean_up_hourly_trades()
         max_trades_per_hour = 3
         if len(self.trades_this_hour) >= max_trades_per_hour:
             self.logger.info(f"Reached hourly trade limit {max_trades_per_hour}, skipping trade.")
             return
 
-        data_source = 'historical' if signal_timestamp < self.strategy_start_time else 'live'
-        from tdr_core.trade import Trade  # Local import to avoid circular references
+        from tdr_core.trade import Trade  
         trade_info = Trade(
             trade_type,
             self.symbol,
@@ -390,26 +367,46 @@ class MACrossoverStrategy:
             price,
             datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S'),
             self.last_trade_reason,
-            data_source,
+            'live' if self.live_trading else 'historical',
             signal_timestamp,
             live_trading=self.live_trading
         )
 
-        self.last_trade_data_source = data_source
+        self.last_trade_data_source = trade_info.data_source
         self.last_trade_signal_timestamp = signal_timestamp
 
+        # Place order with the exchange if live.
         if self.live_trading:
-            result = self.order_placer.place_order(
-                f"market-{trade_type}", self.symbol, trade_btc
-            )
+            result = self.order_placer.place_order(f"market-{trade_type}", self.symbol, trade_btc)
             self.logger.info(f"Executed LIVE {trade_type} order: {result}")
             trade_info.order_result = result
             if result.get("status") == "error":
                 self.logger.error(f"Trade failed: {result}")
                 self._log_failed_trade(trade_info)
                 return
+            # Update balances & cost basis
             self.update_balance(trade_type, price, trade_btc)
+
+            # (NEW) Append to trades.json right away for live trades
+            try:
+                file_path = os.path.abspath(self.trade_log_file)
+                if not os.path.exists(file_path):
+                    existing_trades = []
+                else:
+                    with open(file_path, 'r') as f:
+                        try:
+                            existing_trades = json.load(f)
+                        except json.JSONDecodeError:
+                            existing_trades = []
+                existing_trades.append(trade_info.to_dict())
+                with open(file_path, 'w') as f:
+                    json.dump(existing_trades, f, indent=2)
+                self.logger.debug(f"Appended live trade to {self.trade_log_file}")
+            except Exception as e:
+                self.logger.error(f"Failed to write live trade: {e}")
+
         else:
+            # Dry-run => no actual exchange order, just local simulation
             self.logger.info(f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
             self.trade_log.append(trade_info)
             self.update_balance(trade_type, price, trade_btc)
@@ -417,15 +414,15 @@ class MACrossoverStrategy:
         self.trades_this_hour.append(datetime.utcnow())
         self._log_successful_trade(trade_info)
 
-        # (NEW) Once an actual trade is executed, clear any leftover theoretical trade.
+        # If a theoretical trade existed, clear it
         if self.theoretical_trade is not None:
             self.logger.debug("Clearing theoretical trade because an actual trade occurred.")
             self.theoretical_trade = None
 
     def update_balance(self, trade_type, fill_price, fill_btc):
         """
-        Update balance after a trade is executed (including fees and P&L).
-        Now uses cost-basis tracking to fix the entry price & PnL issues.
+        Update balance after a trade, tracking cost basis & partial fills.
+        (NEW) If final fill_btc ends up 0, skip it to avoid no-op.
         """
         fee = self.calculate_fee(fill_btc, fill_price)
         self.total_fees_paid += fee
@@ -434,23 +431,32 @@ class MACrossoverStrategy:
             cost_usd = fill_btc * fill_price
             total_cost_usd = cost_usd + fee
             if total_cost_usd > self.balance_usd:
+                # partial fill correction
                 possible_btc = self.balance_usd / (fill_price * (1 + self.fee_percentage))
                 possible_btc = round(possible_btc, 8)
+                if possible_btc < 1e-8:
+                    self.logger.debug(f"Cannot buy anything with leftover USD. Skipping.")
+                    return
                 fill_btc = possible_btc
                 cost_usd = fill_btc * fill_price
                 fee = self.calculate_fee(fill_btc, fill_price)
                 total_cost_usd = cost_usd + fee
+
             self.balance_usd -= total_cost_usd
             self.balance_btc += fill_btc
 
-            # If we are going long or adding to a long
+            # If going long or adding to existing long
             if self.position_size >= 0:
                 self.position_cost_basis += (fill_btc * fill_price)
                 self.position_size += fill_btc
             else:
-                # If we were short (position_size < 0), 
-                # you'd do partial close logic, etc. 
-                pass
+                # If we were short (position_size<0), partial close logic goes here
+                short_cover_size = min(abs(self.position_size), fill_btc)
+                # reduce existing short
+                ratio = short_cover_size / abs(self.position_size)
+                cost_removed = ratio * self.position_cost_basis
+                self.position_cost_basis -= cost_removed
+                self.position_size += short_cover_size
 
             if self.last_trade_price is not None and self.position == -1:
                 # old code for short -> buy
@@ -467,8 +473,10 @@ class MACrossoverStrategy:
             net_usd = proceeds_usd - fee
 
             if fill_btc > self.balance_btc:
-                fill_btc = self.balance_btc
-                fill_btc = round(fill_btc, 8)
+                fill_btc = round(self.balance_btc, 8)
+                if fill_btc < 1e-8:
+                    self.logger.debug(f"Cannot sell. Zero BTC. Skipping.")
+                    return
                 proceeds_usd = fill_btc * fill_price
                 fee = proceeds_usd * self.fee_percentage
                 net_usd = proceeds_usd - fee
@@ -479,12 +487,11 @@ class MACrossoverStrategy:
             if self.position_size > 0:
                 # partial or full close of a long
                 if fill_btc > self.position_size:
-                    fill_btc = self.position_size
+                    fill_btc = round(self.position_size, 8)
                 ratio = fill_btc / self.position_size
                 cost_removed = ratio * self.position_cost_basis
                 self.position_cost_basis -= cost_removed
                 self.position_size -= fill_btc
-                # If self.position_size is 0, we closed out the position fully.
 
             if self.last_trade_price is not None and self.position == 1:
                 profit = fill_btc * (fill_price - self.last_trade_price) - fee
@@ -496,10 +503,11 @@ class MACrossoverStrategy:
         self.last_trade_price = fill_price
         self.trades_executed += 1
 
-        balance_ratio = self.current_balance / self.initial_balance if self.initial_balance else 1
-        self.current_amount = self.initial_amount * balance_ratio
+        # Recompute 'current_amount' for old P&L logic
+        ratio = self.current_balance / self.initial_balance if self.initial_balance else 1
+        self.current_amount = self.initial_amount * ratio
 
-        # Update the max/min for USD and BTC after each trade
+        # Update max/min USD & BTC
         if self.balance_usd > self.max_balance_usd:
             self.max_balance_usd = self.balance_usd
         if self.balance_usd < self.min_balance_usd:
@@ -509,7 +517,7 @@ class MACrossoverStrategy:
         if self.balance_btc < self.min_balance_btc:
             self.min_balance_btc = self.balance_btc
 
-        # Also update max/min mark-to-market
+        # Update max/min MTM
         mtm_usd, _ = self.get_mark_to_market_values()
         if mtm_usd > self.max_mtm_usd:
             self.max_mtm_usd = mtm_usd
@@ -534,10 +542,8 @@ class MACrossoverStrategy:
 
     def get_status(self):
         """
-        Return a dictionary summarizing the current status of this strategy,
-        with a new 'position_info' block to show the current position in USD or BTC.
-        Also includes cost-basis-based entry price for accurate PnL.
-        (ADDED) We now also return 'theoretical_trade' if it was set.
+        Return a dictionary summarizing the current status, including 'position_info'
+        that shows cost-basis-based entry price, position size, and unrealized PnL.
         """
         status = {
             'running': self.running,
@@ -565,7 +571,6 @@ class MACrossoverStrategy:
             'average_profit_per_trade': (self.total_profit_loss / self.trades_executed) if self.trades_executed else 0,
             'trade_count_today': self.trade_count_today,
             'remaining_trades_today': max(0, self.max_trades_per_day - self.trade_count_today),
-            # (NEW) Theoretical trade info (if any)
             'theoretical_trade': self.theoretical_trade
         }
 
@@ -584,16 +589,18 @@ class MACrossoverStrategy:
                 status['short_ma_momentum'] = 'Increasing' if short_ma_slope > 0 else 'Decreasing'
                 status['long_ma_momentum'] = 'Increasing' if long_ma_slope > 0 else 'Decreasing'
                 status['momentum_alignment'] = (
-                    'Aligned'
-                    if (short_ma_slope > 0 and long_ma_slope > 0)
+                    'Aligned' if (short_ma_slope > 0 and long_ma_slope > 0)
                     or (short_ma_slope < 0 and long_ma_slope < 0)
                     else 'Diverging'
                 )
 
         if self.trades_executed > 0:
             status['average_fee_per_trade'] = self.total_fees_paid / self.trades_executed
-            status['risk_reward_ratio'] = abs(self.total_profit_loss / self.total_fees_paid) if self.total_fees_paid > 0 else 0
+            status['risk_reward_ratio'] = (
+                abs(self.total_profit_loss / self.total_fees_paid) if self.total_fees_paid > 0 else 0
+            )
 
+        # Mark-to-market updates
         mtm_usd, mtm_btc = self.get_mark_to_market_values()
         status['mark_to_market_usd'] = mtm_usd
         status['mark_to_market_btc'] = mtm_btc
@@ -610,6 +617,7 @@ class MACrossoverStrategy:
         status['max_mtm_usd'] = self.max_mtm_usd
         status['min_mtm_usd'] = self.min_mtm_usd
 
+        # Build position_info
         position_info = {
             'current_price': self.data_manager.get_current_price(self.symbol) or 0.0,
             'entry_price': 0.0,
@@ -619,9 +627,8 @@ class MACrossoverStrategy:
         }
 
         cp = position_info['current_price']
-
-        if self.position == 1 and self.position_size > 0:
-            avg_entry_price = self.position_cost_basis / self.position_size if self.position_size else 0.0
+        if self.position == 1 and self.position_size > 1e-8:
+            avg_entry_price = (self.position_cost_basis / self.position_size) if self.position_size else 0.0
             position_info['entry_price'] = avg_entry_price
             position_info['position_size_btc'] = self.position_size
             position_info['position_size_usd'] = self.position_size * cp
@@ -629,11 +636,11 @@ class MACrossoverStrategy:
             mark_value = self.position_size * cp
             position_info['unrealized_pnl'] = mark_value - cost_basis
 
-        elif self.position == -1 and self.position_size < 0:
+        elif self.position == -1 and self.position_size < -1e-8:
+            # For a short, position_size is negative
             avg_entry_price = 0.0
-            if abs(self.position_size) > 1e-12:  # avoid division by zero
+            if abs(self.position_size) > 1e-8:
                 avg_entry_price = self.position_cost_basis / abs(self.position_size)
-
             position_info['entry_price'] = avg_entry_price
             position_info['position_size_btc'] = self.position_size
             position_info['position_size_usd'] = self.position_cost_basis
