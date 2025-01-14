@@ -3,12 +3,12 @@
 # FULL FILE PATH: src/tdr_core/shell.py
 # ----------------------------------------------------------------------------
 # CHANGES MADE:
-#   1) Added an optional argument to `do_status()` so that:
-#        - `status` or `status <anything_not_full>` => shows a short version (default).
-#        - `status full` => shows the original long version (the entire block).
-#   2) In both versions, we added a "Direction" line to Position Details.
-#   3) We have preserved all existing comments, logic, and formatting 
-#      except where explicitly needed to accommodate the short/full toggle.
+#   1) The "do_status()" command now checks if the user typed "status long" 
+#      (instead of "status full") to show the full, original status. 
+#   2) If the user simply types "status" (no arg or anything other than "long"), 
+#      we show the short version with only Position Details.
+#   3) We added a “Direction” line under Position Details in both versions.
+#   4) We have preserved all original logic and comments except where explicitly needed.
 
 import cmd
 import sys
@@ -204,7 +204,7 @@ class CryptoShell(cmd.Cmd):
             'limit_sell': 'limit_sell btcusd 0.001 60000 ioc_order=true',
             'auto_trade': 'auto_trade 2.47btc long',
             'stop_auto_trade': 'stop_auto_trade',
-            'status': 'status [full]',
+            'status': 'status [long]',
             'chart': 'chart btcusd 1H'
         }
 
@@ -606,14 +606,14 @@ class CryptoShell(cmd.Cmd):
 
     def do_status(self, arg):
         """
-        Show status of auto-trading. Usage: status [full]
+        Show status of auto-trading. Usage: status [long]
         
-        By default (status, no argument), we show only a short version:
-          - Position Details with direction 
-        If user types "status full", we show the entire block.
+        By default (no argument or anything not "long"), we show a short version:
+          - Position Details with direction
+        If user types "status long", we show the entire original block.
         """
         sub_arg = arg.strip().lower()
-        show_full = (sub_arg == 'full')
+        show_full = (sub_arg == 'long')
 
         if not self.auto_trader or not self.auto_trader.running:
             print("Auto-trading is not running.")
@@ -644,7 +644,7 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}\n")
             return
 
-        # Otherwise, show the full (original) status:
+        # Otherwise, show the full (long) status:
         print("\nAuto-Trading Status:")
         print("━"*50)
         print(f"  • Running: {status['running']}")
