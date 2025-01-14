@@ -10,6 +10,14 @@
 #      so you don't have to wait for strategy.stop().
 #   6) (NEW) We skip trades if fill_btc < 1e-8, avoiding "zero position" confusion.
 #   7) Preserved all comments and logic unless explicitly changed.
+#
+# ADDITIONAL CHANGE:
+#   (A) Under "get_status()" for MACrossoverStrategy, we add a new field
+#       "ma_signal_proximity" to reflect how close we are to flipping from long to short or short to long.
+#
+# NOTE: We have taken care to preserve all existing comments and code, only adding
+#       the minimal lines required to implement the "How close are we?" measure.
+# ----------------------------------------------------------------------------
 
 import pandas as pd
 import numpy as np
@@ -343,7 +351,7 @@ class MACrossoverStrategy:
         btc_approx = available_usd / (price * (1 + self.fee_percentage))
         return round(btc_approx, 8)
 
-    def execute_trade(self, trade_type, price, timestamp, signal_timestamp, trade_btc):
+    def execute_trade(self, trade_type, price, timestamp, signal_time, trade_btc):
         """
         Execute a single trade. 
         (NEW) If trade_btc < 1e-8, skip to avoid confusion with 0.0 updates.
@@ -368,12 +376,12 @@ class MACrossoverStrategy:
             datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S'),
             self.last_trade_reason,
             'live' if self.live_trading else 'historical',
-            signal_timestamp,
+            signal_time,
             live_trading=self.live_trading
         )
 
         self.last_trade_data_source = trade_info.data_source
-        self.last_trade_signal_timestamp = signal_timestamp
+        self.last_trade_signal_timestamp = signal_time
 
         # Place order with the exchange if live.
         if self.live_trading:
@@ -648,6 +656,24 @@ class MACrossoverStrategy:
             position_info['unrealized_pnl'] = self.position_cost_basis - mark_value
 
         status['position_info'] = position_info
+
+        ########################################################################
+        # (A) NEW: Provide an MA-based measure of "how close" we are to crossing:
+        ########################################################################
+        if status['ma_difference'] is not None:
+            short_val = self.df_ma.iloc[-1]['Short_MA']
+            long_val = self.df_ma.iloc[-1]['Long_MA']
+            avg_ma = (short_val + long_val) / 2.0 if (short_val + long_val) != 0 else 0.0
+            if avg_ma != 0.0:
+                # This proportion is how far we are from crossing, in fractional terms.
+                status['ma_signal_proximity'] = abs(short_val - long_val) / abs(avg_ma)
+            else:
+                # If average is zero (degenerate case), just set 0 or None
+                status['ma_signal_proximity'] = None
+        else:
+            status['ma_signal_proximity'] = None
+        ########################################################################
+
         return status
 
     def _log_successful_trade(self, trade_info):

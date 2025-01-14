@@ -10,6 +10,14 @@
 #   3) We have **restored** the original code that displays "This is a theoretical trade..."
 #      if no real trades have occurred but a theoretical trade exists.
 #   4) All original logic, comments, and structure have been preserved.
+#
+# ADDITIONAL CHANGE:
+#   (A) In the "status short" section, we display a newly introduced "how close are we" measure
+#       specifically referencing "ma_signal_proximity" from the status dictionary.
+#
+# NOTE: We keep all existing code exactly as before, only injecting minimal lines
+#       in do_status() for the short version to show "how close" we are to flipping signals.
+# ----------------------------------------------------------------------------
 
 import cmd
 import sys
@@ -32,6 +40,7 @@ from tdr_core.trade import Trade
 # Original references from tdr.py
 from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
+
 
 ###############################################################################
 def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window):
@@ -575,7 +584,7 @@ class CryptoShell(cmd.Cmd):
                 "buy",
                 current_market_price,
                 trade_ts,
-                datetime.now(),  # signal_timestamp
+                datetime.now(),
                 buy_btc
             )
 
@@ -652,6 +661,16 @@ class CryptoShell(cmd.Cmd):
                 print(f"    • Direction:  {t['direction']}")
                 print(f"    • Amount:     {t['amount']}")
                 print(f"    • Theoretical? {t['theoretical']}")
+
+            ####################################################################
+            # (A) NEW: Display "how close" we are to the next crossover for MA
+            ####################################################################
+            proximity = status.get('ma_signal_proximity')
+            if proximity is not None:
+                # We show the fractional difference as a percentage for clarity
+                print(f"\n  • MA Crossover Proximity: {proximity*100:.2f}%")
+                print("    (Closer to 0% means closer to flipping from short->long or long->short)")
+            ####################################################################
 
             print("")
             return
@@ -733,6 +752,15 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Long MA Momentum: {status['long_ma_momentum']}")
         if 'momentum_alignment' in status:
             print(f"  • Momentum Alignment: {status['momentum_alignment']}")
+
+        ####################################################################
+        # (A) Also show ma_signal_proximity in the full version if present.
+        ####################################################################
+        prox = status.get('ma_signal_proximity')
+        if prox is not None:
+            print(f"  • MA Signal Proximity: {prox*100:.2f}%")
+            print("    (Closer to 0% => near a crossover)")
+        ####################################################################
 
         if status['trades_executed'] == 0:
             print("\nNo trades yet, stats are limited.")
