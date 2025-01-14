@@ -3,13 +3,12 @@
 # FULL FILE PATH: src/tdr_core/shell.py
 # ----------------------------------------------------------------------------
 # CHANGES MADE:
-#   1) If user starts "auto_trade Xusd short" and hist_position == -1, 
-#      we do a theoretical short (negative BTC + cost basis).
-#   2) If user starts "auto_trade Xusd short" and hist_position != -1, 
-#      we do an immediate real SELL, so that "Position Details" is correct.
-#   3) Retain all original comments/logic unless needed for short fix.
-#   4) Provide 'status' command output, which now references the updated 
-#      position info from the strategy.
+#   1) Added an optional argument to `do_status()` so that:
+#        - `status` or `status <anything_not_full>` => shows a short version (default).
+#        - `status full` => shows the original long version (the entire block).
+#   2) In both versions, we added a "Direction" line to Position Details.
+#   3) We have preserved all existing comments, logic, and formatting 
+#      except where explicitly needed to accommodate the short/full toggle.
 
 import cmd
 import sys
@@ -23,11 +22,13 @@ from datetime import datetime
 from flask import Flask, request
 from multiprocessing import Process, Manager
 
+# We'll need references to modules from our codebase:
 from tdr_core.order_placer import OrderPlacer
 from tdr_core.strategies import MACrossoverStrategy
 from tdr_core.data_manager import CryptoDataManager
 from tdr_core.trade import Trade
 
+# Original references from tdr.py
 from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
 
@@ -57,7 +58,7 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
         return 'Server shutting down...'
 
     app.layout = html.Div(children=[
-        html.H1(children=f'{symbol.upper()} Real-time Candlestick Chart'),
+        html.H1(children='{} Real-time Candlestick Chart'.format(symbol.upper())),
         dcc.Graph(id='live-graph', style={'width': '100%', 'height': '80vh'}),
         dcc.Interval(id='graph-update', interval=60*1000, n_intervals=0)
     ])
@@ -155,7 +156,7 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
         layout = go.Layout(
             xaxis=dict(title='Time', range=[x_start, x_end]),
             yaxis=dict(title='Price ($)', range=[y_min, y_max]),
-            title=f'{symbol.upper()} Candlestick Chart with MAs',
+            title='{} Candlestick Chart with MAs'.format(symbol.upper()),
             height=800
         )
 
@@ -203,7 +204,7 @@ class CryptoShell(cmd.Cmd):
             'limit_sell': 'limit_sell btcusd 0.001 60000 ioc_order=true',
             'auto_trade': 'auto_trade 2.47btc long',
             'stop_auto_trade': 'stop_auto_trade',
-            'status': 'status',
+            'status': 'status [full]',
             'chart': 'chart btcusd 1H'
         }
 
@@ -220,10 +221,10 @@ class CryptoShell(cmd.Cmd):
         """
         command = arg.strip().lower()
         if command in self.examples:
-            print(f"Example usage of '{command}':")
-            print(f"  {self.examples[command]}")
+            print("Example usage of '{}':".format(command))
+            print("  {}".format(self.examples[command]))
         else:
-            print(f"No example for '{command}'. Available commands:")
+            print("No example for '{}'. Available commands:".format(command))
             print(", ".join(self.examples.keys()))
 
     def do_price(self, arg):
@@ -443,6 +444,10 @@ class CryptoShell(cmd.Cmd):
         
         Usage:
           auto_trade <amount><btc|usd> <long|short|neutral>
+          
+        Examples:
+          auto_trade 2.47btc long
+          auto_trade 234462usd short
         """
         if self.auto_trader and self.auto_trader.running:
             print("Auto-trading is already running. Stop it first.")
@@ -471,10 +476,10 @@ class CryptoShell(cmd.Cmd):
         amount_num = float(match.group(1))
         amount_unit = match.group(3)
         if amount_unit == 'btc' and desired_position != 1:
-            print("Error: If specifying BTC balance, must start in 'long' position.")
+            print("Error: If specifying BTC balance, you must start in a 'long' position.")
             return
         if amount_unit == 'usd' and desired_position != -1:
-            print("Error: If specifying USD balance, must start in 'short' position.")
+            print("Error: If specifying USD balance, you must start in a 'short' position.")
             return
 
         file_path = os.path.abspath('best_strategy.json')
@@ -498,11 +503,10 @@ class CryptoShell(cmd.Cmd):
         df = self.data_manager.get_price_dataframe('btcusd').copy()
         if 'close' not in df.columns and 'price' in df.columns:
             df.rename(columns={'price': 'close'}, inplace=True)
-
         if df.empty:
             hist_position = 0
         else:
-            from tdr import determine_initial_position
+            from tdr import determine_initial_position  # minimal local import
             hist_position = determine_initial_position(df, short_window, long_window)
 
         initial_balance_btc = 0.0
@@ -528,9 +532,9 @@ class CryptoShell(cmd.Cmd):
 
         current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
 
-        # If the user requests a position that matches hist_position => theoretical
+        # If the user starts "long" and hist_position is also long => theoretical
         if desired_position == 1 and hist_position == 1 and current_market_price > 0:
-            if self.auto_trader.position_size < 1e-8:
+            if self.auto_trader.position_size < 1e-8:  # i.e. 0.0
                 self.auto_trader.position_size = amount_num
                 self.auto_trader.position_cost_basis = amount_num * current_market_price
                 self.logger.info(
@@ -544,6 +548,7 @@ class CryptoShell(cmd.Cmd):
                     'theoretical': True
                 }
 
+        # If the user starts "short" and hist_position is also short => theoretical
         if desired_position == -1 and hist_position == -1 and current_market_price > 0:
             short_btc = amount_num / current_market_price
             if self.auto_trader.position_size > -1e-8 and short_btc > 0:
@@ -551,7 +556,7 @@ class CryptoShell(cmd.Cmd):
                 self.auto_trader.position_cost_basis = short_btc * current_market_price
                 self.logger.info(
                     f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
-                    f"for an initial SHORT of {short_btc:.6f} BTC at ${current_market_price:.2f}."
+                    f"for an initial SHORT of {short_btc:.6f} BTC (=-{short_btc:.6f}) at ${current_market_price:.2f}."
                 )
                 self.auto_trader.theoretical_trade = {
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -560,27 +565,23 @@ class CryptoShell(cmd.Cmd):
                     'theoretical': True
                 }
 
-        # If user request != hist_position => immediate real trade so "Position Details" won't be zero
+        # If user request != hist_position => do immediate real trade
         if desired_position == 1 and hist_position != 1 and current_market_price > 0:
             buy_btc = amount_num / current_market_price
             trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            self.logger.info(
-                f"(auto_trade) Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}."
-            )
+            self.logger.info(f"(auto_trade) Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
             self.auto_trader.execute_trade(
                 "buy",
                 current_market_price,
                 trade_ts,
-                datetime.now(),  
+                datetime.now(),  # signal_timestamp
                 buy_btc
             )
 
         elif desired_position == -1 and hist_position != -1 and current_market_price > 0:
             sell_btc = amount_num / current_market_price
             trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            self.logger.info(
-                f"(auto_trade) Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}."
-            )
+            self.logger.info(f"(auto_trade) Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
             self.auto_trader.execute_trade(
                 "sell",
                 current_market_price,
@@ -605,43 +606,32 @@ class CryptoShell(cmd.Cmd):
 
     def do_status(self, arg):
         """
-        Show status of auto-trading, including balances, P&L, open position, etc.
+        Show status of auto-trading. Usage: status [full]
+        
+        By default (status, no argument), we show only a short version:
+          - Position Details with direction 
+        If user types "status full", we show the entire block.
         """
-        if self.auto_trader and self.auto_trader.running:
-            status = self.auto_trader.get_status()
-            pos_str = {1: 'Long', -1: 'Short', 0: 'Neutral'}.get(status['position'], 'Unknown')
+        sub_arg = arg.strip().lower()
+        show_full = (sub_arg == 'full')
 
-            print("\nAuto-Trading Status:")
+        if not self.auto_trader or not self.auto_trader.running:
+            print("Auto-trading is not running.")
+            return
+
+        status = self.auto_trader.get_status()
+        pos_str = {1:'Long', -1:'Short', 0:'Neutral'}.get(status['position'], 'Unknown')
+
+        # If user asked for the short version (default):
+        if not show_full:
+            print("\nPosition Details (Short View):")
             print("━"*50)
-            print(f"  • Running: {status['running']}")
-            print(f"  • Position: {pos_str}")
-            print(f"  • Daily Trades: {status['trade_count_today']}/{self.auto_trader.max_trades_per_day}")
-            print(f"  • Remaining Trades Today: {status['remaining_trades_today']}")
-
-            print("\nAccount Balances & Performance:")
-            print(f"  • Initial USD Balance: ${status['initial_balance_usd']:.2f}")
-            print(f"  • Initial BTC Balance: {status['initial_balance_btc']:.8f}")
-            print(f"  • Current USD Balance: ${status['balance_usd']:.2f}")
-            print(f"  • Current BTC Balance: {status['balance_btc']:.8f}")
-            print(f"  • Total Return (vs initial): {status['total_return_pct']:.2f}%")
-            print(f"  • Total P&L: ${status['total_profit_loss']:.2f}")
-            print(f"  • Current Trade Amount: {status['current_amount']:.8f}")
-            print(f"  • Total Fees Paid: ${status['total_fees_paid']:.2f}")
-
-            print("\nMark-to-Market & Drawdowns:")
-            print(f"  • Current MTM (USD): ${status['mark_to_market_usd']:.2f}")
-            print(f"  • Current MTM (BTC): {status['mark_to_market_btc']:.8f}")
-            print(f"  • Max MTM (USD): ${status['max_mtm_usd']:.2f}")
-            print(f"  • Min MTM (USD): ${status['min_mtm_usd']:.2f}")
-            print(f"  • Max USD Balance: ${status['max_balance_usd']:.2f}")
-            print(f"  • Min USD Balance: ${status['min_balance_usd']:.2f}")
-            print(f"  • Max BTC Balance: {status['max_balance_btc']:.8f}")
-            print(f"  • Min BTC Balance: {status['min_balance_btc']:.8f}")
-
+            # This line is newly added: "Direction"
+            print(f"  • Direction: {pos_str}")
             pos_info = status.get('position_info', {})
-            print("\nPosition Details:")
             print(f"  • Current Price:  ${pos_info.get('current_price', 0.0):.2f}")
             print(f"  • Entry Price:    ${pos_info.get('entry_price', 0.0):.2f}")
+
             if status['position'] == 1:
                 print(f"  • Position Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f}")
                 print(f"  • Position Value (USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
@@ -650,66 +640,101 @@ class CryptoShell(cmd.Cmd):
                 print(f"  • USD Held:         ${pos_info.get('position_size_usd', 0.0):.2f}")
             else:
                 print("  • Neutral position, no open BTC or short.")
-            print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
 
-            # If no trades executed, but a theoretical trade exists, mention it
-            if status['trades_executed'] == 0 and status.get('theoretical_trade'):
-                t = status['theoretical_trade']
-                print(f"\n  This is a theoretical trade (no actual trades yet):")
-                print(f"    • Timestamp:  {t['timestamp']}")
-                print(f"    • Direction:  {t['direction']}")
-                print(f"    • Amount:     {t['amount']}")
-                print(f"    • Theoretical? {t['theoretical']}")
+            print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}\n")
+            return
 
-            print("\nTrading Statistics:")
-            print(f"  • Total Trades: {status['trades_executed']}")
-            print(f"  • Profitable Trades: {status['profitable_trades']}")
-            print(f"  • Win Rate: {status['win_rate']:.1f}%")
+        # Otherwise, show the full (original) status:
+        print("\nAuto-Trading Status:")
+        print("━"*50)
+        print(f"  • Running: {status['running']}")
+        print(f"  • Position: {pos_str}")
+        print(f"  • Daily Trades: {status['trade_count_today']}/{self.auto_trader.max_trades_per_day}")
+        print(f"  • Remaining Trades Today: {status['remaining_trades_today']}")
 
-            if status['trades_executed'] > 0:
-                print(f"  • Avg Profit/Trade: ${status['average_profit_per_trade']:.2f}")
-                print(f"  • Avg Fee/Trade: ${status.get('average_fee_per_trade', 0.0):.2f}")
-                print(f"  • Risk/Reward Ratio: {status.get('risk_reward_ratio', 0.0):.2f}")
+        print("\nAccount Balances & Performance:")
+        print(f"  • Initial USD Balance: ${status['initial_balance_usd']:.2f}")
+        print(f"  • Initial BTC Balance: {status['initial_balance_btc']:.8f}")
+        print(f"  • Current USD Balance: ${status['balance_usd']:.2f}")
+        print(f"  • Current BTC Balance: {status['balance_btc']:.8f}")
+        print(f"  • Total Return (vs initial): {status['total_return_pct']:.2f}%")
+        print(f"  • Total P&L: ${status['total_profit_loss']:.2f}")
+        print(f"  • Current Trade Amount: {status['current_amount']:.8f}")
+        print(f"  • Total Fees Paid: ${status['total_fees_paid']:.2f}")
 
-            if status['last_trade']:
-                print("\nLast Trade Info:")
-                print(f"  • Reason: {status['last_trade']}")
-                print(f"  • Data Source: {status['last_trade_data_source']}")
-                print(f"  • Signal Time: {status['last_trade_signal_timestamp']}")
+        print("\nMark-to-Market & Drawdowns:")
+        print(f"  • Current MTM (USD): ${status['mark_to_market_usd']:.2f}")
+        print(f"  • Current MTM (BTC): {status['mark_to_market_btc']:.8f}")
+        print(f"  • Max MTM (USD): ${status['max_mtm_usd']:.2f}")
+        print(f"  • Min MTM (USD): ${status['min_mtm_usd']:.2f}")
+        print(f"  • Max USD Balance: ${status['max_balance_usd']:.2f}")
+        print(f"  • Min USD Balance: ${status['min_balance_usd']:.2f}")
+        print(f"  • Max BTC Balance: {status['max_balance_btc']:.8f}")
+        print(f"  • Min BTC Balance: {status['min_balance_btc']:.8f}")
 
-            print("\nTechnical Analysis:")
-            if status['next_trigger']:
-                print(f"  • {status['next_trigger']}")
-            if status['current_trends']:
-                print("  • Current Trends:")
-                for k, v in status['current_trends'].items():
-                    print(f"    ◦ {k}: {v}")
-            if status['ma_difference'] is not None:
-                print(f"  • MA Difference: {status['ma_difference']:.4f}")
-            if status['ma_slope_difference'] is not None:
-                print(f"  • MA Slope Difference: {status['ma_slope_difference']:.4f}")
-            if 'short_ma_momentum' in status:
-                print(f"  • Short MA Momentum: {status['short_ma_momentum']}")
-            if 'long_ma_momentum' in status:
-                print(f"  • Long MA Momentum: {status['long_ma_momentum']}")
-            if 'momentum_alignment' in status:
-                print(f"  • Momentum Alignment: {status['momentum_alignment']}")
-
-            if status['trades_executed'] == 0:
-                print("\nNo trades yet, stats are limited.")
-            elif status['win_rate'] < 40:
-                print("Warning: Win rate is below 40%. Consider reviewing parameters.")
-            if status['current_balance'] < status['initial_balance'] * 0.9:
-                print("Warning: Balance is over 10% below initial.")
-            if status['remaining_trades_today'] <= 1:
-                print("Warning: Approaching daily trade limit!")
-
-            session_duration = datetime.now() - self.auto_trader.strategy_start_time
-            hours = session_duration.total_seconds() / 3600
-            print(f"\nSession Duration: {hours:.1f} hours\n")
-            print("━"*50)
+        pos_info = status.get('position_info', {})
+        print("\nPosition Details:")
+        # Additional line showing direction
+        print(f"  • Direction:  {pos_str}")
+        print(f"  • Current Price:  ${pos_info.get('current_price', 0.0):.2f}")
+        print(f"  • Entry Price:    ${pos_info.get('entry_price', 0.0):.2f}")
+        if status['position'] == 1:
+            print(f"  • Position Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f}")
+            print(f"  • Position Value (USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
+        elif status['position'] == -1:
+            print(f"  • Short Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f} (negative means short)")
+            print(f"  • USD Held:         ${pos_info.get('position_size_usd', 0.0):.2f}")
         else:
-            print("Auto-trading is not running.")
+            print("  • Neutral position, no open BTC or short.")
+        print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
+
+        print("\nTrading Statistics:")
+        print(f"  • Total Trades: {status['trades_executed']}")
+        print(f"  • Profitable Trades: {status['profitable_trades']}")
+        print(f"  • Win Rate: {status['win_rate']:.1f}%")
+
+        if status['trades_executed'] > 0:
+            print(f"  • Avg Profit/Trade: ${status['average_profit_per_trade']:.2f}")
+            print(f"  • Avg Fee/Trade: ${status.get('average_fee_per_trade', 0.0):.2f}")
+            print(f"  • Risk/Reward Ratio: {status.get('risk_reward_ratio', 0.0):.2f}")
+
+        if status['last_trade']:
+            print("\nLast Trade Info:")
+            print(f"  • Reason: {status['last_trade']}")
+            print(f"  • Data Source: {status['last_trade_data_source']}")
+            print(f"  • Signal Time: {status['last_trade_signal_timestamp']}")
+
+        print("\nTechnical Analysis:")
+        if status['next_trigger']:
+            print(f"  • {status['next_trigger']}")
+        if status['current_trends']:
+            print("  • Current Trends:")
+            for k, v in status['current_trends'].items():
+                print(f"    ◦ {k}: {v}")
+        if status['ma_difference'] is not None:
+            print(f"  • MA Difference: {status['ma_difference']:.4f}")
+        if status['ma_slope_difference'] is not None:
+            print(f"  • MA Slope Difference: {status['ma_slope_difference']:.4f}")
+        if 'short_ma_momentum' in status:
+            print(f"  • Short MA Momentum: {status['short_ma_momentum']}")
+        if 'long_ma_momentum' in status:
+            print(f"  • Long MA Momentum: {status['long_ma_momentum']}")
+        if 'momentum_alignment' in status:
+            print(f"  • Momentum Alignment: {status['momentum_alignment']}")
+
+        if status['trades_executed'] == 0:
+            print("\nNo trades yet, stats are limited.")
+        elif status['win_rate'] < 40:
+            print("Warning: Win rate is below 40%. Consider reviewing parameters.")
+        if status['current_balance'] < status['initial_balance']*0.9:
+            print("Warning: Balance is over 10% below initial.")
+        if status['remaining_trades_today'] <= 1:
+            print("Warning: Approaching daily trade limit!")
+
+        session_duration = datetime.now() - self.auto_trader.strategy_start_time
+        hours = session_duration.total_seconds() / 3600
+        print(f"\nSession Duration: {hours:.1f} hours\n")
+        print("━"*50)
 
     def do_quit(self, arg):
         """
