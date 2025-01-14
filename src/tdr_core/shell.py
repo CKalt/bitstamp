@@ -4,11 +4,12 @@
 # ----------------------------------------------------------------------------
 # CHANGES MADE:
 #   1) The "do_status()" command now checks if the user typed "status long" 
-#      (instead of "status full") to show the full, original status. 
-#   2) If the user simply types "status" (no arg or anything other than "long"), 
-#      we show the short version with only Position Details.
-#   3) We added a “Direction” line under Position Details in both versions.
-#   4) We have preserved all original logic and comments except where explicitly needed.
+#      to show the *full* version. Otherwise (including "status" with no arg), 
+#      it shows a *short* version.
+#   2) We have added a “Direction” line in Position Details for both short and long views.
+#   3) We have **restored** the original code that displays "This is a theoretical trade..."
+#      if no real trades have occurred but a theoretical trade exists.
+#   4) All original logic, comments, and structure have been preserved.
 
 import cmd
 import sys
@@ -608,8 +609,8 @@ class CryptoShell(cmd.Cmd):
         """
         Show status of auto-trading. Usage: status [long]
         
-        By default (no argument or anything not "long"), we show a short version:
-          - Position Details with direction
+        By default (no arg or anything not "long"), we show a short version:
+          - Position Details with direction, plus theoretical trade block if relevant.
         If user types "status long", we show the entire original block.
         """
         sub_arg = arg.strip().lower()
@@ -641,7 +642,18 @@ class CryptoShell(cmd.Cmd):
             else:
                 print("  • Neutral position, no open BTC or short.")
 
-            print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}\n")
+            print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
+
+            # (RESTORED) The block showing theoretical trade if no real trades yet
+            if status['trades_executed'] == 0 and status.get('theoretical_trade'):
+                t = status['theoretical_trade']
+                print(f"\n  This is a theoretical trade (no actual trades yet):")
+                print(f"    • Timestamp:  {t['timestamp']}")
+                print(f"    • Direction:  {t['direction']}")
+                print(f"    • Amount:     {t['amount']}")
+                print(f"    • Theoretical? {t['theoretical']}")
+
+            print("")
             return
 
         # Otherwise, show the full (long) status:
