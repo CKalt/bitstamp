@@ -28,3 +28,4 @@ foo*
 
 # Ignore files in any __pycache__ directory
 __pycache__/
+trades.json
