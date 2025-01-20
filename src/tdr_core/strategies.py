@@ -9,14 +9,11 @@
 #   5) (NEW) If live_trading=True, we now append new trades to 'trades.json' in real time
 #      so you don't have to wait for strategy.stop().
 #   6) (NEW) We skip trades if fill_btc < 1e-8, avoiding "zero position" confusion.
-#   7) Preserved all comments and logic unless explicitly changed.
-#
-# ADDITIONAL CHANGE:
-#   (A) Under "get_status()" for MACrossoverStrategy, we add a new field
-#       "ma_signal_proximity" to reflect how close we are to flipping from long to short or short to long.
+#   7) (Previously) Removed partial-fill clamp in the 'sell' side to allow actual short entries.
+#   8) (NEW) For the 'buy' side, we now properly handle leftover BTC if you move from short to a net long.
 #
 # NOTE: We have taken care to preserve all existing comments and code, only adding
-#       the minimal lines required to implement the "How close are we?" measure.
+#       the minimal lines required for short->long leftover logic.
 # ----------------------------------------------------------------------------
 
 import pandas as pd
@@ -432,10 +429,9 @@ class MACrossoverStrategy:
         Update balance after a trade, tracking cost basis & partial fills.
         (NEW) If final fill_btc ends up 0, skip it to avoid no-op.
 
-        IMPORTANT CHANGE: 
-         - REMOVED partial-fill clamping code that prevented opening short positions.
-         - Now, if fill_btc exceeds self.balance_btc, self.balance_btc becomes negative, 
-           thus establishing or increasing a short.
+        REMINDER: 
+         - We have removed partial-fill clamp on the 'sell' side to allow short entries.
+         - We also fix leftover logic on the 'buy' side so going from short->long updates position_size properly.
         """
         fee = self.calculate_fee(fill_btc, fill_price)
         self.total_fees_paid += fee
@@ -462,13 +458,21 @@ class MACrossoverStrategy:
             if self.position_size >= 0:
                 self.position_cost_basis += (fill_btc * fill_price)
                 self.position_size += fill_btc
+
             else:
-                # If we were short (position_size<0), partial close logic for short 
+                # If we were short (position_size<0), partial close logic
                 short_cover_size = min(abs(self.position_size), fill_btc)
                 ratio = short_cover_size / abs(self.position_size)
                 cost_removed = ratio * self.position_cost_basis
                 self.position_cost_basis -= cost_removed
                 self.position_size += short_cover_size
+
+                # (NEW) If the buy exceeded what's needed to close the short, leftover becomes a new long
+                leftover_btc_for_long = fill_btc - short_cover_size
+                if leftover_btc_for_long > 1e-8:
+                    # Now we add that leftover portion as a new positive position
+                    self.position_size += leftover_btc_for_long
+                    self.position_cost_basis += leftover_btc_for_long * fill_price
 
             if self.last_trade_price is not None and self.position == -1:
                 # old code for short -> buy
@@ -479,30 +483,25 @@ class MACrossoverStrategy:
                     self.profitable_trades += 1
 
         elif trade_type == "sell":
-            # Previously, partial fill logic forcibly limited fill_btc to self.balance_btc.
-            # We remove that clamp to allow going short if fill_btc > self.balance_btc.
+            # If fill_btc > current balance, we open or add to a short (balance_btc goes negative).
             proceeds_usd = fill_btc * fill_price
             fee_sell = proceeds_usd * self.fee_percentage
             fee = fee_sell
             net_usd = proceeds_usd - fee
 
-            # If fill_btc > current balance, we open or add to a short (balance_btc goes negative).
-            # Otherwise, we just reduce existing BTC.
             self.balance_btc -= fill_btc
             self.balance_usd += net_usd
 
-            # Update cost basis for partial close or new short
             if self.position_size > 0:
                 # partial or full close of a long
                 if fill_btc > self.position_size:
                     # going from long to short
-                    # remove entire long cost first
                     fill_btc_for_long = self.position_size
-                    ratio = 1.0  # we are fully closing that long portion
+                    ratio = 1.0  # fully closing that long portion
                     cost_removed = self.position_cost_basis
                     self.position_cost_basis -= cost_removed
                     self.position_size -= fill_btc_for_long
-                    # now leftover portion is new short
+                    # leftover portion is new short
                     leftover_btc_for_short = fill_btc - fill_btc_for_long
                     if leftover_btc_for_short > 1e-8:
                         self.position_size -= leftover_btc_for_short
@@ -516,7 +515,6 @@ class MACrossoverStrategy:
 
             else:
                 # We were neutral or already short => add to short
-                # If we had no short, position_size=0 => purely new short
                 self.position_size -= fill_btc
                 self.position_cost_basis += (fill_btc * fill_price)
 
@@ -677,17 +675,15 @@ class MACrossoverStrategy:
         status['position_info'] = position_info
 
         ########################################################################
-        # (A) NEW: Provide an MA-based measure of "how close" we are to crossing:
+        # (A) Provide an MA-based measure of "how close" we are to crossing:
         ########################################################################
         if status['ma_difference'] is not None:
             short_val = self.df_ma.iloc[-1]['Short_MA']
             long_val = self.df_ma.iloc[-1]['Long_MA']
             avg_ma = (short_val + long_val) / 2.0 if (short_val + long_val) != 0 else 0.0
             if avg_ma != 0.0:
-                # This proportion is how far we are from crossing, in fractional terms.
                 status['ma_signal_proximity'] = abs(short_val - long_val) / abs(avg_ma)
             else:
-                # If average is zero (degenerate case), just set 0 or None
                 status['ma_signal_proximity'] = None
         else:
             status['ma_signal_proximity'] = None
