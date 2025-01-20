@@ -431,6 +431,11 @@ class MACrossoverStrategy:
         """
         Update balance after a trade, tracking cost basis & partial fills.
         (NEW) If final fill_btc ends up 0, skip it to avoid no-op.
+
+        IMPORTANT CHANGE: 
+         - REMOVED partial-fill clamping code that prevented opening short positions.
+         - Now, if fill_btc exceeds self.balance_btc, self.balance_btc becomes negative, 
+           thus establishing or increasing a short.
         """
         fee = self.calculate_fee(fill_btc, fill_price)
         self.total_fees_paid += fee
@@ -458,9 +463,8 @@ class MACrossoverStrategy:
                 self.position_cost_basis += (fill_btc * fill_price)
                 self.position_size += fill_btc
             else:
-                # If we were short (position_size<0), partial close logic goes here
+                # If we were short (position_size<0), partial close logic for short 
                 short_cover_size = min(abs(self.position_size), fill_btc)
-                # reduce existing short
                 ratio = short_cover_size / abs(self.position_size)
                 cost_removed = ratio * self.position_cost_basis
                 self.position_cost_basis -= cost_removed
@@ -475,31 +479,46 @@ class MACrossoverStrategy:
                     self.profitable_trades += 1
 
         elif trade_type == "sell":
+            # Previously, partial fill logic forcibly limited fill_btc to self.balance_btc.
+            # We remove that clamp to allow going short if fill_btc > self.balance_btc.
             proceeds_usd = fill_btc * fill_price
             fee_sell = proceeds_usd * self.fee_percentage
             fee = fee_sell
             net_usd = proceeds_usd - fee
 
-            if fill_btc > self.balance_btc:
-                fill_btc = round(self.balance_btc, 8)
-                if fill_btc < 1e-8:
-                    self.logger.debug(f"Cannot sell. Zero BTC. Skipping.")
-                    return
-                proceeds_usd = fill_btc * fill_price
-                fee = proceeds_usd * self.fee_percentage
-                net_usd = proceeds_usd - fee
-
+            # If fill_btc > current balance, we open or add to a short (balance_btc goes negative).
+            # Otherwise, we just reduce existing BTC.
             self.balance_btc -= fill_btc
             self.balance_usd += net_usd
 
+            # Update cost basis for partial close or new short
             if self.position_size > 0:
                 # partial or full close of a long
                 if fill_btc > self.position_size:
-                    fill_btc = round(self.position_size, 8)
-                ratio = fill_btc / self.position_size
-                cost_removed = ratio * self.position_cost_basis
-                self.position_cost_basis -= cost_removed
+                    # going from long to short
+                    # remove entire long cost first
+                    fill_btc_for_long = self.position_size
+                    ratio = 1.0  # we are fully closing that long portion
+                    cost_removed = self.position_cost_basis
+                    self.position_cost_basis -= cost_removed
+                    self.position_size -= fill_btc_for_long
+                    # now leftover portion is new short
+                    leftover_btc_for_short = fill_btc - fill_btc_for_long
+                    if leftover_btc_for_short > 1e-8:
+                        self.position_size -= leftover_btc_for_short
+                        self.position_cost_basis += leftover_btc_for_short * fill_price
+                else:
+                    # partial or full flatten only
+                    ratio = fill_btc / self.position_size
+                    cost_removed = ratio * self.position_cost_basis
+                    self.position_cost_basis -= cost_removed
+                    self.position_size -= fill_btc
+
+            else:
+                # We were neutral or already short => add to short
+                # If we had no short, position_size=0 => purely new short
                 self.position_size -= fill_btc
+                self.position_cost_basis += (fill_btc * fill_price)
 
             if self.last_trade_price is not None and self.position == 1:
                 profit = fill_btc * (fill_price - self.last_trade_price) - fee
