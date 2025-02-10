@@ -1,0 +1,37 @@
+Below are two related python projects that share code so that we can both back test using crypto trading strategies src/bktst.py and the auto trade them using src/tdr.py.
+
+What I need to have you do is add code to both so that I may run src/tdr.py for a day or so in dry-run mode using the RSI strategy as configured by this best_strategies.json file:
+
+{
+    "Strategy": "RSI",
+    "RSI_Window": 12,
+    "Overbought": 75,
+    "Oversold": 30,
+    "Final_Balance": 10473.164647966205,
+    "Total_Return": 4.731646479662049,
+    "Total_Trades": 110.0,
+    "Average_Trades_Per_Day": 3.6666666666666665,
+    "Profit_Factor": 1.139023842205612,
+    "Sharpe_Ratio": 0.3650889699289558,
+    "Last_Signal_Timestamp": 1739134800,
+    "Last_Signal_Action": "GO LONG",
+    "Last_Trade_Timestamp": 1739144592,
+    "Last_Trade_Price": 96370.0,
+    "do_live_trades": false
+}
+
+This file happens to be the way a particular RSI trading strategy is given to src/tdr.py for auto trading.  
+
+Please understand we recently added a feature to `src/tdr.py` so that it could process RSI auto_trades instead of what was formerly only MA based auto_trades.  I believe there were bugs introduced to the RSI side that worked better on the MA side thus I would like you to refer to the MA side for confirmation about how the trading should work.  Other than the strategy the actual execution should be the same. Triggered by new price data coming in (which is historically logged in btcusd.log in either case)
+
+
+Now I am concerned about some things  related to the way src/tdr.py seems to be working and I would like for you to discover and perhaps improve the script so that it performs as it should.  In particular, src/tdr.py has a feature so that when we go long on btcusd it breaks the trades into 3 separate trades so that it is not constrained by account balance settings in bit stamp.  Now I have a suspicion that each of these 3 trades a full single for the trades per day count limiter we set. The reason I think this is that I had it running last night and somehow it already said we had hit our limit of 5 trades.  Now if each time we go long this counts as 3 trades and not 1 trade towards this limit this would indeed be a bug.  So thus my desire here is that you set up a logging system when we are auto trading that will allow us to run another process after a day to make sure that the trades were made at the correct time.   
+
+To address this and other concerns I wish to have a new python script src/trade-checker.py that takes in log files (both historic btcusd.log) and trade generated output and sanity checks them after some test duration where signals came in and would have been trading on in a live mode setting.  You can see how important this is because we would need to run in dry-run mode for a day and then have this other script do a sanity check making sure we like what it did. Only once I can show you solid output and confirmation from the trade-checker shall we be happy and ready to try in a non-dry-run mode case. 
+
+Of course when we are in either dry or non-dry we need to be writing out signal trading into a log file so that we may run trade-checker.
+
+This I would like you to design and write trade-checker.py so that it can be run at any time and look over the shoulder of src/tdr.py to make sure we like what it's been doing by looking at the btcusd.log file as well as the trades.json and best_strategy.json whatever other data it needs to check to confirm we like the actions of src/tdr.py.
+
+Here's src/bktst.py:
+
