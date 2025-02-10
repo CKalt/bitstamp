@@ -4,17 +4,22 @@
 # Full File Path: src/tdr_core/shell.py
 #
 # CHANGES (EXPLANATION):
-#   1) We already skip forced trades if hist_position == desired_position 
-#      (for both MA and RSI). However, if they match, we now set the 
-#      'entry price' and 'position_size' as though we actually opened 
-#      the trade (like a "theoretical trade"), so the user sees an 
-#      "Entry Price" in status.
-#   2) We copy the logic from the MA block, which sets 'position_size', 
-#      'position_cost_basis', and 'theoretical_trade' if 
-#      hist_position == desired_position == 1 (long) or == -1 (short).
-#   3) We keep all existing commands (e.g. do_quit, do_exit) 
-#      so the user can exit the shell, and preserve all original code 
-#      and comments. 
+#   1) When the user does "auto_trade <X>usd short", but we skip the forced 
+#      SELL because "we have no BTC" (i.e. user_has_btc() == False), we now 
+#      set a "theoretical short" entry price anyway. This helps the user see 
+#      in 'status' that they are "short" with some cost basis, even though no 
+#      real immediate trade was placed. 
+#   2) This matches the user request: "Please note how I had asked that you set 
+#      the entry price ... if we were already in the correct direction or 
+#      skipping the forced SELL. Then show that in status as a 'theoretical' trade."
+#   3) We only do this in the RSI and MA blocks if desired_position == -1 but 
+#      we skip forcing the SELL due to zero local BTC. Then we do: 
+#         position_size = - short_btc
+#         position_cost_basis = short_btc * current_market_price
+#         theoretical_trade dict
+#      so that the "Entry Price" and "Short Size" appear in status.
+#   4) All existing logic, commands, docstrings remain intact. We just add 
+#      a snippet after we skip the forced SELL to set that "theoretical short." 
 ###############################################################################
 
 import cmd
@@ -38,6 +43,7 @@ from tdr_core.trade import Trade
 # Original references from tdr.py
 from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
+
 
 def determine_rsi_position(df, rsi_window=14, overbought=70, oversold=30):
     """
@@ -352,9 +358,10 @@ class CryptoShell(cmd.Cmd):
         Start auto-trading using the best strategy from best_strategy.json.
         
         If hist_position == desired_position, we skip forcing an immediate trade 
-        but we set the 'entry price' as though we made the trade (theoretical).
-        This covers both short->short or long->long. If short is requested but 
-        the user has zero BTC, we skip forced SELL. 
+        but we also set the cost basis as though we 'theoretically' opened that 
+        position at the current market price. If short is requested but we have 
+        no local BTC, we skip forced SELL but still treat ourselves as short 
+        with a 'theoretical' cost basis. 
         """
         if self.auto_trader and self.auto_trader.running:
             print("Auto-trading is already running. Stop it first.")
@@ -408,6 +415,8 @@ class CryptoShell(cmd.Cmd):
             return False
 
         if strategy_name == 'MA':
+            from tdr import determine_initial_position  # local import
+
             short_window = int(best_strategy_params.get('Short_Window', 12))
             long_window  = int(best_strategy_params.get('Long_Window', 36))
             do_live      = best_strategy_params.get('do_live_trades', False)
@@ -419,7 +428,6 @@ class CryptoShell(cmd.Cmd):
             if df.empty:
                 hist_position = 0
             else:
-                from tdr import determine_initial_position  
                 hist_position = determine_initial_position(df, short_window, long_window)
 
             initial_balance_btc = 0.0
@@ -445,8 +453,9 @@ class CryptoShell(cmd.Cmd):
 
             current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
 
+            # (1) hist_position == desired_position => set theoretical cost basis
+            # (2) otherwise, attempt forced immediate trade if possible
             if desired_position == hist_position:
-                # If already matched, set position_size & cost_basis as if we did trade
                 if desired_position == 1 and current_market_price > 0:
                     if self.auto_trader.position_size < 1e-8:
                         self.auto_trader.position_size = amount_num
@@ -492,7 +501,16 @@ class CryptoShell(cmd.Cmd):
                     )
                 elif desired_position == -1 and hist_position != -1 and current_market_price > 0:
                     if not user_has_btc():
-                        self.logger.info("(auto_trade) MA: We have no BTC to sell, skipping forced SELL.")
+                        self.logger.info("(auto_trade) MA: We have no BTC to sell, skipping forced SELL. Setting theoretical short anyway.")
+                        short_btc = amount_num / current_market_price
+                        self.auto_trader.position_size = -short_btc
+                        self.auto_trader.position_cost_basis = short_btc * current_market_price
+                        self.auto_trader.theoretical_trade = {
+                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'direction': 'short',
+                            'amount': amount_num,
+                            'theoretical': True
+                        }
                     else:
                         sell_btc = amount_num / current_market_price
                         trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -510,6 +528,8 @@ class CryptoShell(cmd.Cmd):
                   f"MA strategy (Short={short_window}, Long={long_window}), do_live_trades={do_live}")
 
         elif strategy_name == 'RSI':
+            from tdr_core.shell import determine_rsi_position
+
             rsi_window = int(best_strategy_params.get('RSI_Window', 14))
             overbought = float(best_strategy_params.get('Overbought', 70))
             oversold   = float(best_strategy_params.get('Oversold', 30))
@@ -523,7 +543,6 @@ class CryptoShell(cmd.Cmd):
             if df.empty:
                 hist_position = 0
             else:
-                from tdr_core.shell import determine_rsi_position  
                 hist_position = determine_rsi_position(df, rsi_window, overbought, oversold)
 
             initial_balance_btc = 0.0
@@ -551,7 +570,6 @@ class CryptoShell(cmd.Cmd):
             current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
 
             if desired_position == hist_position:
-                # If already matched, set position_size & cost_basis as if we did trade
                 if desired_position == 1 and current_market_price > 0:
                     if self.auto_trader.position_size < 1e-8:
                         self.auto_trader.position_size = amount_num
@@ -597,7 +615,16 @@ class CryptoShell(cmd.Cmd):
                     )
                 elif desired_position == -1 and hist_position != -1 and current_market_price > 0:
                     if not user_has_btc():
-                        self.logger.info("(auto_trade) RSI: We have no BTC to sell, skipping forced SELL.")
+                        self.logger.info("(auto_trade) RSI: We have no BTC to sell, skipping forced SELL. Setting theoretical short anyway.")
+                        short_btc = amount_num / current_market_price
+                        self.auto_trader.position_size = - short_btc
+                        self.auto_trader.position_cost_basis = short_btc * current_market_price
+                        self.auto_trader.theoretical_trade = {
+                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'direction': 'short',
+                            'amount': amount_num,
+                            'theoretical': True
+                        }
                     else:
                         sell_btc = amount_num / current_market_price
                         trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
