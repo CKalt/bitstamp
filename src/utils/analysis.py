@@ -1,4 +1,15 @@
+###############################################################################
 # src/utils/analysis.py
+###############################################################################
+# Full File Path: src/utils/analysis.py
+#
+# CHANGES:
+#   1) We added a new parameter `only_ma=False` to run_trading_system().
+#   2) If only_ma=True, we SKIP all non-MA strategy optimizations (RSI, Bollinger Bands, MACD, RAMM, Adaptive VWMA).
+#   3) We preserve all original code, logic, comments, etc., simply wrapping the existing strategies
+#      in an "if not only_ma" block.
+#   4) All existing logic remains, so if only_ma=False, everything proceeds as before.
+###############################################################################
 
 import pandas as pd
 import numpy as np
@@ -62,8 +73,10 @@ def analyze_data(df):
 
 ###############################################################################
 # CHANGED: Now accepts `config` with constraint settings
+# ALSO CHANGED: now accepts `only_ma=False` to skip other strategies
 ###############################################################################
-def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterations=50, config=None):
+def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterations=50,
+                       config=None, only_ma=False):
     print("Starting run_trading_system function...")
     df = ensure_datetime_index(df)
     print(f"DataFrame shape after ensuring datetime index: {df.shape}")
@@ -165,174 +178,196 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
     else:
         print("No MA Crossover strategies met the criteria.")
 
-    print("Running RSI Strategy...")
-    rsi_results = optimize_rsi_parameters(
-        df_high,
-        range(10, 21, 2),
-        range(65, 81, 5),
-        range(20, 36, 5),
-        min_trades_per_day=min_trades_per_day,
-        max_trades_per_day=max_trades_per_day,
-        min_total_return=min_total_return,
-        min_profit_per_trade=min_profit_per_trade
-    )
-    if not rsi_results.empty:
-        best_rsi = rsi_results.loc[rsi_results['Total_Return'].idxmax()]
-        print("Best RSI parameters:")
-        print(best_rsi)
-        strategies['RSI'] = best_rsi.to_dict()
-        all_results_list.append(rsi_results)
-
-        print("Generating trade list for best RSI strategy...")
-        best_rsi_df = calculate_rsi(df_high.copy(), int(best_rsi['RSI_Window']))
-        best_rsi_df = generate_rsi_signals(best_rsi_df,
-                                           int(best_rsi['Overbought']),
-                                           int(best_rsi['Oversold']))
-        rsi_trades = generate_trade_list(best_rsi_df, 'RSI')
-        rsi_trades.to_csv('rsi_trades.csv', index=False)
-        print("RSI trades saved to 'rsi_trades.csv'")
-
-        strategy_dfs['RSI'] = best_rsi_df
-    else:
-        print("No RSI strategies met the criteria.")
-
-    print("Running Bollinger Bands Strategy...")
-    bb_param_grid = [{'window': w, 'num_std': s}
-                     for w in range(10, 31, 5) for s in [1.5, 2, 2.5]]
-    bb_results = optimize_hft_parameters(
-        df_low,
-        'BB',
-        param_grid=bb_param_grid,
-        min_trades_per_day=min_trades_per_day,
-        max_trades_per_day=max_trades_per_day,
-        min_total_return=min_total_return,
-        min_profit_per_trade=min_profit_per_trade
-    )
-    if not bb_results.empty:
-        best_bb = bb_results.loc[bb_results['Total_Return'].idxmax()]
-        print("Best Bollinger Bands parameters:")
-        print(best_bb)
-        strategies['Bollinger Bands'] = best_bb.to_dict()
-        all_results_list.append(bb_results)
-
-        print("Generating trade list for best Bollinger Bands strategy...")
-        best_bb_df = calculate_bollinger_bands(
-            df_low.copy(),
-            window=int(best_bb['window']),
-            num_std=best_bb['num_std']
+    ###########################################################################
+    # If only_ma is True, then we skip all the other strategies below.
+    ###########################################################################
+    if not only_ma:
+        # ----------------------------------------------------
+        # RSI Strategy
+        # ----------------------------------------------------
+        print("Running RSI Strategy...")
+        rsi_results = optimize_rsi_parameters(
+            df_high,
+            range(10, 21, 2),
+            range(65, 81, 5),
+            range(20, 36, 5),
+            min_trades_per_day=min_trades_per_day,
+            max_trades_per_day=max_trades_per_day,
+            min_total_return=min_total_return,
+            min_profit_per_trade=min_profit_per_trade
         )
-        best_bb_df = generate_bollinger_band_signals(best_bb_df)
-        bb_trades = generate_trade_list(best_bb_df, 'BB')
-        bb_trades.to_csv('bb_trades.csv', index=False)
-        print("Bollinger Bands trades saved to 'bb_trades.csv'")
+        if not rsi_results.empty:
+            best_rsi = rsi_results.loc[rsi_results['Total_Return'].idxmax()]
+            print("Best RSI parameters:")
+            print(best_rsi)
+            strategies['RSI'] = best_rsi.to_dict()
+            all_results_list.append(rsi_results)
 
-        strategy_dfs['Bollinger Bands'] = best_bb_df
-    else:
-        print("No Bollinger Bands strategies met the criteria.")
+            print("Generating trade list for best RSI strategy...")
+            best_rsi_df = calculate_rsi(df_high.copy(), int(best_rsi['RSI_Window']))
+            best_rsi_df = generate_rsi_signals(best_rsi_df,
+                                               int(best_rsi['Overbought']),
+                                               int(best_rsi['Oversold']))
+            rsi_trades = generate_trade_list(best_rsi_df, 'RSI')
+            rsi_trades.to_csv('rsi_trades.csv', index=False)
+            print("RSI trades saved to 'rsi_trades.csv'")
 
-    print("Running MACD Strategy...")
-    macd_param_grid = [{'fast': f, 'slow': s, 'signal': sig}
-                       for f in [6, 12, 18]
-                       for s in [20, 26, 32]
-                       for sig in [7, 9, 11]]
-    macd_results = optimize_hft_parameters(
-        df_low,
-        'MACD',
-        param_grid=macd_param_grid,
-        min_trades_per_day=min_trades_per_day,
-        max_trades_per_day=max_trades_per_day,
-        min_total_return=min_total_return,
-        min_profit_per_trade=min_profit_per_trade
-    )
-    if not macd_results.empty:
-        best_macd = macd_results.loc[macd_results['Total_Return'].idxmax()]
-        print("Best MACD parameters:")
-        print(best_macd)
-        strategies['MACD'] = best_macd.to_dict()
-        all_results_list.append(macd_results)
+            strategy_dfs['RSI'] = best_rsi_df
+        else:
+            print("No RSI strategies met the criteria.")
 
-        print("Generating trade list for best MACD strategy...")
-        best_macd_df = calculate_macd(
-            df_low.copy(),
-            fast=int(best_macd['fast']),
-            slow=int(best_macd['slow']),
-            signal=int(best_macd['signal'])
+        # ----------------------------------------------------
+        # Bollinger Bands Strategy
+        # ----------------------------------------------------
+        print("Running Bollinger Bands Strategy...")
+        bb_param_grid = [{'window': w, 'num_std': s}
+                         for w in range(10, 31, 5) for s in [1.5, 2, 2.5]]
+        bb_results = optimize_hft_parameters(
+            df_low,
+            'BB',
+            param_grid=bb_param_grid,
+            min_trades_per_day=min_trades_per_day,
+            max_trades_per_day=max_trades_per_day,
+            min_total_return=min_total_return,
+            min_profit_per_trade=min_profit_per_trade
         )
-        best_macd_df = generate_macd_signals(best_macd_df)
-        macd_trades = generate_trade_list(best_macd_df, 'MACD')
-        macd_trades.to_csv('macd_trades.csv', index=False)
-        print("MACD trades saved to 'macd_trades.csv'")
+        if not bb_results.empty:
+            best_bb = bb_results.loc[bb_results['Total_Return'].idxmax()]
+            print("Best Bollinger Bands parameters:")
+            print(best_bb)
+            strategies['Bollinger Bands'] = best_bb.to_dict()
+            all_results_list.append(bb_results)
 
-        strategy_dfs['MACD'] = best_macd_df
-    else:
-        print("No MACD strategies met the criteria.")
+            print("Generating trade list for best Bollinger Bands strategy...")
+            best_bb_df = calculate_bollinger_bands(
+                df_low.copy(),
+                window=int(best_bb['window']),
+                num_std=best_bb['num_std']
+            )
+            best_bb_df = generate_bollinger_band_signals(best_bb_df)
+            bb_trades = generate_trade_list(best_bb_df, 'BB')
+            bb_trades.to_csv('bb_trades.csv', index=False)
+            print("Bollinger Bands trades saved to 'bb_trades.csv'")
 
-    print("Running RAMM Strategy...")
-    ramm_results = optimize_ramm_parameters(
-        df_high,
-        max_iterations=max_iterations,
-        min_trades_per_day=min_trades_per_day,
-        max_trades_per_day=max_trades_per_day,
-        min_total_return=min_total_return,
-        min_profit_per_trade=min_profit_per_trade
-    )
-    if not ramm_results.empty:
-        best_ramm = ramm_results.loc[ramm_results['Total_Return'].idxmax()]
-        print("Best RAMM parameters:")
-        print(best_ramm)
-        strategies['RAMM'] = best_ramm.to_dict()
-        all_results_list.append(ramm_results)
+            strategy_dfs['Bollinger Bands'] = best_bb_df
+        else:
+            print("No Bollinger Bands strategies met the criteria.")
 
-        print("Generating trade list for best RAMM strategy...")
-        best_ramm_df = calculate_ramm_signals(
-            df_high.copy(),
-            ma_short=int(best_ramm['MA_Short']),
-            ma_long=int(best_ramm['MA_Long']),
-            rsi_period=int(best_ramm['RSI_Period']),
-            rsi_ob=int(best_ramm['RSI_Overbought']),
-            rsi_os=int(best_ramm['RSI_Oversold']),
-            regime_lookback=int(best_ramm['Regime_Lookback'])
+        # ----------------------------------------------------
+        # MACD Strategy
+        # ----------------------------------------------------
+        print("Running MACD Strategy...")
+        macd_param_grid = [{'fast': f, 'slow': s, 'signal': sig}
+                           for f in [6, 12, 18]
+                           for s in [20, 26, 32]
+                           for sig in [7, 9, 11]]
+        macd_results = optimize_hft_parameters(
+            df_low,
+            'MACD',
+            param_grid=macd_param_grid,
+            min_trades_per_day=min_trades_per_day,
+            max_trades_per_day=max_trades_per_day,
+            min_total_return=min_total_return,
+            min_profit_per_trade=min_profit_per_trade
         )
-        ramm_trades = generate_trade_list(best_ramm_df, 'RAMM')
-        ramm_trades.to_csv('ramm_trades.csv', index=False)
-        print("RAMM trades saved to 'ramm_trades.csv'")
+        if not macd_results.empty:
+            best_macd = macd_results.loc[macd_results['Total_Return'].idxmax()]
+            print("Best MACD parameters:")
+            print(best_macd)
+            strategies['MACD'] = best_macd.to_dict()
+            all_results_list.append(macd_results)
 
-        strategy_dfs['RAMM'] = best_ramm_df
-    else:
-        print("No RAMM strategies met the criteria.")
+            print("Generating trade list for best MACD strategy...")
+            best_macd_df = calculate_macd(
+                df_low.copy(),
+                fast=int(best_macd['fast']),
+                slow=int(best_macd['slow']),
+                signal=int(best_macd['signal'])
+            )
+            best_macd_df = generate_macd_signals(best_macd_df)
+            macd_trades = generate_trade_list(best_macd_df, 'MACD')
+            macd_trades.to_csv('macd_trades.csv', index=False)
+            print("MACD trades saved to 'macd_trades.csv'")
 
-    print("Running Adaptive VWMA Strategy...")
-    adaptive_vwma_results = optimize_adaptive_vwma_parameters(
-        df_high,
-        min_trades_per_day=min_trades_per_day,
-        max_trades_per_day=max_trades_per_day,
-        min_total_return=min_total_return,
-        min_profit_per_trade=min_profit_per_trade
-    )
-    if not adaptive_vwma_results.empty:
-        best_adaptive_vwma = adaptive_vwma_results.loc[adaptive_vwma_results['Total_Return'].idxmax()]
-        print("Best Adaptive VWMA parameters:")
-        print(best_adaptive_vwma)
-        strategies['Adaptive_VWMA'] = best_adaptive_vwma.to_dict()
-        all_results_list.append(adaptive_vwma_results)
+            strategy_dfs['MACD'] = best_macd_df
+        else:
+            print("No MACD strategies met the criteria.")
 
-        print("Generating trade list for best Adaptive VWMA strategy...")
-        best_adaptive_vwma_df = calculate_adaptive_vwma(
-            df_high.copy(),
-            base_window=int(best_adaptive_vwma['Base_Window'])
+        # ----------------------------------------------------
+        # RAMM Strategy
+        # ----------------------------------------------------
+        print("Running RAMM Strategy...")
+        ramm_results = optimize_ramm_parameters(
+            df_high,
+            max_iterations=max_iterations,
+            min_trades_per_day=min_trades_per_day,
+            max_trades_per_day=max_trades_per_day,
+            min_total_return=min_total_return,
+            min_profit_per_trade=min_profit_per_trade
         )
-        best_adaptive_vwma_df = generate_adaptive_vwma_signals(
-            best_adaptive_vwma_df,
-            vol_scale=best_adaptive_vwma['Volume_Scale']
+        if not ramm_results.empty:
+            best_ramm = ramm_results.loc[ramm_results['Total_Return'].idxmax()]
+            print("Best RAMM parameters:")
+            print(best_ramm)
+            strategies['RAMM'] = best_ramm.to_dict()
+            all_results_list.append(ramm_results)
+
+            print("Generating trade list for best RAMM strategy...")
+            best_ramm_df = calculate_ramm_signals(
+                df_high.copy(),
+                ma_short=int(best_ramm['MA_Short']),
+                ma_long=int(best_ramm['MA_Long']),
+                rsi_period=int(best_ramm['RSI_Period']),
+                rsi_ob=int(best_ramm['RSI_Overbought']),
+                rsi_os=int(best_ramm['RSI_Oversold']),
+                regime_lookback=int(best_ramm['Regime_Lookback'])
+            )
+            ramm_trades = generate_trade_list(best_ramm_df, 'RAMM')
+            ramm_trades.to_csv('ramm_trades.csv', index=False)
+            print("RAMM trades saved to 'ramm_trades.csv'")
+
+            strategy_dfs['RAMM'] = best_ramm_df
+        else:
+            print("No RAMM strategies met the criteria.")
+
+        # ----------------------------------------------------
+        # Adaptive VWMA Strategy
+        # ----------------------------------------------------
+        print("Running Adaptive VWMA Strategy...")
+        adaptive_vwma_results = optimize_adaptive_vwma_parameters(
+            df_high,
+            min_trades_per_day=min_trades_per_day,
+            max_trades_per_day=max_trades_per_day,
+            min_total_return=min_total_return,
+            min_profit_per_trade=min_profit_per_trade
         )
-        adaptive_vwma_trades = generate_trade_list(best_adaptive_vwma_df, 'Adaptive_VWMA')
-        adaptive_vwma_trades.to_csv('adaptive_vwma_trades.csv', index=False)
-        print("Adaptive VWMA trades saved to 'adaptive_vwma_trades.csv'")
+        if not adaptive_vwma_results.empty:
+            best_adaptive_vwma = adaptive_vwma_results.loc[adaptive_vwma_results['Total_Return'].idxmax()]
+            print("Best Adaptive VWMA parameters:")
+            print(best_adaptive_vwma)
+            strategies['Adaptive_VWMA'] = best_adaptive_vwma.to_dict()
+            all_results_list.append(adaptive_vwma_results)
 
-        strategy_dfs['Adaptive_VWMA'] = best_adaptive_vwma_df
-    else:
-        print("No Adaptive VWMA strategies met the criteria.")
+            print("Generating trade list for best Adaptive VWMA strategy...")
+            best_adaptive_vwma_df = calculate_adaptive_vwma(
+                df_high.copy(),
+                base_window=int(best_adaptive_vwma['Base_Window'])
+            )
+            best_adaptive_vwma_df = generate_adaptive_vwma_signals(
+                best_adaptive_vwma_df,
+                vol_scale=best_adaptive_vwma['Volume_Scale']
+            )
+            adaptive_vwma_trades = generate_trade_list(best_adaptive_vwma_df, 'Adaptive_VWMA')
+            adaptive_vwma_trades.to_csv('adaptive_vwma_trades.csv', index=False)
+            print("Adaptive VWMA trades saved to 'adaptive_vwma_trades.csv'")
 
+            strategy_dfs['Adaptive_VWMA'] = best_adaptive_vwma_df
+        else:
+            print("No Adaptive VWMA strategies met the criteria.")
+
+    # -------------------------------------------------------------------------
+    # Summaries & best-strategy logic remain the same
+    # -------------------------------------------------------------------------
     if strategies:
         print("Preparing detailed strategy results...")
         print_strategy_results(strategies)

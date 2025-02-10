@@ -1,4 +1,28 @@
+###############################################################################
 # src/bktst.py
+###############################################################################
+# Full File Path: src/bktst.py
+#
+# WHY THIS CHANGE:
+#   The block that defines 'detailed_strategy_results' was purely an example 
+#   (mock data) not linked to the real optimizer output, causing confusion. 
+#   We preserve the original comments and code except we now comment out 
+#   that mock dictionary and skip printing it so as not to mislead.
+#
+# WHAT'S CHANGED:
+#   1) We have commented out the hard-coded 'detailed_strategy_results' block 
+#      to avoid displaying contradictory data after the real optimizer 
+#      finds "No strategies met the criteria."
+#   2) We retain all original code, comments, and structure, 
+#      simply preventing the mock results from printing to console.
+#   3) We keep the previously added --only-ma argument, and the 
+#      fix that prevents KeyError on empty DataFrame.
+#
+# NOTE:
+#   If you'd like to display real, detailed results, consider 
+#   deriving them from the actual 'optimization_results' or 
+#   'strategy_comparison' rather than using a hard-coded block.
+###############################################################################
 
 from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
@@ -54,9 +78,12 @@ def parse_arguments():
     parser.add_argument('--max-iterations', type=int, default=50,
                         help='Maximum number of iterations for parameter optimization')
     parser.add_argument('--high-frequency', type=str, default='1H',
-                        help='Sampling frequency for higher timeframe (e.g., "1H" for hourly)')
+                        help='Sampling frequency for higher timeframe (e.g., ' '"1H" for hourly)')
     parser.add_argument('--low-frequency', type=str, default='15T',
-                        help='Sampling frequency for lower timeframe (e.g., "15T" for 15 minutes)')
+                        help='Sampling frequency for lower timeframe (e.g., ' '"15T" for 15 minutes)')
+    # NEW: Add --only-ma flag
+    parser.add_argument('--only-ma', action='store_true',
+                        help='Only optimize for the Moving Average (MA) strategy.')
     return parser.parse_args()
 
 
@@ -165,12 +192,15 @@ def display_strategy_comparison(comparison_df):
 def display_detailed_strategy_results(strategy_results):
     """
     Display detailed strategy results for each strategy in a table format.
-
-    :param strategy_results: Dictionary of results for each strategy type.
+    
+    NOTE: This was originally referencing a mocked dictionary. We have commented 
+    out that dictionary creation to avoid contradictory data. If you'd like 
+    to show real data, pass in the actual results from your optimizer.
     """
     print("\nDetailed Strategy Results:\n")
     for strategy, results in strategy_results.items():
         print(f"--- {strategy} ---")
+        import pandas as pd
         results_df = pd.DataFrame([results])
         print(results_df.to_markdown(index=False))
         print("\n")
@@ -236,10 +266,20 @@ def main():
             high_frequency=args.high_frequency,
             low_frequency=args.low_frequency,
             max_iterations=args.max_iterations,
-            config=config  # <-- # CHANGED: Passing config
+            config=config,     # <-- # CHANGED: Passing config
+            only_ma=args.only_ma
         )
 
-        # Example: Define detailed strategy results (mocked; replace with actual data from `run_trading_system`)
+        ################################################################
+        # CHANGED: We have commented out the previously mocked data that 
+        # used to show a "fake" strategy result. This prevents confusion 
+        # when real results show "No strategies met the criteria."
+        ################################################################
+
+        # OLD CODE (Commented):
+        """
+        # Example: Define detailed strategy results (mocked; replace with actual 
+        # data from `run_trading_system`)
         detailed_strategy_results = {
             "MA": {
                 "Frequency": args.high_frequency,
@@ -277,21 +317,27 @@ def main():
                 "Profit_Factor": 1.14,
                 "Sharpe_Ratio": 0.18
             }
-        }
+        """
+        
+        # If you'd like to display real results, consider building a dictionary 
+        # from 'optimization_results' or 'strategy_comparison' as needed:
+        detailed_strategy_results = {}
 
-        # Display detailed strategy results
+        # Display detailed strategy results (currently empty unless you populate 
+        # it from your real run)
         print("\n--- Detailed Strategy Results ---")
         display_detailed_strategy_results(detailed_strategy_results)
 
-        # Display strategy comparison
-        print("\n--- Strategy Comparison ---")
-        display_strategy_comparison(strategy_comparison)
+        # If strategy_comparison is non-empty and has "Strategy" column, show it
+        if not strategy_comparison.empty and "Strategy" in strategy_comparison.columns:
+            print("\n--- Strategy Comparison ---")
+            display_strategy_comparison(strategy_comparison)
+            print("\n--- Summary of Best Strategies ---")
+            display_summary(strategy_comparison)
+        else:
+            print("\nNo strategy comparison data to display.")
 
-        # Display summary of best strategies
-        print("\n--- Summary of Best Strategies ---")
-        display_summary(strategy_comparison)
-
-        # Save optimization results to CSV
+        # Save optimization results to CSV (if any exist)
         optimization_results.to_csv("all_strategy_results.csv", index=False)
         print("\nResults saved to 'all_strategy_results.csv'.")
 

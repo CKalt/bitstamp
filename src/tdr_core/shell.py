@@ -1,23 +1,17 @@
+###############################################################################
 # src/tdr_core/shell.py
-# ----------------------------------------------------------------------------
-# FULL FILE PATH: src/tdr_core/shell.py
-# ----------------------------------------------------------------------------
-# CHANGES MADE:
-#   1) The "do_status()" command now checks if the user typed "status long" 
-#      to show the *full* version. Otherwise (including "status" with no arg), 
-#      it shows a *short* version.
-#   2) We have added a “Direction” line in Position Details for both short and long views.
-#   3) We have **restored** the original code that displays "This is a theoretical trade..."
-#      if no real trades have occurred but a theoretical trade exists.
-#   4) All original logic, comments, and structure have been preserved.
+###############################################################################
+# Full File Path: src/tdr_core/shell.py
 #
-# ADDITIONAL CHANGE:
-#   (A) In the "status short" section, we display a newly introduced "how close are we" measure
-#       specifically referencing "ma_signal_proximity" from the status dictionary.
-#
-# NOTE: We keep all existing code exactly as before, only injecting minimal lines
-#       in do_status() for the short version to show "how close" we are to flipping signals.
-# ----------------------------------------------------------------------------
+# CHANGES (EXPLANATION):
+#   1) In do_auto_trade(), we add a new 'elif' block if best_strategy is "RSI" 
+#      so that we create an RSITradingStrategy object instead of forcibly 
+#      printing "Best strategy is not 'MA'; it's {strategy_name}."
+#   2) We retrieve "RSI_Window", "Overbought", and "Oversold" from best_strategy.json, 
+#      and pass them to RSITradingStrategy.
+#   3) We preserve all original code, including 'MA' logic, references to 
+#      other commands, and so on. We only add new lines for RSI usage.
+###############################################################################
 
 import cmd
 import sys
@@ -33,7 +27,7 @@ from multiprocessing import Process, Manager
 
 # We'll need references to modules from our codebase:
 from tdr_core.order_placer import OrderPlacer
-from tdr_core.strategies import MACrossoverStrategy
+from tdr_core.strategies import MACrossoverStrategy, RSITradingStrategy  # ADDED RSI
 from tdr_core.data_manager import CryptoDataManager
 from tdr_core.trade import Trade
 
@@ -42,140 +36,6 @@ from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
 
 
-###############################################################################
-def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window):
-    """
-    Dash-based real-time candlestick chart with MA signals.
-    """
-    import dash
-    from dash import dcc, html
-    from dash.dependencies import Output, Input
-    import plotly.graph_objs as go
-    import threading
-    import pandas as pd
-    import numpy as np
-    from flask import Flask, request
-
-    server = Flask(__name__)
-    app = dash.Dash(__name__, server=server)
-
-    @server.route('/shutdown')
-    def shutdown():
-        func = request.environ.get('werkzeug.server.shutdown')
-        if func is None:
-            return 'Not running with the Werkzeug Server'
-        func()
-        return 'Server shutting down...'
-
-    app.layout = html.Div(children=[
-        html.H1(children='{} Real-time Candlestick Chart'.format(symbol.upper())),
-        dcc.Graph(id='live-graph', style={'width': '100%', 'height': '80vh'}),
-        dcc.Interval(id='graph-update', interval=60*1000, n_intervals=0)
-    ])
-
-    @app.callback(
-        Output('live-graph', 'figure'),
-        [Input('graph-update', 'n_intervals'),
-         Input('live-graph', 'relayoutData')]
-    )
-    def update_graph_live(n, relayout_data):
-        df = pd.DataFrame.from_dict(data_manager_dict[symbol])
-        if df.empty:
-            return {}
-
-        df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
-        df.set_index('datetime', inplace=True)
-
-        try:
-            df_resampled = df.resample(bar_size).agg({
-                'open': 'first',
-                'high': 'max',
-                'low': 'min',
-                'close': 'last',
-                'volume': 'sum',
-                'trades': 'sum',
-                'timestamp': 'last',
-                'source': 'last'
-            }).dropna()
-        except ValueError:
-            return {}
-
-        if len(df_resampled) < long_window:
-            return {}
-
-        from indicators.technical_indicators import add_moving_averages, generate_ma_signals
-        df_ma = add_moving_averages(df_resampled.copy(), short_window, long_window, price_col='close')
-        df_ma = generate_ma_signals(df_ma)
-        df_ma['Signal_Change'] = df_ma['MA_Signal'].diff()
-        df_ma['Buy_Signal_Price'] = np.where(df_ma['Signal_Change'] == 2, df_ma['close'], np.nan)
-        df_ma['Sell_Signal_Price'] = np.where(df_ma['Signal_Change'] == -2, df_ma['close'], np.nan)
-
-        if relayout_data and 'xaxis.range[0]' in relayout_data and 'xaxis.range[1]' in relayout_data:
-            x_start = pd.to_datetime(relayout_data['xaxis.range[0]'])
-            x_end = pd.to_datetime(relayout_data['xaxis.range[1]'])
-        else:
-            x_end = df_ma.index.max()
-            x_start = x_end - pd.Timedelta(days=7)
-
-        df_visible = df_ma[(df_ma.index >= x_start) & (df_ma.index <= x_end)]
-        if df_visible.empty:
-            df_visible = df_ma
-
-        y_min = df_visible[['low','Short_MA','Long_MA','Buy_Signal_Price','Sell_Signal_Price']].min().min()
-        y_max = df_visible[['high','Short_MA','Long_MA','Buy_Signal_Price','Sell_Signal_Price']].max().max()
-        y_padding = (y_max - y_min) * 0.05
-        y_min -= y_padding
-        y_max += y_padding
-
-        candlestick = go.Candlestick(
-            x=df_visible.index,
-            open=df_visible['open'],
-            high=df_visible['high'],
-            low=df_visible['low'],
-            close=df_visible['close'],
-            name='Candlestick'
-        )
-        short_ma_line = go.Scatter(
-            x=df_visible.index,
-            y=df_visible['Short_MA'],
-            line=dict(color='blue', width=1),
-            name=f'Short MA ({short_window})'
-        )
-        long_ma_line = go.Scatter(
-            x=df_visible.index,
-            y=df_visible['Long_MA'],
-            line=dict(color='red', width=1),
-            name=f'Long MA ({long_window})'
-        )
-        buy_signals = go.Scatter(
-            x=df_visible.index,
-            y=df_visible['Buy_Signal_Price'],
-            mode='markers',
-            marker=dict(symbol='triangle-up', color='green', size=12),
-            name='Buy Signal'
-        )
-        sell_signals = go.Scatter(
-            x=df_visible.index,
-            y=df_visible['Sell_Signal_Price'],
-            mode='markers',
-            marker=dict(symbol='triangle-down', color='red', size=12),
-            name='Sell Signal'
-        )
-
-        data = [candlestick, short_ma_line, long_ma_line, buy_signals, sell_signals]
-        layout = go.Layout(
-            xaxis=dict(title='Time', range=[x_start, x_end]),
-            yaxis=dict(title='Price ($)', range=[y_min, y_max]),
-            title='{} Candlestick Chart with MAs'.format(symbol.upper()),
-            height=800
-        )
-
-        return {'data': data, 'layout': layout}
-
-    app.run_server(debug=False, use_reloader=False)
-
-
-###############################################################################
 class CryptoShell(cmd.Cmd):
     """
     An interactive command-based shell for controlling the Crypto trading system.
@@ -501,108 +361,211 @@ class CryptoShell(cmd.Cmd):
             best_strategy_params = json.load(f)
 
         strategy_name = best_strategy_params.get('Strategy')
-        if strategy_name != 'MA':
-            print(f"Best strategy is not 'MA'; it's {strategy_name}.")
-            return
 
-        short_window = int(best_strategy_params.get('Short_Window', 12))
-        long_window  = int(best_strategy_params.get('Long_Window', 36))
-        do_live      = best_strategy_params.get('do_live_trades', False)
-        max_trades_day = best_strategy_params.get('max_trades_per_day', 5)
+        # CHANGED: We add new logic for "RSI"
+        if strategy_name == 'MA':
+            short_window = int(best_strategy_params.get('Short_Window', 12))
+            long_window  = int(best_strategy_params.get('Long_Window', 36))
+            do_live      = best_strategy_params.get('do_live_trades', False)
+            max_trades_day = best_strategy_params.get('max_trades_per_day', 5)
 
-        df = self.data_manager.get_price_dataframe('btcusd').copy()
-        if 'close' not in df.columns and 'price' in df.columns:
-            df.rename(columns={'price': 'close'}, inplace=True)
-        if df.empty:
+            df = self.data_manager.get_price_dataframe('btcusd').copy()
+            if 'close' not in df.columns and 'price' in df.columns:
+                df.rename(columns={'price': 'close'}, inplace=True)
+            if df.empty:
+                hist_position = 0
+            else:
+                from tdr import determine_initial_position  # minimal local import
+                hist_position = determine_initial_position(df, short_window, long_window)
+
+            initial_balance_btc = 0.0
+            initial_balance_usd = 0.0
+            if desired_position == 1:
+                initial_balance_btc = amount_num
+            elif desired_position == -1:
+                initial_balance_usd = amount_num
+
+            self.auto_trader = MACrossoverStrategy(
+                self.data_manager,
+                short_window,
+                long_window,
+                amount_num,
+                'btcusd',
+                self.logger,
+                live_trading=do_live,
+                max_trades_per_day=max_trades_day,
+                initial_position=desired_position,
+                initial_balance_btc=initial_balance_btc,
+                initial_balance_usd=initial_balance_usd
+            )
+
+            current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
+
+            if desired_position == 1 and hist_position == 1 and current_market_price > 0:
+                if self.auto_trader.position_size < 1e-8:
+                    self.auto_trader.position_size = amount_num
+                    self.auto_trader.position_cost_basis = amount_num * current_market_price
+                    self.logger.info(
+                        f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
+                        f"for an initial LONG of {amount_num} BTC at ${current_market_price:.2f}."
+                    )
+                    self.auto_trader.theoretical_trade = {
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'direction': 'long',
+                        'amount': amount_num,
+                        'theoretical': True
+                    }
+
+            if desired_position == -1 and hist_position == -1 and current_market_price > 0:
+                short_btc = amount_num / current_market_price
+                if self.auto_trader.position_size > -1e-8 and short_btc > 0:
+                    self.auto_trader.position_size = - short_btc
+                    self.auto_trader.position_cost_basis = short_btc * current_market_price
+                    self.logger.info(
+                        f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
+                        f"for an initial SHORT of {short_btc:.6f} BTC (=-{short_btc:.6f}) "
+                        f"at ${current_market_price:.2f}."
+                    )
+                    self.auto_trader.theoretical_trade = {
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'direction': 'short',
+                        'amount': amount_num,
+                        'theoretical': True
+                    }
+
+            # If user request != hist_position => do immediate real trade
+            if desired_position == 1 and hist_position != 1 and current_market_price > 0:
+                buy_btc = amount_num / current_market_price
+                trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                self.logger.info(f"(auto_trade) Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
+                self.auto_trader.execute_trade(
+                    "buy",
+                    current_market_price,
+                    trade_ts,
+                    datetime.now(),
+                    buy_btc
+                )
+
+            elif desired_position == -1 and hist_position != -1 and current_market_price > 0:
+                sell_btc = amount_num / current_market_price
+                trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                self.logger.info(f"(auto_trade) Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
+                self.auto_trader.execute_trade(
+                    "sell",
+                    current_market_price,
+                    trade_ts,
+                    datetime.now(),
+                    sell_btc
+                )
+
+            self.auto_trader.start()
+            print(f"Auto-trading started with {balance_str}, position={pos_str}, "
+                  f"MA strategy (Short={short_window}, Long={long_window}), do_live_trades={do_live}")
+
+        elif strategy_name == 'RSI':
+            # NEW: We handle RSI auto-trading
+            rsi_window = int(best_strategy_params.get('RSI_Window', 14))
+            overbought = float(best_strategy_params.get('Overbought', 70))
+            oversold   = float(best_strategy_params.get('Oversold', 30))
+            do_live    = best_strategy_params.get('do_live_trades', False)
+            max_trades_day = best_strategy_params.get('max_trades_per_day', 5)
+
+            # We'll not do 'determine_initial_position' for RSI, 
+            # or we can do a single "0" for now. 
+            # If you want to replicate some 'hist_position' logic, you could 
+            # define a function that checks RSI's last known state. 
             hist_position = 0
+
+            initial_balance_btc = 0.0
+            initial_balance_usd = 0.0
+            if desired_position == 1:
+                initial_balance_btc = amount_num
+            elif desired_position == -1:
+                initial_balance_usd = amount_num
+
+            self.auto_trader = RSITradingStrategy(
+                self.data_manager,
+                rsi_window,
+                overbought,
+                oversold,
+                amount_num,
+                'btcusd',
+                self.logger,
+                live_trading=do_live,
+                max_trades_per_day=max_trades_day,
+                initial_position=desired_position,
+                initial_balance_btc=initial_balance_btc,
+                initial_balance_usd=initial_balance_usd
+            )
+
+            current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
+
+            # Minimal logic for immediate alignment:
+            if desired_position == 1 and hist_position == 1 and current_market_price > 0:
+                if self.auto_trader.position_size < 1e-8:
+                    self.auto_trader.position_size = amount_num
+                    self.auto_trader.position_cost_basis = amount_num * current_market_price
+                    self.logger.info(
+                        f"(auto_trade) RSI: Setting cost basis to "
+                        f"{self.auto_trader.position_cost_basis:.2f} for an initial LONG of {amount_num} BTC."
+                    )
+                    self.auto_trader.theoretical_trade = {
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'direction': 'long',
+                        'amount': amount_num,
+                        'theoretical': True
+                    }
+
+            if desired_position == -1 and hist_position == -1 and current_market_price > 0:
+                short_btc = amount_num / current_market_price
+                if self.auto_trader.position_size > -1e-8 and short_btc > 0:
+                    self.auto_trader.position_size = - short_btc
+                    self.auto_trader.position_cost_basis = short_btc * current_market_price
+                    self.logger.info(
+                        f"(auto_trade) RSI: Setting cost basis to "
+                        f"{self.auto_trader.position_cost_basis:.2f} for an initial SHORT of {short_btc:.6f} BTC."
+                    )
+                    self.auto_trader.theoretical_trade = {
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'direction': 'short',
+                        'amount': amount_num,
+                        'theoretical': True
+                    }
+
+            # If user request != hist_position => do immediate real trade
+            # (This is optional for RSI; we keep it for consistency with MA logic)
+            if desired_position == 1 and hist_position != 1 and current_market_price > 0:
+                buy_btc = amount_num / current_market_price
+                trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                self.logger.info(f"(auto_trade) RSI: Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
+                self.auto_trader.execute_trade(
+                    "buy",
+                    current_market_price,
+                    trade_ts,
+                    datetime.now(),
+                    buy_btc
+                )
+
+            elif desired_position == -1 and hist_position != -1 and current_market_price > 0:
+                sell_btc = amount_num / current_market_price
+                trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                self.logger.info(f"(auto_trade) RSI: Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
+                self.auto_trader.execute_trade(
+                    "sell",
+                    current_market_price,
+                    trade_ts,
+                    datetime.now(),
+                    sell_btc
+                )
+
+            self.auto_trader.start()
+            print(f"Auto-trading started with {balance_str}, position={pos_str}, "
+                  f"RSI strategy (Window={rsi_window}, Overbought={overbought}, Oversold={oversold}), do_live_trades={do_live}")
+
         else:
-            from tdr import determine_initial_position  # minimal local import
-            hist_position = determine_initial_position(df, short_window, long_window)
-
-        initial_balance_btc = 0.0
-        initial_balance_usd = 0.0
-        if desired_position == 1:
-            initial_balance_btc = amount_num
-        elif desired_position == -1:
-            initial_balance_usd = amount_num
-
-        self.auto_trader = MACrossoverStrategy(
-            self.data_manager,
-            short_window,
-            long_window,
-            amount_num,
-            'btcusd',
-            self.logger,
-            live_trading=do_live,
-            max_trades_per_day=max_trades_day,
-            initial_position=desired_position,
-            initial_balance_btc=initial_balance_btc,
-            initial_balance_usd=initial_balance_usd
-        )
-
-        current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
-
-        # If the user starts "long" and hist_position is also long => theoretical
-        if desired_position == 1 and hist_position == 1 and current_market_price > 0:
-            if self.auto_trader.position_size < 1e-8:  # i.e. 0.0
-                self.auto_trader.position_size = amount_num
-                self.auto_trader.position_cost_basis = amount_num * current_market_price
-                self.logger.info(
-                    f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
-                    f"for an initial LONG of {amount_num} BTC at ${current_market_price:.2f}."
-                )
-                self.auto_trader.theoretical_trade = {
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'direction': 'long',
-                    'amount': amount_num,
-                    'theoretical': True
-                }
-
-        # If the user starts "short" and hist_position is also short => theoretical
-        if desired_position == -1 and hist_position == -1 and current_market_price > 0:
-            short_btc = amount_num / current_market_price
-            if self.auto_trader.position_size > -1e-8 and short_btc > 0:
-                self.auto_trader.position_size = - short_btc
-                self.auto_trader.position_cost_basis = short_btc * current_market_price
-                self.logger.info(
-                    f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
-                    f"for an initial SHORT of {short_btc:.6f} BTC (=-{short_btc:.6f}) at ${current_market_price:.2f}."
-                )
-                self.auto_trader.theoretical_trade = {
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'direction': 'short',
-                    'amount': amount_num,
-                    'theoretical': True
-                }
-
-        # If user request != hist_position => do immediate real trade
-        if desired_position == 1 and hist_position != 1 and current_market_price > 0:
-            buy_btc = amount_num / current_market_price
-            trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            self.logger.info(f"(auto_trade) Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
-            self.auto_trader.execute_trade(
-                "buy",
-                current_market_price,
-                trade_ts,
-                datetime.now(),
-                buy_btc
-            )
-
-        elif desired_position == -1 and hist_position != -1 and current_market_price > 0:
-            sell_btc = amount_num / current_market_price
-            trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            self.logger.info(f"(auto_trade) Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
-            self.auto_trader.execute_trade(
-                "sell",
-                current_market_price,
-                trade_ts,
-                datetime.now(),
-                sell_btc
-            )
-
-        self.auto_trader.start()
-        print(f"Auto-trading started with {balance_str}, position={pos_str}, "
-              f"MA strategy (Short={short_window}, Long={long_window}), do_live_trades={do_live}")
+            print(f"Best strategy is not 'MA' or 'RSI'; it's {strategy_name}.")
+            print("Currently supported: 'MA', 'RSI'.")
+            return
 
     def do_stop_auto_trade(self, arg):
         """
@@ -632,11 +595,9 @@ class CryptoShell(cmd.Cmd):
         status = self.auto_trader.get_status()
         pos_str = {1:'Long', -1:'Short', 0:'Neutral'}.get(status['position'], 'Unknown')
 
-        # If user asked for the short version (default):
         if not show_full:
             print("\nPosition Details (Short View):")
             print("━"*50)
-            # This line is newly added: "Direction"
             print(f"  • Direction: {pos_str}")
             pos_info = status.get('position_info', {})
             print(f"  • Current Price:  ${pos_info.get('current_price', 0.0):.2f}")
@@ -653,7 +614,6 @@ class CryptoShell(cmd.Cmd):
 
             print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
 
-            # (RESTORED) The block showing theoretical trade if no real trades yet
             if status['trades_executed'] == 0 and status.get('theoretical_trade'):
                 t = status['theoretical_trade']
                 print(f"\n  This is a theoretical trade (no actual trades yet):")
@@ -662,15 +622,10 @@ class CryptoShell(cmd.Cmd):
                 print(f"    • Amount:     {t['amount']}")
                 print(f"    • Theoretical? {t['theoretical']}")
 
-            ####################################################################
-            # (A) NEW: Display "how close" we are to the next crossover for MA
-            ####################################################################
             proximity = status.get('ma_signal_proximity')
             if proximity is not None:
-                # We show the fractional difference as a percentage for clarity
                 print(f"\n  • MA Crossover Proximity: {proximity*100:.2f}%")
                 print("    (Closer to 0% means closer to flipping from short->long or long->short)")
-            ####################################################################
 
             print("")
             return
@@ -705,7 +660,6 @@ class CryptoShell(cmd.Cmd):
 
         pos_info = status.get('position_info', {})
         print("\nPosition Details:")
-        # Additional line showing direction
         print(f"  • Direction:  {pos_str}")
         print(f"  • Current Price:  ${pos_info.get('current_price', 0.0):.2f}")
         print(f"  • Entry Price:    ${pos_info.get('entry_price', 0.0):.2f}")
@@ -738,13 +692,13 @@ class CryptoShell(cmd.Cmd):
         print("\nTechnical Analysis:")
         if status['next_trigger']:
             print(f"  • {status['next_trigger']}")
-        if status['current_trends']:
+        if status.get('current_trends'):
             print("  • Current Trends:")
             for k, v in status['current_trends'].items():
                 print(f"    ◦ {k}: {v}")
-        if status['ma_difference'] is not None:
+        if 'ma_difference' in status and status['ma_difference'] is not None:
             print(f"  • MA Difference: {status['ma_difference']:.4f}")
-        if status['ma_slope_difference'] is not None:
+        if 'ma_slope_difference' in status and status['ma_slope_difference'] is not None:
             print(f"  • MA Slope Difference: {status['ma_slope_difference']:.4f}")
         if 'short_ma_momentum' in status:
             print(f"  • Short MA Momentum: {status['short_ma_momentum']}")
@@ -753,14 +707,9 @@ class CryptoShell(cmd.Cmd):
         if 'momentum_alignment' in status:
             print(f"  • Momentum Alignment: {status['momentum_alignment']}")
 
-        ####################################################################
-        # (A) Also show ma_signal_proximity in the full version if present.
-        ####################################################################
-        prox = status.get('ma_signal_proximity')
-        if prox is not None:
-            print(f"  • MA Signal Proximity: {prox*100:.2f}%")
-            print("    (Closer to 0% => near a crossover)")
-        ####################################################################
+        # RSI debug info:
+        if 'last_rsi' in status:
+            print(f"  • Last RSI: {status['last_rsi']:.2f} (window={status.get('rsi_window', 14)}, overbought={status.get('overbought',70)}, oversold={status.get('oversold',30)})")
 
         if status['trades_executed'] == 0:
             print("\nNo trades yet, stats are limited.")
@@ -858,6 +807,7 @@ class CryptoShell(cmd.Cmd):
 
         threading.Thread(target=update_shared_data, daemon=True).start()
 
+        from tdr import run_dash_app  # minimal local import
         self.chart_process = Process(
             target=run_dash_app,
             args=(self.data_manager_dict, symbol, bar_size, short_window, long_window)

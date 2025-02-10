@@ -1,4 +1,25 @@
+###############################################################################
 # src/tdr.py
+###############################################################################
+# Full File Path: src/tdr.py
+#
+# CHANGES (EXPLANATION):
+#   1) We introduce RSI auto-trading support so that best_strategy.json 
+#      with "Strategy": "RSI" can be used by the "auto_trade" command.
+#   2) We preserve all existing comments, logic, and code related to the 
+#      MA strategy. We only add new logic in do_auto_trade to handle RSI.
+#   3) For consistency, we read "RSI_Window", "Overbought", "Oversold" 
+#      from best_strategy.json, and construct an RSITradingStrategy 
+#      (see the newly added RSITradingStrategy class in tdr_core/strategies.py).
+#   4) We keep the original references to "MACrossoverStrategy" for "MA" 
+#      and only add an elif block if "Strategy" == "RSI".
+#   5) All original code, comments, and structure remain intact; 
+#      only minimal changes appear for RSI integration.
+#
+# NOTE: You must also see the changes in src/tdr_core/strategies.py 
+#       (shown below) for the RSITradingStrategy class. If that file 
+#       is missing or out-of-date, please request the updated version.
+###############################################################################
 
 #!/usr/bin/env python
 # src/tdr.py
@@ -54,7 +75,7 @@ from tdr_core.data_manager import CryptoDataManager
 from tdr_core.trade import Trade
 from tdr_core.websocket_client import subscribe_to_websocket
 from tdr_core.order_placer import OrderPlacer
-from tdr_core.strategies import MACrossoverStrategy
+from tdr_core.strategies import MACrossoverStrategy, RSITradingStrategy  # ADDED RSITradingStrategy
 from tdr_core.shell import CryptoShell
 
 HIGH_FREQUENCY = '1H'  # Default bar size
