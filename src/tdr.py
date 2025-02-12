@@ -17,8 +17,25 @@
 #      only minimal changes appear for RSI integration.
 #
 # NOTE: You must also see the changes in src/tdr_core/strategies.py 
-#       (shown below) for the RSITradingStrategy class. If that file 
+#       for the RSITradingStrategy class. If that file 
 #       is missing or out-of-date, please request the updated version.
+#
+# ADDITIONAL CHANGES (2025-02-11):
+#   - We fix a suspected bug whereby partial trades (the "buy_in_three_parts"
+#     or "rsi_buy_in_three_parts" steps) were counting multiple times
+#     toward the daily trade limit. Now each group of partial buys is counted
+#     only once per signal.
+#   - We also add a basic "signal event logging" feature so that each time
+#     a new MA or RSI signal triggers a trade, we append a small record
+#     to 'signal_logs.json'. This can later be reviewed by the new
+#     'src/trade-checker.py' script.
+#
+# IMPORTANT CORRECTION:
+#   - The final lines:
+#       if __name__ == '__main__':
+#           set_start_method('spawn')
+#           main()
+#     must remain, as they are needed to run 'main()' when invoked directly.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -75,12 +92,11 @@ from tdr_core.data_manager import CryptoDataManager
 from tdr_core.trade import Trade
 from tdr_core.websocket_client import subscribe_to_websocket
 from tdr_core.order_placer import OrderPlacer
-from tdr_core.strategies import MACrossoverStrategy, RSITradingStrategy  # ADDED RSITradingStrategy
+from tdr_core.strategies import MACrossoverStrategy, RSITradingStrategy
 from tdr_core.shell import CryptoShell
 
 HIGH_FREQUENCY = '1H'  # Default bar size
 STALE_FEED_SECONDS = 120  # If more than 2 minutes pass with no trades, attempt reconnect.
-
 
 def determine_initial_position(df: pd.DataFrame, short_window: int, long_window: int) -> int:
     """
@@ -104,7 +120,6 @@ def determine_initial_position(df: pd.DataFrame, short_window: int, long_window:
     else:
         return 0
 
-
 def run_websocket(url, symbols, data_manager, stop_event):
     """
     Launch a separate event loop to handle multiple subscribe tasks,
@@ -124,7 +139,6 @@ def run_websocket(url, symbols, data_manager, stop_event):
     finally:
         loop.close()
 
-
 def setup_logging(verbose):
     logger = logging.getLogger("CryptoShellLogger")
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
@@ -141,7 +155,6 @@ def setup_logging(verbose):
     logger.addHandler(file_handler)
 
     return logger
-
 
 def main():
     """
@@ -229,7 +242,7 @@ def main():
         if shell.chart_process and shell.chart_process.is_alive():
             shell.stop_dash_app()
 
-
+# IMPORTANT: We do NOT remove these lines!
 if __name__ == '__main__':
     set_start_method('spawn')
     main()

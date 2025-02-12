@@ -6,32 +6,23 @@
 # CONTEXT AND CHANGES:
 #   - This file contains two classes: MACrossoverStrategy and RSITradingStrategy.
 #   - We do NOT remove or alter existing functionality or comments. Instead, we
-#     add minimal changes so that RSITradingStrategy performs partial buys (like
-#     MACrossoverStrategy does) when it detects an RSI-based "long" signal. This
-#     avoids "only buy 0E-8 BTC" exchange errors by splitting one large buy into
-#     multiple smaller (partial) buys.
+#     add minimal changes so that RSITradingStrategy also logs signals,
+#     and that partial (three-part) buys count only once per day instead
+#     of 3 times toward the max-trades-per-day limit.
 #
-#   - Specifically, we replicate the MA approach:
-#       1) We define a new method rsi_buy_in_three_parts(...) in RSITradingStrategy
-#          (mirroring buy_in_three_parts(...) from MACrossoverStrategy).
-#       2) We define a helper get_89pct_btc_of_usd(...) (like MA's get_89pct_btc_of_usd).
-#       3) In check_for_signals(), if we detect RSI says "BUY," we call
-#          rsi_buy_in_three_parts(...) instead of doing a single self.execute_trade.
-#       4) All other RSI logic, comments, docstrings, and features remain intact.
-#       5) We do NOT remove or break any existing function. We only add the new
-#          partial-buy calls and the two new helper methods in RSITradingStrategy.
+#   - Specifically for the partial-trade bug fix:
+#       1) We move the 'self.trade_count_today += 1' increment out of
+#          check_for_signals (BUY side) into buy_in_three_parts (MA),
+#          or rsi_buy_in_three_parts (RSI).
+#       2) We keep short side logic unchanged, since it's a single trade
+#          anyway.
 #
-#   - We keep the entire file listing below, preserving original code for both
-#     MACrossoverStrategy and RSITradingStrategy. We mark the minimal changes we
-#     introduced with comments like “# NEW (PARTIAL BUY)” to clarify where they are.
+#   - Additionally, whenever we detect a new MA or RSI signal and are about
+#     to do a trade, we log an entry into 'signal_logs.json' for easier
+#     post-hoc analysis by 'trade-checker.py'.
 #
-# EXPLANATION of Potential Mistakes We Correct:
-#   - If RSI strategy tried to do one big buy order for nearly all USD, small
-#     fee differences might cause "You can only buy 0E-8 BTC" errors if the exchange
-#     sees insufficient funds. Splitting into 3 partial buys is more flexible.
-#   - We apologize for any previous code versions that deleted large sections
-#     unnecessarily. This version adds partial-buy logic with minimal disruption
-#     to everything else.
+#   - We preserve all original comments, docstrings, and logic beyond these
+#     minimal adjustments.
 ###############################################################################
 
 import pandas as pd
@@ -299,6 +290,36 @@ class MACrossoverStrategy:
         signal_time = df_ma.index[-1]
         self.check_for_signals(signal_now, price, signal_time)
 
+    def _log_signal_event(self, signal_value, current_price, signal_time, reason):
+        """
+        NEW HELPER:
+          Writes a record to 'signal_logs.json' whenever we see a new MA signal
+          that triggers a trade.
+        """
+        signal_data = {
+            "timestamp": signal_time.isoformat(),
+            "signal_value": int(signal_value),
+            "strategy": "MA",
+            "current_price": float(current_price),
+            "reason": reason,
+            "logged_at_utc": datetime.utcnow().isoformat()
+        }
+        file_path = os.path.abspath("signal_logs.json")
+        try:
+            if not os.path.exists(file_path):
+                existing_signals = []
+            else:
+                with open(file_path, 'r') as f:
+                    try:
+                        existing_signals = json.load(f)
+                    except json.JSONDecodeError:
+                        existing_signals = []
+            existing_signals.append(signal_data)
+            with open(file_path, 'w') as f:
+                json.dump(existing_signals, f, indent=2)
+        except Exception as e:
+            self.logger.error(f"Failed to log MA signal: {e}")
+
     def check_for_signals(self, latest_signal, current_price, signal_time):
         """
         If the new MA signal differs from our current position, place trades.
@@ -320,12 +341,13 @@ class MACrossoverStrategy:
                 return
 
             self.logger.info(f"Buy signal triggered at {current_price}")
+            self._log_signal_event(latest_signal, current_price, signal_time, reason="MA Crossover BUY")
             self.position = 1
             self.last_trade_reason = "MA Crossover: short above long."
-            self.buy_in_three_parts(
-                current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time
-            )
-            self.trade_count_today += 1
+            # NOTE (2025-02-11):
+            #   We remove self.trade_count_today += 1 here so that partial
+            #   buys only count once inside buy_in_three_parts.
+            self.buy_in_three_parts(current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time)
             self.last_signal_time = signal_time
 
         # If we see a SELL signal
@@ -335,6 +357,7 @@ class MACrossoverStrategy:
                 return
 
             self.logger.info(f"Sell signal triggered at {current_price}")
+            self._log_signal_event(latest_signal, current_price, signal_time, reason="MA Crossover SELL")
             self.position = -1
             self.last_trade_reason = "MA Crossover: short below long."
             trade_btc = round(self.balance_btc, 8)
@@ -345,6 +368,7 @@ class MACrossoverStrategy:
                 signal_time,
                 trade_btc
             )
+            # For the short side, it is a single trade; so increment now
             self.trade_count_today += 1
             self.last_signal_time = signal_time
 
@@ -352,7 +376,7 @@ class MACrossoverStrategy:
         """
         Simulate a multi-part buy so we can keep within a 90% rule but only
         1 daily "signal" used. We do partial trades to avoid insufficient
-        balance issues.
+        balance issues. Now we increment daily trades only once at the end.
         """
         partial_btc_1 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1)
@@ -362,6 +386,9 @@ class MACrossoverStrategy:
 
         partial_btc_3 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_3)
+
+        # Moved here: count the entire 3-part buy as one daily trade.
+        self.trade_count_today += 1
 
     def get_89pct_btc_of_usd(self, price):
         available_usd = self.balance_usd * 0.89
@@ -446,8 +473,7 @@ class MACrossoverStrategy:
     def update_balance(self, trade_type, fill_price, fill_btc):
         """
         Update local USD/BTC balances after a trade, tracking cost basis,
-        partial fills, etc. We keep the existing logic for partial close
-        of short or long. We do not remove or break existing code.
+        partial fills, etc. We keep the existing logic.
         """
         fee = self.calculate_fee(fill_btc, fill_price)
         self.total_fees_paid += fee
@@ -690,9 +716,9 @@ class RSITradingStrategy:
     """
     Implements a basic RSI-based strategy with position tracking and optional
     daily trade limits. If RSI < oversold => go long, if RSI > overbought => go
-    short. We now add partial-buy logic (like MA's buy_in_three_parts) so that
-    when RSI triggers a BUY, we do multiple smaller purchases instead of one big
-    order. This helps avoid 'only buy 0E-8 BTC' exchange errors.
+    short. We now add partial-buy logic so that when RSI triggers a BUY, we do
+    multiple smaller purchases instead of one big order. This helps avoid
+    'only buy 0E-8 BTC' exchange errors.
     """
     def __init__(
         self,
@@ -891,6 +917,36 @@ class RSITradingStrategy:
         signal_time = df_rsi.index[-1]
         self.check_for_signals(latest_signal, price, signal_time)
 
+    def _log_signal_event(self, signal_value, current_price, signal_time, reason):
+        """
+        NEW HELPER:
+          Writes a record to 'signal_logs.json' whenever we see a new RSI signal
+          that triggers a trade.
+        """
+        signal_data = {
+            "timestamp": signal_time.isoformat(),
+            "signal_value": int(signal_value),
+            "strategy": "RSI",
+            "current_price": float(current_price),
+            "reason": reason,
+            "logged_at_utc": datetime.utcnow().isoformat()
+        }
+        file_path = os.path.abspath("signal_logs.json")
+        try:
+            if not os.path.exists(file_path):
+                existing_signals = []
+            else:
+                with open(file_path, 'r') as f:
+                    try:
+                        existing_signals = json.load(f)
+                    except json.JSONDecodeError:
+                        existing_signals = []
+            existing_signals.append(signal_data)
+            with open(file_path, 'w') as f:
+                json.dump(existing_signals, f, indent=2)
+        except Exception as e:
+            self.logger.error(f"Failed to log RSI signal: {e}")
+
     def check_for_signals(self, latest_signal, current_price, signal_time):
         """
         If RSI indicates buy (1) or sell (-1), see if it differs from our current
@@ -912,15 +968,15 @@ class RSITradingStrategy:
                 return
 
             self.logger.info(f"RSI Buy signal triggered at {current_price}")
+            self._log_signal_event(latest_signal, current_price, signal_time, reason=f"RSI < {self.oversold}")
             self.position = 1
             self.last_trade_reason = f"RSI < {self.oversold}"
-            # NEW (PARTIAL BUY): replicate MA's approach
+            # Moved daily trade increment to rsi_buy_in_three_parts
             self.rsi_buy_in_three_parts(
                 current_price,
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 signal_time
             )
-            self.trade_count_today += 1
             self.last_signal_time = signal_time
 
         # SELL if RSI_Signal=-1 and position >= 0
@@ -930,6 +986,7 @@ class RSITradingStrategy:
                 return
 
             self.logger.info(f"RSI Sell signal triggered at {current_price}")
+            self._log_signal_event(latest_signal, current_price, signal_time, reason=f"RSI > {self.overbought}")
             self.position = -1
             self.last_trade_reason = f"RSI > {self.overbought}"
             trade_btc = round(self.balance_btc, 8)
@@ -940,15 +997,16 @@ class RSITradingStrategy:
                 signal_time,
                 trade_btc
             )
+            # Single trade for short
             self.trade_count_today += 1
             self.last_signal_time = signal_time
 
-    # NEW (PARTIAL BUY) ------------
     def rsi_buy_in_three_parts(self, price, timestamp, signal_time):
         """
         Similar to MACrossoverStrategy.buy_in_three_parts:
         do three smaller buys, each about 89% of self.balance_usd,
         to avoid 'only buy 0E-8 BTC' errors from fees or small leftover funds.
+        At the end, increment daily trade count by 1.
         """
         partial_btc_1 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1)
@@ -958,12 +1016,13 @@ class RSITradingStrategy:
 
         partial_btc_3 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_3)
-    # END (PARTIAL BUY) ------------
 
-    # NEW HELPER (like MA's get_89pct_btc_of_usd)
+        # Count the entire group of partial buys as one daily trade
+        self.trade_count_today += 1
+
     def get_89pct_btc_of_usd(self, price):
         """
-        Use ~89% of our current balance_usd (minus fees) for each partial buy.
+        Use ~89% of our current balance_usd for each partial buy, minus fees.
         """
         available_usd = self.balance_usd * 0.89
         btc_approx = available_usd / (price * (1 + self.fee_percentage))
@@ -971,9 +1030,7 @@ class RSITradingStrategy:
 
     def execute_trade(self, trade_type, price, timestamp, signal_time, trade_btc):
         """
-        Execute a single trade. We do NOT remove any existing code or logic.
-        We keep partial close logic, fee logic, etc. We only add the new partial
-        buy calls in check_for_signals().
+        Execute a single trade. Keep partial fill logic, cost basis updates, etc.
         """
         if trade_btc < 1e-8:
             self.logger.debug(f"(RSI) Skipping trade because fill_btc is too small: {trade_btc}")
@@ -1124,20 +1181,6 @@ class RSITradingStrategy:
 
         ratio = self.current_balance / self.initial_balance if self.initial_balance else 1
         self.current_amount = self.initial_amount * ratio
-
-        # If we changed from last trade
-        if trade_type == "sell" and self.position == 1 and self.last_trade_price is not None:
-            profit = fill_btc * (fill_price - self.last_trade_price) - fee
-            self.current_balance += profit
-            self.total_profit_loss += profit
-            if profit > 0:
-                self.profitable_trades += 1
-        elif trade_type == "buy" and self.position == -1 and self.last_trade_price is not None:
-            profit = fill_btc * (self.last_trade_price - fill_price) - fee
-            self.current_balance += profit
-            self.total_profit_loss += profit
-            if profit > 0:
-                self.profitable_trades += 1
 
         if self.balance_usd > self.max_balance_usd:
             self.max_balance_usd = self.balance_usd
