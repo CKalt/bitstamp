@@ -4,14 +4,11 @@
 # Full File Path: src/tdr.py
 #
 # CHANGES (EXPLANATION):
-#   1) We introduce or enhance code that logs real-time signals into signal_logs.json
-#      whenever the system decides to buy/sell (or skip) for RSI or MA. This way,
-#      trade-checker can match signals to trades.
-#   2) We ensure partial trades do not each increment daily trade count. If you
-#      want a single daily increment after a partial buy, see also tdr_core/strategies.py.
-#   3) We keep all docstrings, comments, original functionality, etc., except for
-#      minimal additions to unify logging of signals and skip forced "trade_count_today"
-#      increments for partial sub-trades.
+#   1) We add a code block at startup (in main()) to remove old logs 
+#      ("non-live-trades.json", "trades.json", "signal_logs.json", etc.) so 
+#      each run starts fresh.
+#   2) We preserve all original code, docstrings, and functionality except 
+#      this minimal addition.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -62,13 +59,13 @@ from indicators.technical_indicators import (
 )
 
 # ------------------------------------------------------------------------
-# NEW IMPORTS for refactored modules (preserving original classes/functions)
+# Modules from tdr_core
 # ------------------------------------------------------------------------
 from tdr_core.data_manager import CryptoDataManager
 from tdr_core.trade import Trade
 from tdr_core.websocket_client import subscribe_to_websocket
 from tdr_core.order_placer import OrderPlacer
-from tdr_core.strategies import MACrossoverStrategy, RSITradingStrategy  # ADDED RSITradingStrategy
+from tdr_core.strategies import MACrossoverStrategy, RSITradingStrategy
 from tdr_core.shell import CryptoShell
 
 HIGH_FREQUENCY = '1H'  # Default bar size
@@ -141,6 +138,11 @@ def main():
     Main entry point: reads best_strategy.json for config, 
     parses historical log if present, then launches the CryptoShell.
     """
+    # NEW: Clear old logs to start fresh
+    for logfile in ["non-live-trades.json", "trades.json", "signal_logs.json"]:
+        if os.path.exists(logfile):
+            os.remove(logfile)
+
     config_file = os.path.abspath("best_strategy.json")
     if not os.path.exists(config_file):
         print(f"No '{config_file}' found. Using default settings.")
