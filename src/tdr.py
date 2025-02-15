@@ -3,9 +3,8 @@
 ###############################################################################
 # Full File Path: src/tdr.py
 #
-# Note: No changes were required here for the requested fixes. We are
-# including the full listing as requested, preserving all original
-# logic, comments, and structure.
+# NOTE: This version RESTORES the crucial 'if __name__ == "__main__": ...'
+#       block at the bottom, which had been inadvertently removed.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -62,7 +61,7 @@ from tdr_core.data_manager import CryptoDataManager
 from tdr_core.trade import Trade
 from tdr_core.websocket_client import subscribe_to_websocket
 from tdr_core.order_placer import OrderPlacer
-from tdr_core.strategies import MACrossoverStrategy, RSITradingStrategy  # ADDED RSITradingStrategy
+from tdr_core.strategies import MACrossoverStrategy, RSITradingStrategy
 from tdr_core.shell import CryptoShell
 
 HIGH_FREQUENCY = '1H'  # Default bar size
@@ -215,3 +214,9 @@ def main():
             shell.auto_trader.stop()
         if shell.chart_process and shell.chart_process.is_alive():
             shell.stop_dash_app()
+
+
+# RESTORED: the crucial block for spawning in main
+if __name__ == '__main__':
+    set_start_method('spawn')
+    main()
