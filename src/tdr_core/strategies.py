@@ -4,34 +4,12 @@
 # FULL FILE PATH: src/tdr_core/strategies.py
 #
 # CONTEXT AND CHANGES:
-#   - This file contains two classes: MACrossoverStrategy and RSITradingStrategy.
-#   - We do NOT remove or alter existing functionality or comments. Instead, we
-#     add minimal changes so that RSITradingStrategy performs partial buys (like
-#     MACrossoverStrategy does) when it detects an RSI-based "long" signal. This
-#     avoids "only buy 0E-8 BTC" exchange errors by splitting one large buy into
-#     multiple smaller (partial) buys.
-#
-#   - Specifically, we replicate the MA approach:
-#       1) We define a new method rsi_buy_in_three_parts(...) in RSITradingStrategy
-#          (mirroring buy_in_three_parts(...) from MACrossoverStrategy).
-#       2) We define a helper get_89pct_btc_of_usd(...) (like MA's get_89pct_btc_of_usd).
-#       3) In check_for_signals(), if we detect RSI says "BUY," we call
-#          rsi_buy_in_three_parts(...) instead of doing a single self.execute_trade.
-#       4) All other RSI logic, comments, docstrings, and features remain intact.
-#       5) We do NOT remove or break any existing function. We only add the new
-#          partial-buy calls and the two new helper methods in RSITradingStrategy.
-#
-#   - We keep the entire file listing below, preserving original code for both
-#     MACrossoverStrategy and RSITradingStrategy. We mark the minimal changes we
-#     introduced with comments like “# NEW (PARTIAL BUY)” to clarify where they are.
-#
-# EXPLANATION of Potential Mistakes We Correct:
-#   - If RSI strategy tried to do one big buy order for nearly all USD, small
-#     fee differences might cause "You can only buy 0E-8 BTC" errors if the exchange
-#     sees insufficient funds. Splitting into 3 partial buys is more flexible.
-#   - We apologize for any previous code versions that deleted large sections
-#     unnecessarily. This version adds partial-buy logic with minimal disruption
-#     to everything else.
+#   - We fix the bug that 3 partial trades are each counted against the hourly
+#     trade limit. Now they count as only 1 trade. The daily limit was already
+#     incremented only once in check_for_signals(), so we did not change that.
+#   - We add 'ma_signal_proximity' to MACrossoverStrategy.get_status() and
+#     'rsi_proximity' to RSITradingStrategy.get_status(), so the shell can print
+#     the proximity lines.
 ###############################################################################
 
 import pandas as pd
@@ -325,6 +303,7 @@ class MACrossoverStrategy:
             self.buy_in_three_parts(
                 current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time
             )
+            # We only increment the daily trade count once, after the 3-part buy
             self.trade_count_today += 1
             self.last_signal_time = signal_time
 
@@ -343,7 +322,8 @@ class MACrossoverStrategy:
                 current_price,
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 signal_time,
-                trade_btc
+                trade_btc,
+                is_partial=False  # single trade
             )
             self.trade_count_today += 1
             self.last_signal_time = signal_time
@@ -351,38 +331,52 @@ class MACrossoverStrategy:
     def buy_in_three_parts(self, price, timestamp, signal_time):
         """
         Simulate a multi-part buy so we can keep within a 90% rule but only
-        1 daily "signal" used. We do partial trades to avoid insufficient
-        balance issues.
+        1 daily "signal". We do partial trades to avoid insufficient
+        balance issues, and only count them as 1 total trade in "check_for_signals".
         """
+        self._clean_up_hourly_trades()
+        max_trades_per_hour = 3
+        if len(self.trades_this_hour) >= max_trades_per_hour:
+            self.logger.info(f"Reached hourly trade limit {max_trades_per_hour}, skipping partial buy.")
+            return
+
+        # Partial buy #1
         partial_btc_1 = self.get_89pct_btc_of_usd(price)
-        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1)
+        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1, is_partial=True)
 
+        # Partial buy #2
         partial_btc_2 = self.get_89pct_btc_of_usd(price)
-        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_2)
+        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_2, is_partial=True)
 
+        # Partial buy #3
         partial_btc_3 = self.get_89pct_btc_of_usd(price)
-        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_3)
+        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_3, is_partial=True)
+
+        # Count these partial buys as just 1 trade for the hourly limit
+        self.trades_this_hour.append(datetime.utcnow())
 
     def get_89pct_btc_of_usd(self, price):
         available_usd = self.balance_usd * 0.89
         btc_approx = available_usd / (price * (1 + self.fee_percentage))
         return round(btc_approx, 8)
 
-    def execute_trade(self, trade_type, price, timestamp, signal_time, trade_btc):
+    def execute_trade(self, trade_type, price, timestamp, signal_time, trade_btc, is_partial=False):
         """
-        Execute a single trade. 
-        If trade_btc < 1e-8, skip to avoid confusion with a near-zero fill.
-        If live_trading=True, append trades to trades.json right away.
+        Execute a single trade.
+        If 'is_partial=True', we skip adding to trades_this_hour (so partial
+        trades won't count for the hour limit). We only do that once for the entire
+        multi-part set after buy_in_three_parts is done.
         """
         if trade_btc < 1e-8:
             self.logger.debug(f"Skipping trade because fill_btc is too small: {trade_btc}")
             return
 
-        self._clean_up_hourly_trades()
-        max_trades_per_hour = 3
-        if len(self.trades_this_hour) >= max_trades_per_hour:
-            self.logger.info(f"Reached hourly trade limit {max_trades_per_hour}, skipping trade.")
-            return
+        if not is_partial:
+            self._clean_up_hourly_trades()
+            max_trades_per_hour = 3
+            if len(self.trades_this_hour) >= max_trades_per_hour:
+                self.logger.info(f"Reached hourly trade limit {max_trades_per_hour}, skipping trade.")
+                return
 
         trade_info = Trade(
             trade_type,
@@ -435,7 +429,10 @@ class MACrossoverStrategy:
             self.trade_log.append(trade_info)
             self.update_balance(trade_type, price, trade_btc)
 
-        self.trades_this_hour.append(datetime.utcnow())
+        # If not partial, count this as 1 hourly trade. If partial, skip.
+        if not is_partial:
+            self.trades_this_hour.append(datetime.utcnow())
+
         self._log_successful_trade(trade_info)
 
         # If a theoretical trade existed, clear it
@@ -621,6 +618,13 @@ class MACrossoverStrategy:
                     else 'Diverging'
                 )
 
+            # NEW: approximate "MA Crossover Proximity"
+            # We'll define the fraction of the gap between short and long MAs vs. the average
+            short_ma_val = self.df_ma.iloc[-1]['Short_MA']
+            long_ma_val  = self.df_ma.iloc[-1]['Long_MA']
+            denom = (abs(short_ma_val) + abs(long_ma_val)) / 2 if (abs(short_ma_val) + abs(long_ma_val)) else 1
+            status['ma_signal_proximity'] = abs(short_ma_val - long_ma_val) / denom
+
         if self.trades_executed > 0:
             status['average_fee_per_trade'] = self.total_fees_paid / self.trades_executed
             status['risk_reward_ratio'] = (
@@ -690,9 +694,8 @@ class RSITradingStrategy:
     """
     Implements a basic RSI-based strategy with position tracking and optional
     daily trade limits. If RSI < oversold => go long, if RSI > overbought => go
-    short. We now add partial-buy logic (like MA's buy_in_three_parts) so that
-    when RSI triggers a BUY, we do multiple smaller purchases instead of one big
-    order. This helps avoid 'only buy 0E-8 BTC' exchange errors.
+    short. We now add partial-buy logic so that when RSI triggers a BUY, we do
+    multiple smaller purchases instead of one big order.
     """
     def __init__(
         self,
@@ -914,12 +917,12 @@ class RSITradingStrategy:
             self.logger.info(f"RSI Buy signal triggered at {current_price}")
             self.position = 1
             self.last_trade_reason = f"RSI < {self.oversold}"
-            # NEW (PARTIAL BUY): replicate MA's approach
             self.rsi_buy_in_three_parts(
                 current_price,
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 signal_time
             )
+            # Increment daily limit once
             self.trade_count_today += 1
             self.last_signal_time = signal_time
 
@@ -938,53 +941,65 @@ class RSITradingStrategy:
                 current_price,
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 signal_time,
-                trade_btc
+                trade_btc,
+                is_partial=False
             )
             self.trade_count_today += 1
             self.last_signal_time = signal_time
 
-    # NEW (PARTIAL BUY) ------------
     def rsi_buy_in_three_parts(self, price, timestamp, signal_time):
         """
         Similar to MACrossoverStrategy.buy_in_three_parts:
         do three smaller buys, each about 89% of self.balance_usd,
         to avoid 'only buy 0E-8 BTC' errors from fees or small leftover funds.
         """
+        self._clean_up_hourly_trades()
+        max_trades_per_hour = 3
+        if len(self.trades_this_hour) >= max_trades_per_hour:
+            self.logger.info(f"Reached hourly trade limit {max_trades_per_hour}, skipping partial RSI buy.")
+            return
+
+        # Partial buy #1
         partial_btc_1 = self.get_89pct_btc_of_usd(price)
-        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1)
+        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1, is_partial=True)
 
+        # Partial buy #2
         partial_btc_2 = self.get_89pct_btc_of_usd(price)
-        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_2)
+        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_2, is_partial=True)
 
+        # Partial buy #3
         partial_btc_3 = self.get_89pct_btc_of_usd(price)
-        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_3)
-    # END (PARTIAL BUY) ------------
+        self.execute_trade("buy", price, timestamp, signal_time, partial_btc_3, is_partial=True)
 
-    # NEW HELPER (like MA's get_89pct_btc_of_usd)
+        # Count these partial buys as just 1 trade for the hourly limit
+        self.trades_this_hour.append(datetime.utcnow())
+
     def get_89pct_btc_of_usd(self, price):
         """
-        Use ~89% of our current balance_usd (minus fees) for each partial buy.
+        Use ~89% of our current balance_usd for each partial buy.
         """
         available_usd = self.balance_usd * 0.89
         btc_approx = available_usd / (price * (1 + self.fee_percentage))
         return round(btc_approx, 8)
 
-    def execute_trade(self, trade_type, price, timestamp, signal_time, trade_btc):
+    def execute_trade(self, trade_type, price, timestamp, signal_time, trade_btc, is_partial=False):
         """
         Execute a single trade. We do NOT remove any existing code or logic.
-        We keep partial close logic, fee logic, etc. We only add the new partial
-        buy calls in check_for_signals().
+        We skip incrementing hour-limit trades if is_partial=True, then do it
+        once at the end of rsi_buy_in_three_parts.
         """
         if trade_btc < 1e-8:
             self.logger.debug(f"(RSI) Skipping trade because fill_btc is too small: {trade_btc}")
             return
 
-        self._clean_up_hourly_trades()
-        max_trades_per_hour = 3
-        if len(self.trades_this_hour) >= max_trades_per_hour:
-            self.logger.info(f"Reached hourly trade limit {max_trades_per_hour}, skipping trade.")
-            return
+        if not is_partial:
+            self._clean_up_hourly_trades()
+            max_trades_per_hour = 3
+            if len(self.trades_this_hour) >= max_trades_per_hour:
+                self.logger.info(f"Reached hourly trade limit {max_trades_per_hour}, skipping RSI trade.")
+                return
 
+        from tdr_core.trade import Trade
         trade_info = Trade(
             trade_type,
             self.symbol,
@@ -1035,7 +1050,10 @@ class RSITradingStrategy:
             self.trade_log.append(trade_info)
             self.update_balance(trade_type, price, trade_btc)
 
-        self.trades_this_hour.append(datetime.utcnow())
+        # If not partial, count as one hourly trade
+        if not is_partial:
+            self.trades_this_hour.append(datetime.utcnow())
+
         self._log_successful_trade(trade_info)
 
         if self.theoretical_trade is not None:
@@ -1206,6 +1224,14 @@ class RSITradingStrategy:
         if hasattr(self, 'df_rsi') and not self.df_rsi.empty:
             last_rsi = self.df_rsi.iloc[-1]['RSI']
             status['last_rsi'] = last_rsi
+
+            # NEW: approximate RSI proximity
+            # distance to the nearest threshold, normalized by (overbought-oversold)
+            dist_to_overbought = abs(last_rsi - self.overbought)
+            dist_to_oversold   = abs(last_rsi - self.oversold)
+            denom = (self.overbought - self.oversold) if (self.overbought > self.oversold) else 1
+            rsi_prox = min(dist_to_overbought, dist_to_oversold) / denom
+            status['rsi_proximity'] = rsi_prox
 
         if self.trades_executed > 0:
             status['average_fee_per_trade'] = self.total_fees_paid / self.trades_executed

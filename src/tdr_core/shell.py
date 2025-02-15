@@ -4,22 +4,9 @@
 # Full File Path: src/tdr_core/shell.py
 #
 # CHANGES (EXPLANATION):
-#   1) When the user does "auto_trade <X>usd short", but we skip the forced 
-#      SELL because "we have no BTC" (i.e. user_has_btc() == False), we now 
-#      set a "theoretical short" entry price anyway. This helps the user see 
-#      in 'status' that they are "short" with some cost basis, even though no 
-#      real immediate trade was placed. 
-#   2) This matches the user request: "Please note how I had asked that you set 
-#      the entry price ... if we were already in the correct direction or 
-#      skipping the forced SELL. Then show that in status as a 'theoretical' trade."
-#   3) We only do this in the RSI and MA blocks if desired_position == -1 but 
-#      we skip forcing the SELL due to zero local BTC. Then we do: 
-#         position_size = - short_btc
-#         position_cost_basis = short_btc * current_market_price
-#         theoretical_trade dict
-#      so that the "Entry Price" and "Short Size" appear in status.
-#   4) All existing logic, commands, docstrings remain intact. We just add 
-#      a snippet after we skip the forced SELL to set that "theoretical short." 
+#   1) We added logic in do_status() to check if the strategy status has
+#      'ma_signal_proximity' or 'rsi_proximity', and print them if present.
+#   2) We preserve all original structure, docstrings, and comments.
 ###############################################################################
 
 import cmd
@@ -47,12 +34,12 @@ from data.loader import create_metadata_file, parse_log_file
 
 def determine_rsi_position(df, rsi_window=14, overbought=70, oversold=30):
     """
-    A minimal function to guess the final RSI-based position from the last row 
-    of DF. If RSI < oversold => position=1, if RSI > overbought => position=-1, 
+    A minimal function to guess the final RSI-based position from the last row
+    of DF. If RSI < oversold => position=1, if RSI > overbought => position=-1,
     else 0.
 
-    This logic ensures that if we are already 'long' (1) or 'short' (-1) 
-    per the last RSI signal, we skip forcing an immediate trade if the user 
+    This logic ensures that if we are already 'long' (1) or 'short' (-1)
+    per the last RSI signal, we skip forcing an immediate trade if the user
     also chooses the same position. This covers both short->short and long->long.
     """
     if df.empty or len(df) < rsi_window:
@@ -356,12 +343,12 @@ class CryptoShell(cmd.Cmd):
     def do_auto_trade(self, arg):
         """
         Start auto-trading using the best strategy from best_strategy.json.
-        
-        If hist_position == desired_position, we skip forcing an immediate trade 
-        but we also set the cost basis as though we 'theoretically' opened that 
-        position at the current market price. If short is requested but we have 
-        no local BTC, we skip forced SELL but still treat ourselves as short 
-        with a 'theoretical' cost basis. 
+
+        If hist_position == desired_position, we skip forcing an immediate trade
+        but we also set the cost basis as though we 'theoretically' opened that
+        position at the current market price. If short is requested but we have
+        no local BTC, we skip forced SELL but still treat ourselves as short
+        with a 'theoretical' cost basis.
         """
         if self.auto_trader and self.auto_trader.running:
             print("Auto-trading is already running. Stop it first.")
@@ -659,7 +646,7 @@ class CryptoShell(cmd.Cmd):
     def do_status(self, arg):
         """
         Show status of auto-trading. Usage: status [long]
-        
+
         By default (no arg or anything not "long"), we show a short version:
           - Position Details with direction, plus theoretical trade block if relevant.
         If user types "status long", we show the entire original block.
@@ -701,10 +688,13 @@ class CryptoShell(cmd.Cmd):
                 print(f"    • Amount:     {t['amount']}")
                 print(f"    • Theoretical? {t['theoretical']}")
 
-            proximity = status.get('ma_signal_proximity')
-            if proximity is not None:
-                print(f"\n  • MA Crossover Proximity: {proximity*100:.2f}%")
+            # NEW: Print the proximity if it exists
+            if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
+                print(f"\n  • MA Crossover Proximity: {status['ma_signal_proximity']*100:.2f}%")
                 print("    (Closer to 0% means closer to flipping from short->long or long->short)")
+            if 'rsi_proximity' in status and status['rsi_proximity'] is not None:
+                print(f"\n  • RSI Proximity: {status['rsi_proximity']*100:.2f}%")
+                print("    (Closer to 0% means RSI is nearer to a boundary cross)")
 
             print("")
             return
@@ -789,6 +779,12 @@ class CryptoShell(cmd.Cmd):
         # RSI debug info:
         if 'last_rsi' in status:
             print(f"  • Last RSI: {status['last_rsi']:.2f} (window={status.get('rsi_window',14)}, overbought={status.get('overbought',70)}, oversold={status.get('oversold',30)})")
+
+        # NEW: Print proximity for MA or RSI if present
+        if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
+            print(f"  • MA Crossover Proximity: {status['ma_signal_proximity']*100:.2f}%")
+        if 'rsi_proximity' in status and status['rsi_proximity'] is not None:
+            print(f"  • RSI Proximity: {status['rsi_proximity']*100:.2f}%")
 
         if status['trades_executed'] == 0:
             print("\nNo trades yet, stats are limited.")
