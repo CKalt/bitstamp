@@ -4,9 +4,13 @@
 # Full File Path: src/tdr_core/shell.py
 #
 # CHANGES (EXPLANATION):
-#   1) We added logic in do_status() to check if the strategy status has
-#      'ma_signal_proximity' or 'rsi_proximity', and print them if present.
-#   2) We preserve all original structure, docstrings, and comments.
+#   1) In do_auto_trade(), for both MA and RSI blocks, if user gave <amount> in
+#      BTC and we need a forced immediate buy (i.e., desired_position==1 and
+#      hist_position!=1), we now set buy_btc = amount_num instead of
+#      amount_num/current_market_price. This fixes the bug that led to
+#      purchasing an extremely small fraction of BTC instead of the intended
+#      full amount.
+#   2) All other code, docstrings, and comments remain unchanged.
 ###############################################################################
 
 import cmd
@@ -476,7 +480,12 @@ class CryptoShell(cmd.Cmd):
                     self.logger.info(f"(auto_trade) MA: No forced trade, positions match.")
             else:
                 if desired_position == 1 and hist_position != 1 and current_market_price > 0:
-                    buy_btc = amount_num / current_market_price
+                    # BUGFIX: If user specified BTC, use amount_num directly; else divide by price
+                    if amount_unit == 'btc':
+                        buy_btc = amount_num
+                    else:
+                        buy_btc = amount_num / current_market_price
+
                     trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     self.logger.info(f"(auto_trade) MA: Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
                     self.auto_trader.execute_trade(
@@ -590,7 +599,12 @@ class CryptoShell(cmd.Cmd):
                     self.logger.info(f"(auto_trade) RSI: No forced trade, positions match.")
             else:
                 if desired_position == 1 and hist_position != 1 and current_market_price > 0:
-                    buy_btc = amount_num / current_market_price
+                    # BUGFIX: If user specified BTC, use amount_num directly; else divide by price
+                    if amount_unit == 'btc':
+                        buy_btc = amount_num
+                    else:
+                        buy_btc = amount_num / current_market_price
+
                     trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     self.logger.info(f"(auto_trade) RSI: Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
                     self.auto_trader.execute_trade(
@@ -688,7 +702,6 @@ class CryptoShell(cmd.Cmd):
                 print(f"    • Amount:     {t['amount']}")
                 print(f"    • Theoretical? {t['theoretical']}")
 
-            # NEW: Print the proximity if it exists
             if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
                 print(f"\n  • MA Crossover Proximity: {status['ma_signal_proximity']*100:.2f}%")
                 print("    (Closer to 0% means closer to flipping from short->long or long->short)")
@@ -780,7 +793,6 @@ class CryptoShell(cmd.Cmd):
         if 'last_rsi' in status:
             print(f"  • Last RSI: {status['last_rsi']:.2f} (window={status.get('rsi_window',14)}, overbought={status.get('overbought',70)}, oversold={status.get('oversold',30)})")
 
-        # NEW: Print proximity for MA or RSI if present
         if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
             print(f"  • MA Crossover Proximity: {status['ma_signal_proximity']*100:.2f}%")
         if 'rsi_proximity' in status and status['rsi_proximity'] is not None:
