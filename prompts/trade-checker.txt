@@ -38,10 +38,3 @@ To address this and other concerns I wish to have a new python script src/trade-
 Of course when we are in either dry or non-dry we need to be writing out signal trading into a log file so that we may run trade-checker.
 
 This I would like you to design and write trade-checker.py so that it can be run at any time and look over the shoulder of src/tdr.py to make sure we like what it's been doing by looking at the btcusd.log file as well as the trades.json and best_strategy.json whatever other data it needs to check to confirm we like the actions of src/tdr.py.
-
-Here's src/bktst.py along with it's dependecies:
-
-
-------------------
-Here's src/tdr.py along with it's dependecies:
-
