@@ -4,12 +4,9 @@
 # Full File Path: src/tdr.py
 #
 # CHANGES:
-#   1) We now read best_strategy.json's "Last_Signal_Action" to decide what
-#      the strategy's last position was (hist_position) instead of using
-#      determine_rsi_position() or determine_initial_position().
-#   2) This prevents forced trades when the JSON says "GO LONG" but the user
-#      also typed "long".
-#   3) No other changes to docstrings or logic are removed.
+#   1) Added a small code block in main() to remove "trades.json" and
+#      "non-live-trades.json" so we start fresh each run. This helps
+#      your upcoming "trade-checker.py" see only trades from the latest run.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -116,6 +113,15 @@ def main():
     Main entry point: reads best_strategy.json for config,
     parses historical log if present, then launches the CryptoShell.
     """
+    # --- NEW CODE BLOCK: remove old logs if they exist ---
+    for filename in ["trades.json", "non-live-trades.json"]:
+        if os.path.exists(filename):
+            try:
+                os.remove(filename)
+                print(f"Removed old {filename} to start fresh.")
+            except Exception as e:
+                print(f"Unable to remove {filename}: {e}")
+
     config_file = os.path.abspath("best_strategy.json")
     if not os.path.exists(config_file):
         print(f"No '{config_file}' found. Using default settings.")
