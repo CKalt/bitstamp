@@ -3,8 +3,13 @@
 ###############################################################################
 # Full File Path: src/tdr.py
 #
-# NOTE: This version RESTORES the crucial 'if __name__ == "__main__": ...'
-#       block at the bottom, which had been inadvertently removed.
+# CHANGES:
+#   1) We now read best_strategy.json's "Last_Signal_Action" to decide what
+#      the strategy's last position was (hist_position) instead of using
+#      determine_rsi_position() or determine_initial_position().
+#   2) This prevents forced trades when the JSON says "GO LONG" but the user
+#      also typed "long".
+#   3) No other changes to docstrings or logic are removed.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -66,29 +71,6 @@ from tdr_core.shell import CryptoShell
 
 HIGH_FREQUENCY = '1H'  # Default bar size
 STALE_FEED_SECONDS = 120  # If more than 2 minutes pass with no trades, attempt reconnect.
-
-
-def determine_initial_position(df: pd.DataFrame, short_window: int, long_window: int) -> int:
-    """
-    Computes the final short/long MA crossover on df to decide
-    if we "should" be long (1), short (-1), or neutral (0).
-    """
-    if len(df) < long_window:
-        return 0
-    df_copy = ensure_datetime_index(df.copy())
-    df_copy['Short_MA'] = df_copy['close'].rolling(short_window).mean()
-    df_copy['Long_MA'] = df_copy['close'].rolling(long_window).mean()
-    df_copy.dropna(inplace=True)
-    if df_copy.empty:
-        return 0
-    last_short = df_copy.iloc[-1]['Short_MA']
-    last_long  = df_copy.iloc[-1]['Long_MA']
-    if last_short > last_long:
-        return 1
-    elif last_short < last_long:
-        return -1
-    else:
-        return 0
 
 
 def run_websocket(url, symbols, data_manager, stop_event):
@@ -216,7 +198,6 @@ def main():
             shell.stop_dash_app()
 
 
-# RESTORED: the crucial block for spawning in main
 if __name__ == '__main__':
     set_start_method('spawn')
     main()

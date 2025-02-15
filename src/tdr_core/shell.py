@@ -4,13 +4,17 @@
 # Full File Path: src/tdr_core/shell.py
 #
 # CHANGES (EXPLANATION):
-#   1) In do_auto_trade(), for both MA and RSI blocks, if user gave <amount> in
-#      BTC and we need a forced immediate buy (i.e., desired_position==1 and
-#      hist_position!=1), we now set buy_btc = amount_num instead of
-#      amount_num/current_market_price. This fixes the bug that led to
-#      purchasing an extremely small fraction of BTC instead of the intended
-#      full amount.
-#   2) All other code, docstrings, and comments remain unchanged.
+#   1) We skip determine_rsi_position() or determine_initial_position() for
+#      mismatch logic. Instead, we read best_strategy.json's "Last_Signal_Action".
+#   2) If "Last_Signal_Action" == "GO LONG" => hist_position = 1
+#      If "Last_Signal_Action" == "GO SHORT" => hist_position = -1
+#      else => hist_position = 0
+#   3) If hist_position == desired_position, we do *not* force any trade.
+#   4) If no forced trade is needed, and the user typed e.g. "2.0btc long",
+#      we immediately set self.auto_trader.position_size and
+#      position_cost_basis so that 'status' shows correct values.
+#   5) This ensures no forced BUY or SELL if we are already on the same side,
+#      and also ensures the status won't show zeros.
 ###############################################################################
 
 import cmd
@@ -38,13 +42,9 @@ from data.loader import create_metadata_file, parse_log_file
 
 def determine_rsi_position(df, rsi_window=14, overbought=70, oversold=30):
     """
-    A minimal function to guess the final RSI-based position from the last row
-    of DF. If RSI < oversold => position=1, if RSI > overbought => position=-1,
-    else 0.
-
-    This logic ensures that if we are already 'long' (1) or 'short' (-1)
-    per the last RSI signal, we skip forcing an immediate trade if the user
-    also chooses the same position. This covers both short->short and long->long.
+    (Deprecated for mismatch logic; kept for reference if needed.)
+    Previously used to guess final RSI-based position from df.
+    We now rely on best_strategy.json to decide the last known signal.
     """
     if df.empty or len(df) < rsi_window:
         return 0
@@ -396,8 +396,18 @@ class CryptoShell(cmd.Cmd):
             best_strategy_params = json.load(f)
 
         strategy_name = best_strategy_params.get('Strategy')
+        do_live       = best_strategy_params.get('do_live_trades', False)
+        max_trades_day= best_strategy_params.get('max_trades_per_day', 5)
 
-        # helper
+        # Decide hist_position from best_strategy.json's "Last_Signal_Action"
+        last_action = best_strategy_params.get('Last_Signal_Action', None)
+        if last_action == "GO LONG":
+            hist_position = 1
+        elif last_action == "GO SHORT":
+            hist_position = -1
+        else:
+            hist_position = 0
+
         def user_has_btc():
             if not self.auto_trader:
                 return False
@@ -405,28 +415,12 @@ class CryptoShell(cmd.Cmd):
                 return True
             return False
 
+        # Setup strategy instance
         if strategy_name == 'MA':
-            from tdr import determine_initial_position  # local import
+            from tdr_core.strategies import MACrossoverStrategy
 
             short_window = int(best_strategy_params.get('Short_Window', 12))
             long_window  = int(best_strategy_params.get('Long_Window', 36))
-            do_live      = best_strategy_params.get('do_live_trades', False)
-            max_trades_day = best_strategy_params.get('max_trades_per_day', 5)
-
-            df = self.data_manager.get_price_dataframe('btcusd').copy()
-            if 'close' not in df.columns and 'price' in df.columns:
-                df.rename(columns={'price': 'close'}, inplace=True)
-            if df.empty:
-                hist_position = 0
-            else:
-                hist_position = determine_initial_position(df, short_window, long_window)
-
-            initial_balance_btc = 0.0
-            initial_balance_usd = 0.0
-            if desired_position == 1:
-                initial_balance_btc = amount_num
-            elif desired_position == -1:
-                initial_balance_usd = amount_num
 
             self.auto_trader = MACrossoverStrategy(
                 self.data_manager,
@@ -438,115 +432,16 @@ class CryptoShell(cmd.Cmd):
                 live_trading=do_live,
                 max_trades_per_day=max_trades_day,
                 initial_position=desired_position,
-                initial_balance_btc=initial_balance_btc,
-                initial_balance_usd=initial_balance_usd
+                initial_balance_btc=(amount_num if desired_position==1 else 0.0),
+                initial_balance_usd=(amount_num if desired_position==-1 else 0.0)
             )
 
-            current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
-
-            # (1) hist_position == desired_position => set theoretical cost basis
-            # (2) otherwise, attempt forced immediate trade if possible
-            if desired_position == hist_position:
-                if desired_position == 1 and current_market_price > 0:
-                    if self.auto_trader.position_size < 1e-8:
-                        self.auto_trader.position_size = amount_num
-                        self.auto_trader.position_cost_basis = amount_num * current_market_price
-                        self.logger.info(
-                            f"(auto_trade) MA: Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
-                            f"for an initial LONG of {amount_num} BTC at ${current_market_price:.2f}."
-                        )
-                        self.auto_trader.theoretical_trade = {
-                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                            'direction': 'long',
-                            'amount': amount_num,
-                            'theoretical': True
-                        }
-                elif desired_position == -1 and current_market_price > 0:
-                    short_btc = amount_num / current_market_price
-                    if self.auto_trader.position_size > -1e-8 and short_btc > 0:
-                        self.auto_trader.position_size = - short_btc
-                        self.auto_trader.position_cost_basis = short_btc * current_market_price
-                        self.logger.info(
-                            f"(auto_trade) MA: Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
-                            f"for an initial SHORT of {short_btc:.6f} BTC at ${current_market_price:.2f}."
-                        )
-                        self.auto_trader.theoretical_trade = {
-                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                            'direction': 'short',
-                            'amount': amount_num,
-                            'theoretical': True
-                        }
-                else:
-                    self.logger.info(f"(auto_trade) MA: No forced trade, positions match.")
-            else:
-                if desired_position == 1 and hist_position != 1 and current_market_price > 0:
-                    # BUGFIX: If user specified BTC, use amount_num directly; else divide by price
-                    if amount_unit == 'btc':
-                        buy_btc = amount_num
-                    else:
-                        buy_btc = amount_num / current_market_price
-
-                    trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    self.logger.info(f"(auto_trade) MA: Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
-                    self.auto_trader.execute_trade(
-                        "buy",
-                        current_market_price,
-                        trade_ts,
-                        datetime.now(),
-                        buy_btc
-                    )
-                elif desired_position == -1 and hist_position != -1 and current_market_price > 0:
-                    if not user_has_btc():
-                        self.logger.info("(auto_trade) MA: We have no BTC to sell, skipping forced SELL. Setting theoretical short anyway.")
-                        short_btc = amount_num / current_market_price
-                        self.auto_trader.position_size = -short_btc
-                        self.auto_trader.position_cost_basis = short_btc * current_market_price
-                        self.auto_trader.theoretical_trade = {
-                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                            'direction': 'short',
-                            'amount': amount_num,
-                            'theoretical': True
-                        }
-                    else:
-                        sell_btc = amount_num / current_market_price
-                        trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        self.logger.info(f"(auto_trade) MA: Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
-                        self.auto_trader.execute_trade(
-                            "sell",
-                            current_market_price,
-                            trade_ts,
-                            datetime.now(),
-                            sell_btc
-                        )
-
-            self.auto_trader.start()
-            print(f"Auto-trading started with {balance_str}, position={pos_str}, "
-                  f"MA strategy (Short={short_window}, Long={long_window}), do_live_trades={do_live}")
-
         elif strategy_name == 'RSI':
-            from tdr_core.shell import determine_rsi_position
+            from tdr_core.strategies import RSITradingStrategy
 
             rsi_window = int(best_strategy_params.get('RSI_Window', 14))
             overbought = float(best_strategy_params.get('Overbought', 70))
             oversold   = float(best_strategy_params.get('Oversold', 30))
-            do_live    = best_strategy_params.get('do_live_trades', False)
-            max_trades_day = best_strategy_params.get('max_trades_per_day', 5)
-
-            df = self.data_manager.get_price_dataframe('btcusd').copy()
-            if 'close' not in df.columns and 'price' in df.columns:
-                df.rename(columns={'price': 'close'}, inplace=True)
-
-            if df.empty:
-                hist_position = 0
-            else:
-                hist_position = determine_rsi_position(df, rsi_window, overbought, oversold)
-
-            initial_balance_btc = 0.0
-            initial_balance_usd = 0.0
-            if desired_position == 1:
-                initial_balance_btc = amount_num
-            elif desired_position == -1:
-                initial_balance_usd = amount_num
 
             self.auto_trader = RSITradingStrategy(
                 self.data_manager,
@@ -559,93 +454,96 @@ class CryptoShell(cmd.Cmd):
                 live_trading=do_live,
                 max_trades_per_day=max_trades_day,
                 initial_position=desired_position,
-                initial_balance_btc=initial_balance_btc,
-                initial_balance_usd=initial_balance_usd
+                initial_balance_btc=(amount_num if desired_position==1 else 0.0),
+                initial_balance_usd=(amount_num if desired_position==-1 else 0.0)
             )
-
-            current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
-
-            if desired_position == hist_position:
-                if desired_position == 1 and current_market_price > 0:
-                    if self.auto_trader.position_size < 1e-8:
-                        self.auto_trader.position_size = amount_num
-                        self.auto_trader.position_cost_basis = amount_num * current_market_price
-                        self.logger.info(
-                            f"(auto_trade) RSI: Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
-                            f"for an initial LONG of {amount_num} BTC at ${current_market_price:.2f}."
-                        )
-                        self.auto_trader.theoretical_trade = {
-                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                            'direction': 'long',
-                            'amount': amount_num,
-                            'theoretical': True
-                        }
-                elif desired_position == -1 and current_market_price > 0:
-                    short_btc = amount_num / current_market_price
-                    if self.auto_trader.position_size > -1e-8 and short_btc > 0:
-                        self.auto_trader.position_size = - short_btc
-                        self.auto_trader.position_cost_basis = short_btc * current_market_price
-                        self.logger.info(
-                            f"(auto_trade) RSI: Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
-                            f"for an initial SHORT of {short_btc:.6f} BTC at ${current_market_price:.2f}."
-                        )
-                        self.auto_trader.theoretical_trade = {
-                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                            'direction': 'short',
-                            'amount': amount_num,
-                            'theoretical': True
-                        }
-                else:
-                    self.logger.info(f"(auto_trade) RSI: No forced trade, positions match.")
-            else:
-                if desired_position == 1 and hist_position != 1 and current_market_price > 0:
-                    # BUGFIX: If user specified BTC, use amount_num directly; else divide by price
-                    if amount_unit == 'btc':
-                        buy_btc = amount_num
-                    else:
-                        buy_btc = amount_num / current_market_price
-
-                    trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    self.logger.info(f"(auto_trade) RSI: Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
-                    self.auto_trader.execute_trade(
-                        "buy",
-                        current_market_price,
-                        trade_ts,
-                        datetime.now(),
-                        buy_btc
-                    )
-                elif desired_position == -1 and hist_position != -1 and current_market_price > 0:
-                    if not user_has_btc():
-                        self.logger.info("(auto_trade) RSI: We have no BTC to sell, skipping forced SELL. Setting theoretical short anyway.")
-                        short_btc = amount_num / current_market_price
-                        self.auto_trader.position_size = - short_btc
-                        self.auto_trader.position_cost_basis = short_btc * current_market_price
-                        self.auto_trader.theoretical_trade = {
-                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                            'direction': 'short',
-                            'amount': amount_num,
-                            'theoretical': True
-                        }
-                    else:
-                        sell_btc = amount_num / current_market_price
-                        trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        self.logger.info(f"(auto_trade) RSI: Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
-                        self.auto_trader.execute_trade(
-                            "sell",
-                            current_market_price,
-                            trade_ts,
-                            datetime.now(),
-                            sell_btc
-                        )
-
-            self.auto_trader.start()
-            print(f"Auto-trading started with {balance_str}, position={pos_str}, "
-                  f"RSI strategy (Window={rsi_window}, Overbought={overbought}, Oversold={oversold}), do_live_trades={do_live}")
-
         else:
             print(f"Best strategy is not 'MA' or 'RSI'; it's {strategy_name}.")
             print("Currently supported: 'MA', 'RSI'.")
             return
+
+        current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
+
+        # If hist_position == desired_position => no forced trade
+        # Otherwise, forced immediate trade
+        if desired_position == hist_position:
+            self.logger.info("(auto_trade) Positions match. No forced trade needed.")
+            # If user typed e.g. "2.0btc long", reflect that in position_size & cost_basis
+            if desired_position == 1 and amount_unit == 'btc' and current_market_price>0:
+                # set position_size= e.g. 2.0, cost_basis=2.0 * price
+                self.auto_trader.position_size = amount_num
+                self.auto_trader.position_cost_basis = amount_num * current_market_price
+                self.logger.info(
+                    f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
+                    f"for an initial LONG of {amount_num} BTC at ${current_market_price:.2f}."
+                )
+                self.auto_trader.theoretical_trade = {
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'direction': 'long',
+                    'amount': amount_num,
+                    'theoretical': True
+                }
+            elif desired_position == -1 and amount_unit == 'usd' and current_market_price>0:
+                short_btc = amount_num / current_market_price
+                self.auto_trader.position_size = - short_btc
+                self.auto_trader.position_cost_basis = short_btc * current_market_price
+                self.logger.info(
+                    f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
+                    f"for an initial SHORT of {short_btc:.6f} BTC at ${current_market_price:.2f}."
+                )
+                self.auto_trader.theoretical_trade = {
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'direction': 'short',
+                    'amount': amount_num,
+                    'theoretical': True
+                }
+            else:
+                self.logger.info("(auto_trade) No position update needed (either neutral or leftover scenario).")
+
+        else:
+            # We have mismatch => forced immediate trade
+            # Example: user typed "2.0btc long" but hist_position is -1 => system forcibly buys 2.0 BTC
+            if desired_position == 1 and current_market_price>0:
+                if amount_unit == 'btc':
+                    buy_btc = amount_num
+                else:
+                    buy_btc = amount_num / current_market_price
+                trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                self.logger.info(f"(auto_trade) {strategy_name}: Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
+                self.auto_trader.execute_trade(
+                    "buy",
+                    current_market_price,
+                    trade_ts,
+                    datetime.now(),
+                    buy_btc
+                )
+            elif desired_position == -1 and current_market_price>0:
+                if not user_has_btc():
+                    self.logger.info(f"(auto_trade) {strategy_name}: We have no BTC to sell, skipping forced SELL. Setting theoretical short anyway.")
+                    short_btc = amount_num / current_market_price
+                    self.auto_trader.position_size = - short_btc
+                    self.auto_trader.position_cost_basis = short_btc * current_market_price
+                    self.auto_trader.theoretical_trade = {
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'direction': 'short',
+                        'amount': amount_num,
+                        'theoretical': True
+                    }
+                else:
+                    sell_btc = amount_num / current_market_price
+                    trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    self.logger.info(f"(auto_trade) {strategy_name}: Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
+                    self.auto_trader.execute_trade(
+                        "sell",
+                        current_market_price,
+                        trade_ts,
+                        datetime.now(),
+                        sell_btc
+                    )
+
+        self.auto_trader.start()
+        print(f"Auto-trading started with {balance_str}, position={pos_str}, "
+              f"{strategy_name} strategy, do_live_trades={do_live}")
 
     def do_stop_auto_trade(self, arg):
         """
@@ -789,7 +687,6 @@ class CryptoShell(cmd.Cmd):
         if 'momentum_alignment' in status:
             print(f"  • Momentum Alignment: {status['momentum_alignment']}")
 
-        # RSI debug info:
         if 'last_rsi' in status:
             print(f"  • Last RSI: {status['last_rsi']:.2f} (window={status.get('rsi_window',14)}, overbought={status.get('overbought',70)}, oversold={status.get('oversold',30)})")
 
