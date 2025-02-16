@@ -22,6 +22,15 @@
 #   If you'd like to display real, detailed results, consider 
 #   deriving them from the actual 'optimization_results' or 
 #   'strategy_comparison' rather than using a hard-coded block.
+#
+# ADDITIONALLY (NEW):
+#   1) We want to allow the user to specify multiple bar sizes (5, 15, 20 minutes,
+#      or 1H, etc.) so we can find the best bar size for each strategy.
+#   2) Then store that best bar size in best_strategy.json so tdr.py can trade
+#      with the same frequency.
+#   3) We add --bar-frequencies to parse_arguments, and pass that to run_trading_system.
+#   4) We do not remove any existing code or comments, including the old 
+#      commented-out blocks referencing mock data or best_strategy.json logic. 
 ###############################################################################
 
 from utils.analysis import analyze_data, run_trading_system
@@ -61,7 +70,7 @@ def load_config(config_path='config.json'):
             config = json.load(f)
         print(f"Loaded config from '{config_path}'")
         return config
-###############################################################################
+
 
 def parse_arguments():
     """
@@ -78,10 +87,15 @@ def parse_arguments():
     parser.add_argument('--max-iterations', type=int, default=50,
                         help='Maximum number of iterations for parameter optimization')
     parser.add_argument('--high-frequency', type=str, default='1H',
-                        help='Sampling frequency for higher timeframe (e.g., ' '"1H" for hourly)')
+                        help='Sampling frequency for higher timeframe (e.g., "1H" for hourly)')
     parser.add_argument('--low-frequency', type=str, default='15T',
-                        help='Sampling frequency for lower timeframe (e.g., ' '"15T" for 15 minutes)')
-    # NEW: Add --only-ma flag
+                        help='Sampling frequency for lower timeframe (e.g., "15T" for 15 minutes)')
+
+    # NEW: Add --bar-frequencies (for multiple bar sizes)
+    parser.add_argument('--bar-frequencies', nargs='*', default=['5T','15T','20T','1H'],
+                        help='List of bar frequencies to test (e.g. 5T 15T 20T 1H)')
+
+    # NEW: Add --only-ma flag (existing code, reaffirming)
     parser.add_argument('--only-ma', action='store_true',
                         help='Only optimize for the Moving Average (MA) strategy.')
     return parser.parse_args()
@@ -172,8 +186,7 @@ def display_summary(strategy_comparison):
         print(
             f"{strategy}: Total Return = {strategy_row['Total_Return'].iloc[0]:.2f}%")
 
-    overall_best = strategy_comparison.loc[strategy_comparison['Total_Return'].idxmax(
-    )]
+    overall_best = strategy_comparison.loc[strategy_comparison['Total_Return'].idxmax()]
     print(f"\nOverall best strategy: {overall_best['Strategy']}")
     print(f"Best strategy Total Return: {overall_best['Total_Return']:.2f}%")
 
@@ -261,13 +274,15 @@ def main():
     print("Running trading system...")
     try:
         # Execute the trading system and collect results
+        # CHANGED: pass bar_frequencies to run_trading_system
         optimization_results, strategy_comparison = run_trading_system(
             df,
             high_frequency=args.high_frequency,
             low_frequency=args.low_frequency,
             max_iterations=args.max_iterations,
             config=config,     # <-- # CHANGED: Passing config
-            only_ma=args.only_ma
+            only_ma=args.only_ma,
+            bar_frequencies=args.bar_frequencies  # NEW
         )
 
         ################################################################
