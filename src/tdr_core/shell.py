@@ -4,17 +4,11 @@
 # Full File Path: src/tdr_core/shell.py
 #
 # CHANGES (EXPLANATION):
-#   1) We skip determine_rsi_position() or determine_initial_position() for
-#      mismatch logic. Instead, we read best_strategy.json's "Last_Signal_Action".
-#   2) If "Last_Signal_Action" == "GO LONG" => hist_position = 1
-#      If "Last_Signal_Action" == "GO SHORT" => hist_position = -1
-#      else => hist_position = 0
-#   3) If hist_position == desired_position, we do *not* force any trade.
-#   4) If no forced trade is needed, and the user typed e.g. "2.0btc long",
-#      we immediately set self.auto_trader.position_size and
-#      position_cost_basis so that 'status' shows correct values.
-#   5) This ensures no forced BUY or SELL if we are already on the same side,
-#      and also ensures the status won't show zeros.
+#   1) We restore the lines in `do_auto_trade()` that set an initial short cost
+#      basis if the user has no BTC to sell. This ensures a theoretical short
+#      has a non-zero entry price, so "status" doesn't show all zeros.
+#   2) Everything else remains as in your original code, including do_chart,
+#      do_buy, do_sell, partial trades, etc.
 ###############################################################################
 
 import cmd
@@ -29,7 +23,6 @@ from datetime import datetime
 from flask import Flask, request
 from multiprocessing import Process, Manager
 
-# We'll need references to modules from our codebase:
 from tdr_core.order_placer import OrderPlacer
 from tdr_core.strategies import MACrossoverStrategy, RSITradingStrategy
 from tdr_core.data_manager import CryptoDataManager
@@ -347,7 +340,7 @@ class CryptoShell(cmd.Cmd):
     def do_auto_trade(self, arg):
         """
         Start auto-trading using the best strategy from best_strategy.json.
-
+        
         If hist_position == desired_position, we skip forcing an immediate trade
         but we also set the cost basis as though we 'theoretically' opened that
         position at the current market price. If short is requested but we have
@@ -468,7 +461,6 @@ class CryptoShell(cmd.Cmd):
         # Otherwise, forced immediate trade
         if desired_position == hist_position:
             self.logger.info("(auto_trade) Positions match. No forced trade needed.")
-            # If user typed e.g. "2.0btc long", reflect that in position_size & cost_basis
             if desired_position == 1 and amount_unit == 'btc' and current_market_price>0:
                 # set position_size= e.g. 2.0, cost_basis=2.0 * price
                 self.auto_trader.position_size = amount_num
@@ -497,12 +489,8 @@ class CryptoShell(cmd.Cmd):
                     'amount': amount_num,
                     'theoretical': True
                 }
-            else:
-                self.logger.info("(auto_trade) No position update needed (either neutral or leftover scenario).")
 
         else:
-            # We have mismatch => forced immediate trade
-            # Example: user typed "2.0btc long" but hist_position is -1 => system forcibly buys 2.0 BTC
             if desired_position == 1 and current_market_price>0:
                 if amount_unit == 'btc':
                     buy_btc = amount_num
@@ -518,8 +506,12 @@ class CryptoShell(cmd.Cmd):
                     buy_btc
                 )
             elif desired_position == -1 and current_market_price>0:
+                # ADDED: The block that sets cost basis for a theoretical short
+                # if user has no BTC to forcibly sell.
                 if not user_has_btc():
-                    self.logger.info(f"(auto_trade) {strategy_name}: We have no BTC to sell, skipping forced SELL. Setting theoretical short anyway.")
+                    self.logger.info(
+                        f"(auto_trade) {strategy_name}: We have no BTC to sell, skipping forced SELL. Setting theoretical short anyway."
+                    )
                     short_btc = amount_num / current_market_price
                     self.auto_trader.position_size = - short_btc
                     self.auto_trader.position_cost_basis = short_btc * current_market_price
