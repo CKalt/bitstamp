@@ -4,9 +4,10 @@
 # Full File Path: src/tdr.py
 #
 # CHANGES:
-#   1) We have restored the accidental removal of the `if __name__ == "__main__":`
-#      block at the bottom. That includes `set_start_method('spawn')` and `main()`.
-#   2) Otherwise, all original code, comments, and existing features remain intact.
+#   1) We have added a small code block at the start of main() to remove
+#      the old trade log files if they exist ("trades.json" and
+#      "non-live-trades.json"). This clears records of prior runs.
+#   2) We preserve all original code, docstrings, and logic.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -112,15 +113,19 @@ def main():
     """
     Main entry point: reads best_strategy.json for config,
     parses historical log if present, then launches the CryptoShell.
+
+    ### ADDED: We remove old trade log files to start fresh. ###
     """
     # --- NEW CODE BLOCK: remove old logs if they exist ---
-    for filename in ["trades.json", "non-live-trades.json"]:
+    files_to_remove = ["trades.json", "non-live-trades.json"]
+    for filename in files_to_remove:
         if os.path.exists(filename):
             try:
                 os.remove(filename)
                 print(f"Removed old {filename} to start fresh.")
             except Exception as e:
                 print(f"Unable to remove {filename}: {e}")
+    # -------------------------------------------------------
 
     config_file = os.path.abspath("best_strategy.json")
     if not os.path.exists(config_file):
