@@ -5,10 +5,9 @@
 #
 # CHANGES (EXPLANATION):
 #   1) We restore the lines in `do_auto_trade()` that set an initial short cost
-#      basis if the user has no BTC to sell. This ensures a theoretical short
-#      has a non-zero entry price, so "status" doesn't show all zeros.
-#   2) Everything else remains as in your original code, including do_chart,
-#      do_buy, do_sell, partial trades, etc.
+#      basis if the user has no BTC to sell. 
+#   2) We ensure everything else remains the same, including partial trades, 
+#      docstrings, commands, etc. 
 ###############################################################################
 
 import cmd
@@ -340,7 +339,7 @@ class CryptoShell(cmd.Cmd):
     def do_auto_trade(self, arg):
         """
         Start auto-trading using the best strategy from best_strategy.json.
-        
+
         If hist_position == desired_position, we skip forcing an immediate trade
         but we also set the cost basis as though we 'theoretically' opened that
         position at the current market price. If short is requested but we have
@@ -506,8 +505,6 @@ class CryptoShell(cmd.Cmd):
                     buy_btc
                 )
             elif desired_position == -1 and current_market_price>0:
-                # ADDED: The block that sets cost basis for a theoretical short
-                # if user has no BTC to forcibly sell.
                 if not user_has_btc():
                     self.logger.info(
                         f"(auto_trade) {strategy_name}: We have no BTC to sell, skipping forced SELL. Setting theoretical short anyway."
