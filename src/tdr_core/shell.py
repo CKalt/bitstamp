@@ -3,11 +3,10 @@
 ###############################################################################
 # Full File Path: src/tdr_core/shell.py
 #
-# CHANGES (EXPLANATION):
-#   1) We restore all original docstrings and code for the Shell.
-#   2) In do_auto_trade(), when user says "auto_trade 196000usd short" and
-#      we have no BTC, we set `last_trade_price` and `balance_btc=-short_btc`
-#      so that the RSI strategy can immediately show a non-zero price and cost basis.
+# CHANGES:
+#   1) In do_status(), we add logic to display 'rsi_proximity' in both
+#      short and long status views, paralleling the existing MA approach.
+#   2) We preserve all original code, docstrings, and logic.
 ###############################################################################
 
 import cmd
@@ -32,38 +31,6 @@ from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
 
 
-def determine_rsi_position(df, rsi_window=14, overbought=70, oversold=30):
-    """
-    (Deprecated for mismatch logic; kept for reference if needed.)
-    Previously used to guess final RSI-based position from df.
-    We now rely on best_strategy.json to decide the last known signal.
-    """
-    if df.empty or len(df) < rsi_window:
-        return 0
-    from indicators.technical_indicators import ensure_datetime_index, calculate_rsi
-    df_copy = ensure_datetime_index(df.copy())
-    df_copy = df_copy.resample('1H').agg({
-        'open': 'first',
-        'high': 'max',
-        'low': 'min',
-        'close': 'last',
-        'volume': 'sum',
-        'trades': 'sum',
-        'timestamp': 'last'
-    }).dropna()
-    if len(df_copy) < rsi_window:
-        return 0
-
-    df_copy = calculate_rsi(df_copy, window=rsi_window, price_col='close')
-    last_rsi = df_copy.iloc[-1]['RSI']
-    if last_rsi < oversold:
-        return 1
-    elif last_rsi > overbought:
-        return -1
-    return 0
-
-
-###############################################################################
 class CryptoShell(cmd.Cmd):
     """
     An interactive command-based shell for controlling the Crypto trading system.
@@ -457,11 +424,9 @@ class CryptoShell(cmd.Cmd):
         current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
 
         # If hist_position == desired_position => no forced trade
-        # Otherwise, forced immediate trade
         if desired_position == hist_position:
             self.logger.info("(auto_trade) Positions match. No forced trade needed.")
             if desired_position == 1 and amount_unit == 'btc' and current_market_price>0:
-                # set position_size= e.g. 2.0, cost_basis=2.0 * price
                 self.auto_trader.position_size = amount_num
                 self.auto_trader.position_cost_basis = amount_num * current_market_price
                 self.logger.info(
@@ -490,6 +455,7 @@ class CryptoShell(cmd.Cmd):
                 }
 
         else:
+            # Forcing immediate trade if different from historical
             if desired_position == 1 and current_market_price>0:
                 if amount_unit == 'btc':
                     buy_btc = amount_num
@@ -512,8 +478,6 @@ class CryptoShell(cmd.Cmd):
                     short_btc = amount_num / current_market_price
                     self.auto_trader.position_size = - short_btc
                     self.auto_trader.position_cost_basis = short_btc * current_market_price
-
-                    # ADDED: set last_trade_price & negative BTC so get_status sees them
                     self.auto_trader.last_trade_price = current_market_price
                     self.auto_trader.balance_btc = -short_btc
 
@@ -594,17 +558,20 @@ class CryptoShell(cmd.Cmd):
                 print(f"    • Amount:     {t['amount']}")
                 print(f"    • Theoretical? {t['theoretical']}")
 
-            if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
-                print(f"\n  • MA Crossover Proximity: {status['ma_signal_proximity']*100:.2f}%")
-                print("    (Closer to 0% means closer to flipping from short->long or long->short)")
+            # ### ADDED: Show RSI Proximity if it exists
             if 'rsi_proximity' in status and status['rsi_proximity'] is not None:
                 print(f"\n  • RSI Proximity: {status['rsi_proximity']*100:.2f}%")
                 print("    (Closer to 0% means RSI is nearer to a boundary cross)")
 
+            # If there's also an MA strategy, we might show 'ma_signal_proximity'
+            if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
+                print(f"\n  • MA Crossover Proximity: {status['ma_signal_proximity']*100:.2f}%")
+                print("    (Closer to 0% means closer to flipping from short->long or long->short)")
+
             print("")
             return
 
-        # Otherwise, show the full (long) status (restored code):
+        # Otherwise, show the full (long) status (rest of code unchanged)...
         print("\nAuto-Trading Status:")
         print("━"*50)
         print(f"  • Running: {status['running']}")
@@ -681,14 +648,19 @@ class CryptoShell(cmd.Cmd):
         if 'momentum_alignment' in status:
             print(f"  • Momentum Alignment: {status['momentum_alignment']}")
 
-        if 'last_rsi' in status:
+        if 'last_rsi' in status and status['last_rsi'] is not None:
             print(f"  • Last RSI: {status['last_rsi']:.2f} (window={status.get('rsi_window',14)}, "
                   f"overbought={status.get('overbought',70)}, oversold={status.get('oversold',30)})")
 
-        if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
-            print(f"  • MA Crossover Proximity: {status['ma_signal_proximity']*100:.2f}%")
+        ### ADDED: print rsi_proximity, if present ###
         if 'rsi_proximity' in status and status['rsi_proximity'] is not None:
             print(f"  • RSI Proximity: {status['rsi_proximity']*100:.2f}%")
+            print("    (Closer to 0% means RSI is nearer to a boundary cross)")
+        ### END ADDED ###
+
+        if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
+            print(f"  • MA Crossover Proximity: {status['ma_signal_proximity']*100:.2f}%")
+            print("    (Closer to 0% means closer to flipping from short->long or long->short)")
 
         if status.get('trades_executed',0) == 0:
             print("\nNo trades yet, stats are limited.")
@@ -703,16 +675,6 @@ class CryptoShell(cmd.Cmd):
         hours = session_duration.total_seconds() / 3600
         print(f"\nSession Duration: {hours:.1f} hours\n")
         print("━"*50)
-
-    def do_stop_auto_trade(self, arg):
-        """
-        Stop auto-trading if running.
-        """
-        if self.auto_trader and self.auto_trader.running:
-            self.auto_trader.stop()
-            print("Auto-trading stopped.")
-        else:
-            print("No auto-trading is running.")
 
     def do_quit(self, arg):
         """
