@@ -7,8 +7,12 @@
 #   1) We now accept a new optional parameter bar_frequencies (list of freq).
 #   2) We iterate over each frequency in bar_frequencies, run the existing
 #      strategy pipeline, and track which frequency yields the best overall
-#      returns. The best frequency is then stored in best_strategy.json
+#      returns. The best frequency is then stored in best_strategy.json.
 #   3) We keep the existing logic and comments, ensuring minimal changes.
+#
+# FIX (NEW):
+#   - We move the import of generate_trade_list to the top of the file
+#     to avoid a scoping error: "cannot access local variable 'generate_trade_list'"
 ###############################################################################
 
 import pandas as pd
@@ -17,8 +21,11 @@ import matplotlib.pyplot as plt
 import json
 import traceback
 import os
-from indicators.technical_indicators import ensure_datetime_index
+
+# FIX: Import generate_trade_list here at the top, not in a nested block
 from backtesting.backtester import generate_trade_list
+
+from indicators.technical_indicators import ensure_datetime_index
 from optimization.optimizer import (
     optimize_ma_parameters,
     optimize_rsi_parameters,
@@ -96,10 +103,6 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
     min_profit_per_trade = constraints.get("min_profit_per_trade", 0.0)
 
     # If bar_frequencies is None or empty, we just run the existing logic once
-    # using the user-supplied "high_frequency" (and "low_frequency" for other strats).
-    # If bar_frequencies is not empty, we run a small loop. We want to find which
-    # bar frequency yields the best overall final strategy return, store that,
-    # and return it.
     if not bar_frequencies:
         bar_frequencies = [high_frequency]
 
@@ -121,17 +124,6 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
             'volume': 'sum'
         }).dropna()
         df_resampled['timestamp'] = df_resampled.index.view('int64') // 10**9
-
-        # We'll run the existing strategy pipeline on df_resampled for the "higher timeframe"
-        # and if we do "low_frequency" for HFT stuff, let's just reuse freq or low_frequency.
-        # We'll do the same logic as the original single-run approach, but we store partial results
-        # in local variables.
-
-        # The code below replicates the existing logic from the original run_trading_system,
-        # except we replace "df_high" with "df_resampled" for the "MA/RSI/others" and keep the lower
-        # timeframe approach for "df_low". We can also do "df_low = df_copy.resample(low_frequency)..."
-        # if needed.
-        # For minimal changes, we do so inline:
 
         # Resample data to lower timeframe for certain strategies
         df_low = df_copy.resample(low_frequency).agg({
@@ -161,8 +153,6 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
             print("Initial MA Crossover parameters:")
             print(best_ma)
 
-            # Frequency optimization inside the single freq might be redundant,
-            # but let's keep it for now.
             freq_results = optimize_ma_frequency(df, {
                 'Short_Window': int(best_ma['Short_Window']),
                 'Long_Window': int(best_ma['Long_Window'])
@@ -180,7 +170,7 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
             )
             best_ma_df = generate_ma_signals(best_ma_df)
             ma_trades = generate_trade_list(best_ma_df, 'MA')
-            ma_trades.to_csv(f'ma_trades_{freq}.csv', index=False)  # or keep same name
+            ma_trades.to_csv(f'ma_trades_{freq}.csv', index=False)
 
             strategy_dfs_local['MA'] = best_ma_df
             strategies_local['MA'] = best_ma.to_dict()
@@ -346,9 +336,6 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
 
         # Summaries for this freq
         if strategies_local:
-            # Summaries
-            # We replicate the existing "print_strategy_results"
-            # but we only keep it local for each freq
             total_returns_local = {name: result.get('Total_Return', 0)
                                    for name, result in strategies_local.items()}
             local_best_strat = max(total_returns_local.items(), key=lambda x: x[1])[0] if total_returns_local else None
@@ -358,20 +345,16 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
                 best_overall_freq = freq
                 best_strategies_snapshot = strategies_local
                 best_dfs_snapshot = strategy_dfs_local
-                # We'll build the comparison dataframe
-                best_comparison_df = pd.DataFrame.from_dict(strategies_local, orient='index')
 
             if all_results_list_local:
                 combined_local = pd.concat(all_results_list_local, ignore_index=True)
                 all_results_combined.append(combined_local)
 
-    # After testing all bar frequencies, we store the best frequency, best strategy, etc.
     if len(all_results_combined) > 0:
         all_results = pd.concat(all_results_combined, ignore_index=True)
     else:
         all_results = pd.DataFrame()
 
-    # We replicate the logic from the end of the original run_trading_system
     if best_strategies_snapshot:
         print("\nFinal Best Strategies (across frequencies):")
         print_strategy_results(best_strategies_snapshot)
@@ -388,7 +371,6 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
             print(f"Best bar frequency: {best_overall_freq}")
             print(f"Best strategy Total Return: {total_returns[best_strategy]:.2f}%")
 
-            # Build the JSON
             def convert_types(value):
                 if isinstance(value, (np.integer, np.int64)):
                     return int(value)
@@ -404,10 +386,8 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
             best_strategy_params_converted = {
                 key: convert_types(value) for key, value in best_strategies_snapshot[best_strategy].items()
             }
-            # Add the bar size
             best_strategy_params_converted["Bar_Size"] = best_overall_freq
 
-            # Determine last non-zero signal
             df_best = best_dfs_snapshot.get(best_strategy, None)
             if df_best is not None and not df_best.empty:
                 if best_strategy == "Bollinger Bands":
@@ -445,16 +425,13 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
                 print("An error occurred while writing to best_strategy.json:")
                 traceback.print_exc()
 
-            # Also write out a full trade list
             if df_best is not None and not df_best.empty:
-                from backtesting.backtester import generate_trade_list
-                best_strategy_trades = generate_trade_list(df_best, best_strategy)
                 try:
+                    best_strategy_trades = generate_trade_list(df_best, best_strategy)
                     def convert_timestamps_for_json(obj):
                         if isinstance(obj, pd.Timestamp):
                             return obj.isoformat()
                         return str(obj)
-
                     trades_records = best_strategy_trades.to_dict(orient='records')
                     with open('best_strategy_trades.json', 'w') as f:
                         json.dump(trades_records, f, indent=4, default=convert_timestamps_for_json)
@@ -467,8 +444,8 @@ def run_trading_system(df, high_frequency='1H', low_frequency='15T', max_iterati
     else:
         print("No strategies met the criteria across any bar frequency.")
         comparison_df = pd.DataFrame()
+        all_results = pd.DataFrame()
 
-    # Save the final combined results if we have any
     if not all_results.empty:
         all_results.to_csv('optimization_results.csv', index=False)
         print("\nAll optimization results saved to 'optimization_results.csv'.")
