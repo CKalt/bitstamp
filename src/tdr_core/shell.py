@@ -1,13 +1,13 @@
 ###############################################################################
-# src/tdr_core/shell.py
+# File Path: src/tdr_core/shell.py
 ###############################################################################
 # Full File Path: src/tdr_core/shell.py
 #
 # CHANGES (EXPLANATION):
-#   1) We restore the lines in `do_auto_trade()` that set an initial short cost
-#      basis if the user has no BTC to sell. 
-#   2) We ensure everything else remains the same, including partial trades, 
-#      docstrings, commands, etc. 
+#   1) We restore all original docstrings and code for the Shell.
+#   2) In do_auto_trade(), when user says "auto_trade 196000usd short" and
+#      we have no BTC, we set `last_trade_price` and `balance_btc=-short_btc`
+#      so that the RSI strategy can immediately show a non-zero price and cost basis.
 ###############################################################################
 
 import cmd
@@ -512,6 +512,11 @@ class CryptoShell(cmd.Cmd):
                     short_btc = amount_num / current_market_price
                     self.auto_trader.position_size = - short_btc
                     self.auto_trader.position_cost_basis = short_btc * current_market_price
+
+                    # ADDED: set last_trade_price & negative BTC so get_status sees them
+                    self.auto_trader.last_trade_price = current_market_price
+                    self.auto_trader.balance_btc = -short_btc
+
                     self.auto_trader.theoretical_trade = {
                         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         'direction': 'short',
@@ -599,7 +604,7 @@ class CryptoShell(cmd.Cmd):
             print("")
             return
 
-        # Otherwise, show the full (long) status:
+        # Otherwise, show the full (long) status (restored code):
         print("\nAuto-Trading Status:")
         print("━"*50)
         print(f"  • Running: {status['running']}")
@@ -608,58 +613,58 @@ class CryptoShell(cmd.Cmd):
         print(f"  • Remaining Trades Today: {status['remaining_trades_today']}")
 
         print("\nAccount Balances & Performance:")
-        print(f"  • Initial USD Balance: ${status['initial_balance_usd']:.2f}")
-        print(f"  • Initial BTC Balance: {status['initial_balance_btc']:.8f}")
-        print(f"  • Current USD Balance: ${status['balance_usd']:.2f}")
-        print(f"  • Current BTC Balance: {status['balance_btc']:.8f}")
-        print(f"  • Total Return (vs initial): {status['total_return_pct']:.2f}%")
-        print(f"  • Total P&L: ${status['total_profit_loss']:.2f}")
-        print(f"  • Current Trade Amount: {status['current_amount']:.8f}")
-        print(f"  • Total Fees Paid: ${status['total_fees_paid']:.2f}")
+        print(f"  • Initial USD Balance: ${status.get('initial_balance_usd',0.0):.2f}")
+        print(f"  • Initial BTC Balance: {status.get('initial_balance_btc',0.0):.8f}")
+        print(f"  • Current USD Balance: ${status.get('balance_usd',0.0):.2f}")
+        print(f"  • Current BTC Balance: {status.get('balance_btc',0.0):.8f}")
+        print(f"  • Total Return (vs initial): {status.get('total_return_pct',0.0):.2f}%")
+        print(f"  • Total P&L: ${status.get('total_profit_loss',0.0):.2f}")
+        print(f"  • Current Trade Amount: {status.get('current_amount',0.0):.8f}")
+        print(f"  • Total Fees Paid: ${status.get('total_fees_paid',0.0):.2f}")
 
         print("\nMark-to-Market & Drawdowns:")
-        print(f"  • Current MTM (USD): ${status['mark_to_market_usd']:.2f}")
-        print(f"  • Current MTM (BTC): {status['mark_to_market_btc']:.8f}")
-        print(f"  • Max MTM (USD): ${status['max_mtm_usd']:.2f}")
-        print(f"  • Min MTM (USD): ${status['min_mtm_usd']:.2f}")
-        print(f"  • Max USD Balance: ${status['max_balance_usd']:.2f}")
-        print(f"  • Min USD Balance: ${status['min_balance_usd']:.2f}")
-        print(f"  • Max BTC Balance: {status['max_balance_btc']:.8f}")
-        print(f"  • Min BTC Balance: {status['min_balance_btc']:.8f}")
+        print(f"  • Current MTM (USD): ${status.get('mark_to_market_usd',0.0):.2f}")
+        print(f"  • Current MTM (BTC): {status.get('mark_to_market_btc',0.0):.8f}")
+        print(f"  • Max MTM (USD): ${status.get('max_mtm_usd',0.0):.2f}")
+        print(f"  • Min MTM (USD): ${status.get('min_mtm_usd',0.0):.2f}")
+        print(f"  • Max USD Balance: ${status.get('max_balance_usd',0.0):.2f}")
+        print(f"  • Min USD Balance: ${status.get('min_balance_usd',0.0):.2f}")
+        print(f"  • Max BTC Balance: {status.get('max_balance_btc',0.0):.8f}")
+        print(f"  • Min BTC Balance: {status.get('min_balance_btc',0.0):.8f}")
 
         pos_info = status.get('position_info', {})
         print("\nPosition Details:")
         print(f"  • Direction:  {pos_str}")
-        print(f"  • Current Price:  ${pos_info.get('current_price', 0.0):.2f}")
-        print(f"  • Entry Price:    ${pos_info.get('entry_price', 0.0):.2f}")
+        print(f"  • Current Price:  ${pos_info.get('current_price',0.0):.2f}")
+        print(f"  • Entry Price:    ${pos_info.get('entry_price',0.0):.2f}")
         if status['position'] == 1:
-            print(f"  • Position Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f}")
-            print(f"  • Position Value (USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
+            print(f"  • Position Size (BTC): {pos_info.get('position_size_btc',0.0):.8f}")
+            print(f"  • Position Value (USD): ${pos_info.get('position_size_usd',0.0):.2f}")
         elif status['position'] == -1:
-            print(f"  • Short Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f} (negative means short)")
-            print(f"  • USD Held:         ${pos_info.get('position_size_usd', 0.0):.2f}")
+            print(f"  • Short Size (BTC): {pos_info.get('position_size_btc',0.0):.8f} (negative means short)")
+            print(f"  • USD Held:         ${pos_info.get('position_size_usd',0.0):.2f}")
         else:
             print("  • Neutral position, no open BTC or short.")
-        print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
+        print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl',0.0):.2f}")
 
         print("\nTrading Statistics:")
-        print(f"  • Total Trades: {status['trades_executed']}")
-        print(f"  • Profitable Trades: {status['profitable_trades']}")
-        print(f"  • Win Rate: {status['win_rate']:.1f}%")
+        print(f"  • Total Trades: {status.get('trades_executed',0)}")
+        print(f"  • Profitable Trades: {status.get('profitable_trades',0)}")
+        print(f"  • Win Rate: {status.get('win_rate',0.0):.1f}%")
 
-        if status['trades_executed'] > 0:
-            print(f"  • Avg Profit/Trade: ${status['average_profit_per_trade']:.2f}")
-            print(f"  • Avg Fee/Trade: ${status.get('average_fee_per_trade', 0.0):.2f}")
-            print(f"  • Risk/Reward Ratio: {status.get('risk_reward_ratio', 0.0):.2f}")
+        if status.get('trades_executed',0) > 0:
+            print(f"  • Avg Profit/Trade: ${status.get('average_profit_per_trade',0.0):.2f}")
+            print(f"  • Avg Fee/Trade: ${status.get('average_fee_per_trade',0.0):.2f}")
+            print(f"  • Risk/Reward Ratio: {status.get('risk_reward_ratio',0.0):.2f}")
 
-        if status['last_trade']:
+        if status.get('last_trade',None):
             print("\nLast Trade Info:")
             print(f"  • Reason: {status['last_trade']}")
-            print(f"  • Data Source: {status['last_trade_data_source']}")
-            print(f"  • Signal Time: {status['last_trade_signal_timestamp']}")
+            print(f"  • Data Source: {status.get('last_trade_data_source','N/A')}")
+            print(f"  • Signal Time: {status.get('last_trade_signal_timestamp','N/A')}")
 
         print("\nTechnical Analysis:")
-        if status['next_trigger']:
+        if status.get('next_trigger'):
             print(f"  • {status['next_trigger']}")
         if status.get('current_trends'):
             print("  • Current Trends:")
@@ -677,20 +682,21 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Momentum Alignment: {status['momentum_alignment']}")
 
         if 'last_rsi' in status:
-            print(f"  • Last RSI: {status['last_rsi']:.2f} (window={status.get('rsi_window',14)}, overbought={status.get('overbought',70)}, oversold={status.get('oversold',30)})")
+            print(f"  • Last RSI: {status['last_rsi']:.2f} (window={status.get('rsi_window',14)}, "
+                  f"overbought={status.get('overbought',70)}, oversold={status.get('oversold',30)})")
 
         if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
             print(f"  • MA Crossover Proximity: {status['ma_signal_proximity']*100:.2f}%")
         if 'rsi_proximity' in status and status['rsi_proximity'] is not None:
             print(f"  • RSI Proximity: {status['rsi_proximity']*100:.2f}%")
 
-        if status['trades_executed'] == 0:
+        if status.get('trades_executed',0) == 0:
             print("\nNo trades yet, stats are limited.")
-        elif status['win_rate'] < 40:
+        elif status.get('win_rate',0.0) < 40:
             print("Warning: Win rate is below 40%. Consider reviewing parameters.")
-        if status['current_balance'] < status['initial_balance']*0.9:
+        if status.get('current_balance',0.0) < status.get('initial_balance',0.0)*0.9:
             print("Warning: Balance is over 10% below initial.")
-        if status['remaining_trades_today'] <= 1:
+        if status.get('remaining_trades_today',0) <= 1:
             print("Warning: Approaching daily trade limit!")
 
         session_duration = datetime.now() - self.auto_trader.strategy_start_time
