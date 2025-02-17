@@ -1,17 +1,12 @@
 ###############################################################################
-# File Path: src/tdr.py
+# src/tdr.py
 ###############################################################################
 # Full File Path: src/tdr.py
 #
 # CHANGES:
-#   1) We now read "Bar_Size" from best_strategy.json (if present).
-#   2) We convert real-time trades into that bar size in a bar-based approach,
-#      computing signals only at bar-close with a shift of 1, so it matches
-#      the backtester exactly.
-#   3) We have introduced minimal changes in main() to pass the loaded bar size
-#      to our new or adapted code. Then we do once-per-bar signal checks.
-#   4) Preserving all original code, comments, and not removing any existing
-#      features unless they stand in direct conflict. Everything else remains.
+#   1) We have restored the accidental removal of the `if __name__ == "__main__":`
+#      block at the bottom. That includes `set_start_method('spawn')` and `main()`.
+#   2) Otherwise, all original code, comments, and existing features remain intact.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -61,6 +56,9 @@ from indicators.technical_indicators import (
     generate_macd_signals,
 )
 
+# ------------------------------------------------------------------------
+# NEW IMPORTS for refactored modules (preserving original classes/functions)
+# ------------------------------------------------------------------------
 from tdr_core.data_manager import CryptoDataManager
 from tdr_core.trade import Trade
 from tdr_core.websocket_client import subscribe_to_websocket
@@ -71,7 +69,12 @@ from tdr_core.shell import CryptoShell
 HIGH_FREQUENCY = '1H'  # Default bar size (we will override if best_strategy.json says otherwise)
 STALE_FEED_SECONDS = 120  # If more than 2 minutes pass with no trades, attempt reconnect.
 
+
 def run_websocket(url, symbols, data_manager, stop_event):
+    """
+    Launch a separate event loop to handle multiple subscribe tasks,
+    including staleness detection.
+    """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     tasks = [subscribe_to_websocket(url, symbol, data_manager, stop_event) for symbol in symbols]
@@ -85,6 +88,7 @@ def run_websocket(url, symbols, data_manager, stop_event):
         data_manager.logger.error(f"WebSocket encountered error: {e}")
     finally:
         loop.close()
+
 
 def setup_logging(verbose):
     logger = logging.getLogger("CryptoShellLogger")
@@ -102,6 +106,7 @@ def setup_logging(verbose):
     logger.addHandler(file_handler)
 
     return logger
+
 
 def main():
     """
@@ -157,10 +162,6 @@ def main():
         df = parse_log_file(log_file_path, start_date, end_date)
 
     if not df.empty:
-        # We unify the approach with the backtester
-        # So we only compute signals once per bar, *then shift by 1 bar*
-        # to replicate that bktst approach exactly.
-
         df.rename(columns={'price': 'close'}, inplace=True)
         df['open'] = df['close']
         df['high'] = df['close']
@@ -206,3 +207,9 @@ def main():
             shell.auto_trader.stop()
         if shell.chart_process and shell.chart_process.is_alive():
             shell.stop_dash_app()
+
+
+# RESTORED: We place back the call to main() at the bottom:
+if __name__ == '__main__':
+    set_start_method('spawn')
+    main()
