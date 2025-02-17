@@ -1,0 +1,154 @@
+I have been having problems with the two python applications, used for bitcoin (btcusd trade pair) auto trading. These are listed and described below. Their main files are `src/bktst.py` and `src/tdr.py` and each have other local dependencies under the `src` directory.
+
+The `src/bktst.py` application, listed first, is a back tester and 'src/tdr.py', the second one, is an interactive command line driven program used to perform and allow the user to check on the status of auto trades based on either one of two different strategies identified using the back tester.  The information over which strategy and tuned parameters to use is created by bktst, and stored in a file called `best_strategy.json`. 
+
+I had reached a level of moderate stability and quality when `src/tdr.py` only supported a moving average crossover strategy. The following is the contents of my `best_strategy.json` file that I am currently running this older version and performing live trading on:
+
+
+```
+{
+    "Frequency": "1H",
+    "Strategy": "MA",
+    "Short_Window": 4,
+    "Long_Window": 38,
+    "Final_Balance": 10499.328525204743,
+    "Total_Return": 4.993285252047426,
+    "Total_Trades": 47.0,
+    "Average_Trades_Per_Day": 1.5666666666666667,
+    "Profit_Factor": 1.055339869790974,
+    "Sharpe_Ratio": 0.2711064084592064,
+    "Last_Signal_Timestamp": 1736722800,
+    "Last_Signal_Action": "GO SHORT",
+    "Last_Trade_Timestamp": 1736723593,
+    "Last_Trade_Price": 94166.0,
+    "do_live_trades": true
+}
+```
+
+Unfortunately I fear the quality diminished when I inntroduce the RSI strategy.  Thus one of the items I would like you to focus on is refining the logic and features to be more shared between the MA and the RSI modes.
+
+Here is an example that I am testing with. It so happens we have both a dry-run and live mode, and so I am stuck in dry-run mode getting this to work with RSI.
+
+```
+{
+    "Strategy": "RSI",
+    "RSI_Window": 12,
+    "Overbought": 75,
+    "Oversold": 30,
+    "Final_Balance": 10730.391578353923,
+    "Total_Return": 7.303915783539232,
+    "Total_Trades": 112.0,
+    "Average_Trades_Per_Day": 3.6129032258064515,
+    "Profit_Factor": 1.2233172141355977,
+    "Sharpe_Ratio": 0.5502781564574327,
+    "Last_Signal_Timestamp": 1739314800,
+    "Last_Signal_Action": "GO LONG",
+    "Last_Trade_Timestamp": 1739395492,
+    "Last_Trade_Price": 97561.0,
+    "do_live_trades": false
+}
+```
+
+There is a web socket application not shown here called `src/websock-ticker2.py` that is constantly running and collecting real time price / trade data and storing it into the file named `btcusd.log`.  It so happens that btcusd is the crypto pair I am trading. This file is used by bktst.py. The trading time granularity is coarser than is tdr.py however the idea is to use the strategy that showed good performance historically and it is hoped will inform live trading choices.  
+
+Now it is the auto_trade feature that I am having several issues with and I hope you can check the code to locate these bugs.   First of all it is very important that you understand how the auto_trade command is supposed to work because I believe my assistant may have misunderstood.
+
+The user will start auto trading by first looking at their account in bitstamp to see if they are long or short btcusd and based on that they will come up with an amount they are long or short.  Now here are some important considerations:
+
+At any given time, for example just prior to starting the auto_trade, they are either 100% in usd or 100% in btc.  If they are in usd that means that they are short the btcusd trading pair, if they are in btc it means they are long the btcusd trading pair.
+
+The user enters the auto_trade command at the `src/tdr.py` prompt using this form:  `auto_trade <amount><currency> <direction>`
+
+The <amount> value is a floating point term. e.g. 995.75, 2, 2.05, etc...
+The <currency> value is either btc or usd for bitcoin or us dollar.
+The <direction> value is either long or short.
+
+If the <currency> value is usd, then the direction MUST be short.
+If the <currency> value is btc, then the direciton MUST be long.
+
+This means that the <direction> can be computed from the <currency> value however it is required to reduce error and allow for a valdity check.
+
+If either of these <currency> <direction> rules are violated, tdr should report an error and do nothing.
+
+The auto_trade command needs to be interpeted as "I would like you to start performing auto_trades using my current count controlling the entire balance here which is in the form of <currency> in the amount of <amount> and this represents a <direction> position in btcusd."
+
+
+It is the job of `src/tdr.ty` at this point to assess the current market conditions with respect to the trading strategy defined in the `best_strategy.json` file along with the historic data stored in `btcusd.log` (which is constantly being updated) and see if there is a MATCH between the <direction> (as included in the auto_trade command) and the "current direction" as computed by observing the `btcusd.log` data.  
+
+Again, this data is tick by tick data so we are intereted in a fine grained version of that trading status.
+
+If there is a MATCH between what the user said their position status was using the auto_trade command, then the `src/tdr.py` has no immediate trade to do, but MUST record the position as though the balance described was just obtained via a trade.  We shall call the market price of btcusd at the time of the auto_trade command the 'theoretical entry price` and the amount given by the user as the balance.  At all times the status should report the last entry price, position and current price and value of the position both in USD and in BTC as well as what direction (long or short) their position is with respect to the btcusd trading pair.
+
+If there is a MISMATCH between what the user said their position status was using the auto_trade command, then the `src/tdr.py` then `src/tdr.py` must perform an auto trade. It so happens that if such a trade involves going long, then the trade must be performed in 3 partial trades, each being 90% of the remaining balance.  This is because bitstamp puts a limit of 90% and since our goal is to trade 100% this approximately gets us there.  HOWEVER, this should be regarded as a single trade towards the global limit on trades per day.
+
+
+
+Let's go through some examples:
+
+1. User is short btcusd and strategy signal indicates short.
+
+Let's say the user is short, which means they hold usd.  Let's say there are short $10000usd. This means that when they invoke the auto_trade command they would say:
+
+auto_trade 10000usd short
+
+now when this command is issued the system needs to decide by looking at data collected from `btcusd.log` whether the strategy indicated by `best_strategy.json` is signaling a long or a short position in btcusd.   IF there is a match, which in this case means a signal of short is indicated then there is no trade to make and the system should reflect a theoritical open price at the market level and the amount given. We should always maintain a USD and BTC equivlaent based on the current market price and this is the data that should be reflected by the tdr `status` command.  Please note that this `status` command was working quite well when we had the MA only auto trade however the status has never worked well for the RSI strategy and may have even broken since we added it. 
+
+
+2. User is short btcusd and strategy signal indicates long.
+
+In this case the auto tradng system must change the existing positon from short to long.  Since the user indicated they are short 10000usd they will use that amount of USD to buy btcusd at the market price. It so happens that bitstamp has a rule about only allowing 90% of their balance to be used on any single trade so the code will execute 3 trades (known as partial trades) in order to use the 10000usd to go into a long posiion.  Now it is here where I have seen a bug because we have a limit 
+
+
+3. User is long btcusd and strategy signal indicates long.
+
+auto_trade 2.5btc long
+
+This should be treated just like the case 1. above where user is short btcusd and strategy signal indicates short. Since the user declared trade direction matches the strategy indicated direction, there is nothing to do other than record a theoretical entry price matching the market price and the amount indicated.
+
+4. User is long btcusd and strategy signal indicates short.
+
+In this case the auto tradng system must change the existing positon from long to short.  Since the user indicated they are long 2.5btc they must sell 2.5 btcusd at the current market price.  Bitstamp imposes no restrictions here regarding total amounts, so it is perfectly okay to sell all 2.5btcusd in one trade.
+
+Trade Limit. There is a bug in that the current trade limit is 3 per day. Please set the trade limit to 5 trades per day, but fix the bug so that the 3 partial trades needed to go LONG are counted as only ONE trade towards this limit. There is a known bug that the 3 partial trades are each being counted and so this leads to hitting our limit far too fast.
+
+Status.  There are several problems with the status command for RSI especially.
+
+Here is an example when in MA auto trade mode:
+
+(crypto) status
+
+Position Details (Short View):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  • Direction: Long
+  • Current Price:  $98139.00
+  • Entry Price:    $0.00
+  • Position Size (BTC): 0.00000000
+  • Position Value (USD): $0.00
+  • Unrealized PnL:  $0.00
+
+  • MA Crossover Proximity: 1.60%
+    (Closer to 0% means closer to flipping from short->long or long->short)
+
+
+Entry Price: should never be $0.00.  It should always record the market price of a theoretical position, if the auto_trade direction matches what the strategy says, or it should report the price for the actual last trade that was made.  In case that multiple partial trades this should be the average price of those trades.  But never 0.00.
+
+The position size should be the theoritical amount given in the auto_trade command if the directions match and it should be the total amount traded to flip the position if that was what happened. Again if there were 3 partial trades this should be the sum of those amounts.
+
+KNOWN bugs
+1. status reports zero for position values when it should computed them as per the last trade or theoretical trade.
+2. TRADES per day limit should be 5 not 3.
+3. When 3 partial trades are performed to go long (as described above) the system incorrectly counts this as 3 trades towards the day limit--- we must have tdr.py count the entire set of partial trades as just one trade agaist the dailly limit.
+4. Proximity value is not being reported for the RSI mode.
+
+
+Things to confirm:
+1. That status works correctly and display the current direction, value and positions and proximity for the current strategy and what that strategy is.
+2. Sufficient data is collected in dry-run and live mode, into a JSON file so that we may have a programi, being worked on, called `src/trade-checker.py` verify by reading `btcusd.log` and `best_strategy.json` that the correct trades were identified and that none were missed nor performed when the signal did not indicate a signal.
+3. No features are not fully supported by both MA and RSI, with efficient use of code sharing.
+
+Here is the src/bktst.py app and dependencies:
+
+
+
+
+Here is the src/tdr.py app and dependencies:

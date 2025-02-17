@@ -1,0 +1,3 @@
+Please analyze the two pyton applications below and make sure that when the `src/bktst.py` decides that either the moving average cross over strategy or the rsi strategy was the most profitable, the `src/tdr.py` will effectivetly react to signals at the right time and initial trades in the write direction in order to replicate the same performance as the `src/bktst.py` trader will demonstrate into the future. I have seen some problems with the RSI and am afraid to deploy it in a live setting until they are fixed.  The RSI seems to trade far more frequently.  Please explain how they may be different, and it what ways we can fix this to be better.
+---------------------------
+
