@@ -4,9 +4,9 @@
 # Full File Path: src/tdr_core/shell.py
 #
 # CHANGES:
-#   1) In do_status(), we add logic to display 'rsi_proximity' in both
-#      short and long status views, paralleling the existing MA approach.
-#   2) We preserve all original code, docstrings, and logic.
+#   1) We add two interactive commands: 'start server' and 'stop server'.
+#   2) They call tdr.py's start_rest_server(...) / stop_rest_server().
+#   3) We keep ALL original code and docstrings intact.
 ###############################################################################
 
 import cmd
@@ -29,6 +29,18 @@ from tdr_core.trade import Trade
 # Original references from tdr.py
 from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
+
+# --------------------------------------------------------------------------
+# NEW IMPORT: We import start_rest_server, stop_rest_server from tdr.py
+# to implement the 'start server' and 'stop server' commands
+# --------------------------------------------------------------------------
+try:
+    from tdr import start_rest_server, stop_rest_server
+except ImportError:
+    # If tdr cannot be imported here for some reason, we skip, 
+    # but the user will not have the new commands functional.
+    start_rest_server = None
+    stop_rest_server = None
 
 
 class CryptoShell(cmd.Cmd):
@@ -70,7 +82,10 @@ class CryptoShell(cmd.Cmd):
             'auto_trade': 'auto_trade 2.47btc long',
             'stop_auto_trade': 'stop_auto_trade',
             'status': 'status [long]',
-            'chart': 'chart btcusd 1H'
+            'chart': 'chart btcusd 1H',
+            # NEW EXAMPLES for server
+            'start server': 'start server',
+            'stop server': 'stop server'
         }
 
         # Register callbacks
@@ -558,12 +573,10 @@ class CryptoShell(cmd.Cmd):
                 print(f"    • Amount:     {t['amount']}")
                 print(f"    • Theoretical? {t['theoretical']}")
 
-            # ### ADDED: Show RSI Proximity if it exists
             if 'rsi_proximity' in status and status['rsi_proximity'] is not None:
                 print(f"\n  • RSI Proximity: {status['rsi_proximity']*100:.2f}%")
                 print("    (Closer to 0% means RSI is nearer to a boundary cross)")
 
-            # If there's also an MA strategy, we might show 'ma_signal_proximity'
             if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
                 print(f"\n  • MA Crossover Proximity: {status['ma_signal_proximity']*100:.2f}%")
                 print("    (Closer to 0% means closer to flipping from short->long or long->short)")
@@ -571,7 +584,7 @@ class CryptoShell(cmd.Cmd):
             print("")
             return
 
-        # Otherwise, show the full (long) status (rest of code unchanged)...
+        # Otherwise, show the full (long) status
         print("\nAuto-Trading Status:")
         print("━"*50)
         print(f"  • Running: {status['running']}")
@@ -652,11 +665,9 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Last RSI: {status['last_rsi']:.2f} (window={status.get('rsi_window',14)}, "
                   f"overbought={status.get('overbought',70)}, oversold={status.get('oversold',30)})")
 
-        ### ADDED: print rsi_proximity, if present ###
         if 'rsi_proximity' in status and status['rsi_proximity'] is not None:
             print(f"  • RSI Proximity: {status['rsi_proximity']*100:.2f}%")
             print("    (Closer to 0% means RSI is nearer to a boundary cross)")
-        ### END ADDED ###
 
         if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
             print(f"  • MA Crossover Proximity: {status['ma_signal_proximity']*100:.2f}%")
@@ -766,3 +777,50 @@ class CryptoShell(cmd.Cmd):
         self.chart_process.start()
         print("Dash app is running at http://127.0.0.1:8050/")
         time.sleep(1)
+
+    ###########################################################################
+    # NEW CODE: "start server" and "stop server" interactive commands
+    ###########################################################################
+    def do_start_server(self, arg):
+        """
+        Starts the REST server from tdr.py, making data available at /api endpoints.
+        Usage: start server
+        """
+        if start_rest_server is None:
+            print("REST server cannot be started (start_rest_server not imported).")
+            return
+
+        # Attempt to guess if we have an active strategy:
+        active_strat_name = None
+        active_strat_params = {}
+        if self.auto_trader:
+            # Example: If it's an MA strategy
+            if isinstance(self.auto_trader, MACrossoverStrategy):
+                active_strat_name = 'MA'
+                active_strat_params = {
+                    'Short_Window': self.auto_trader.short_window,
+                    'Long_Window': self.auto_trader.long_window
+                }
+            elif isinstance(self.auto_trader, RSITradingStrategy):
+                active_strat_name = 'RSI'
+                active_strat_params = {
+                    'RSI_Window': self.auto_trader.rsi_window,
+                    'Overbought': self.auto_trader.overbought,
+                    'Oversold': self.auto_trader.oversold
+                }
+            else:
+                # You could fill out more if you have more strategy classes
+                active_strat_name = None
+
+        # Start the Flask REST server on port 5000:
+        start_rest_server(self.data_manager, active_strat_name, active_strat_params, port=5000)
+
+    def do_stop_server(self, arg):
+        """
+        Stops the REST server, if running.
+        Usage: stop server
+        """
+        if stop_rest_server is None:
+            print("REST server cannot be stopped (stop_rest_server not imported).")
+            return
+        stop_rest_server()

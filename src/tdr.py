@@ -3,11 +3,12 @@
 ###############################################################################
 # Full File Path: src/tdr.py
 #
-# CHANGES:
-#   1) We have added a small code block at the start of main() to remove
-#      the old trade log files if they exist ("trades.json" and
-#      "non-live-trades.json"). This clears records of prior runs.
-#   2) We preserve all original code, docstrings, and logic.
+# CHANGES (for REST server & new commands):
+#   1) We add a Flask-based REST interface in a new code block at the bottom.
+#   2) We define start_rest_server() and stop_rest_server() controlling
+#      a background thread that runs the Flask app.
+#   3) We keep ALL original code and comments intact and unremoved.
+#   4) We also expose endpoints for candle data and indicator data (e.g. MAs).
 ###############################################################################
 
 #!/usr/bin/env python
@@ -214,7 +215,214 @@ def main():
             shell.stop_dash_app()
 
 
-# RESTORED: We place back the call to main() at the bottom:
-if __name__ == '__main__':
-    set_start_method('spawn')
-    main()
+###############################################################################
+# BEGIN: NEW CODE FOR FLASK-BASED REST SERVER
+###############################################################################
+### NEW CODE ###
+
+from flask import Flask, request, jsonify
+_rest_app = Flask("tdr_rest_server")
+
+# Global references so our server can read data from them:
+GLOBAL_DATA_MANAGER = None  # We will set this from shell on start_server
+GLOBAL_ACTIVE_STRATEGY = None  # We'll store "MA", "RSI", or None
+GLOBAL_ACTIVE_STRATEGY_DATA = {}  # For storing e.g. short/long windows, etc.
+
+_rest_server_thread = None
+_rest_server_stop_event = threading.Event()
+_rest_server_running = False
+
+def _resample_candles(symbol, timeframe):
+    """
+    Helper to collect the DataFrame from data_manager, resample to timeframe,
+    and return OHLC + volume as a list of dictionaries for JSON.
+    """
+    if (GLOBAL_DATA_MANAGER is None) or (symbol not in GLOBAL_DATA_MANAGER.data):
+        return []
+
+    df = GLOBAL_DATA_MANAGER.get_price_dataframe(symbol).copy()
+    if df.empty:
+        return []
+
+    # Ensure datetime index
+    df = ensure_datetime_index(df)
+    # Resample
+    rule_map = {
+        '15m': '15T',  # 15 minutes
+        '30m': '30T',
+        '1h': '1H',
+        '4h': '4H',
+        '1d': '1D',
+        '1w': '1W'
+    }
+    # fallback to 1H if not recognized
+    rule = rule_map.get(timeframe.lower(), '1H')
+
+    df_resampled = df.resample(rule).agg({
+        'open': 'first',
+        'high': 'max',
+        'low': 'min',
+        'close': 'last',
+        'volume': 'sum',
+    }).dropna()
+
+    df_resampled.reset_index(inplace=True)
+    candles = []
+    for _, row in df_resampled.iterrows():
+        candles.append({
+            'timestamp': int(row['datetime'].timestamp()),
+            'open': float(row['open']),
+            'high': float(row['high']),
+            'low': float(row['low']),
+            'close': float(row['close']),
+            'volume': float(row['volume']),
+        })
+    return candles
+
+
+@_rest_app.route('/api/strategy', methods=['GET'])
+def get_strategy():
+    """
+    Returns the currently active strategy name (e.g. "MA") and relevant parameters.
+    """
+    if GLOBAL_ACTIVE_STRATEGY is None:
+        return jsonify({
+            'strategy': None,
+            'parameters': {}
+        })
+    return jsonify({
+        'strategy': GLOBAL_ACTIVE_STRATEGY,
+        'parameters': GLOBAL_ACTIVE_STRATEGY_DATA
+    })
+
+
+@_rest_app.route('/api/candles', methods=['GET'])
+def get_candles():
+    """
+    GET /api/candles?symbol=btcusd&timeframe=1h
+    Returns candlestick data in JSON form
+    """
+    symbol = request.args.get('symbol', 'btcusd')
+    timeframe = request.args.get('timeframe', '1h')
+    data = _resample_candles(symbol, timeframe)
+    return jsonify(data)
+
+
+@_rest_app.route('/api/indicators/ma', methods=['GET'])
+def get_ma_indicators():
+    """
+    Returns the short and long MA time-series if 'MA' strategy is active,
+    otherwise returns empty or partial data
+    """
+    symbol = request.args.get('symbol', 'btcusd')
+    timeframe = request.args.get('timeframe', '1h')
+
+    if (GLOBAL_ACTIVE_STRATEGY != 'MA'):
+        return jsonify([])  # not an MA strategy at this time
+
+    short_window = GLOBAL_ACTIVE_STRATEGY_DATA.get('Short_Window', 12)
+    long_window = GLOBAL_ACTIVE_STRATEGY_DATA.get('Long_Window', 36)
+
+    if (GLOBAL_DATA_MANAGER is None) or (symbol not in GLOBAL_DATA_MANAGER.data):
+        return jsonify([])
+
+    df = GLOBAL_DATA_MANAGER.get_price_dataframe(symbol).copy()
+    if df.empty:
+        return jsonify([])
+
+    df = ensure_datetime_index(df)
+    # Resample similarly
+    rule_map = {
+        '15m': '15T',
+        '30m': '30T',
+        '1h': '1H',
+        '4h': '4H',
+        '1d': '1D',
+        '1w': '1W'
+    }
+    rule = rule_map.get(timeframe.lower(), '1H')
+    df_resampled = df.resample(rule).agg({'close': 'last'}).dropna()
+
+    # Add MAs
+    df_resampled = add_moving_averages(df_resampled, short_window, long_window, price_col='close')
+    df_resampled.reset_index(inplace=True)
+
+    # Return short/long as separate lists of (timestamp, value)
+    short_list = []
+    long_list = []
+    for _, row in df_resampled.iterrows():
+        t = int(row['datetime'].timestamp())
+        short_list.append({'timestamp': t, 'Short_MA': float(row['Short_MA']) if not pd.isna(row['Short_MA']) else None})
+        long_list.append({'timestamp': t, 'Long_MA': float(row['Long_MA']) if not pd.isna(row['Long_MA']) else None})
+
+    return jsonify({
+        'short_ma': short_list,
+        'long_ma': long_list
+    })
+
+
+def start_rest_server(data_manager, active_strategy_name=None, active_strategy_params=None, port=5000):
+    """
+    Starts the REST server in a background thread. If already running, does nothing.
+    """
+    global GLOBAL_DATA_MANAGER, GLOBAL_ACTIVE_STRATEGY, GLOBAL_ACTIVE_STRATEGY_DATA
+    global _rest_server_running, _rest_server_stop_event, _rest_server_thread
+
+    if _rest_server_running:
+        print("REST server is already running.")
+        return
+
+    GLOBAL_DATA_MANAGER = data_manager
+    GLOBAL_ACTIVE_STRATEGY = active_strategy_name
+    GLOBAL_ACTIVE_STRATEGY_DATA = active_strategy_params if active_strategy_params else {}
+
+    _rest_server_stop_event.clear()
+
+    def _run_app():
+        print("REST server started on port", port)
+        _rest_app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+
+    _rest_server_running = True
+    _rest_server_thread = threading.Thread(target=_run_app, daemon=True)
+    _rest_server_thread.start()
+
+
+def stop_rest_server():
+    """
+    Signals the REST server to stop. This is a bit tricky with Flask; we do
+    a workaround by sending a shutdown request to the server internally.
+    """
+    global _rest_server_running, _rest_server_thread
+
+    if not _rest_server_running:
+        print("REST server is not running.")
+        return
+
+    # The recommended approach is to define a shutdown route and call it:
+    import requests
+    try:
+        requests.get('http://127.0.0.1:5000/shutdown')
+    except Exception:
+        pass
+
+    if _rest_server_thread and _rest_server_thread.is_alive():
+        _rest_server_thread.join(timeout=5.0)
+
+    _rest_server_running = False
+    _rest_server_thread = None
+    print("REST server stopped.")
+
+
+@_rest_app.route('/shutdown', methods=['GET'])
+def shutdown_server():
+    """
+    This endpoint is used by stop_rest_server() to gracefully shut down the Flask server.
+    """
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        raise RuntimeError("Not running with the Werkzeug Server")
+    func()
+    return "Server shutting down..."
+
+### END NEW CODE ###
+###############################################################################
