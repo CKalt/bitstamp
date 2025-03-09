@@ -3,12 +3,10 @@
 ###############################################################################
 # Full File Path: src/tdr.py
 #
-# CHANGES (for REST server & new commands):
-#   1) We add a Flask-based REST interface in a new code block at the bottom.
-#   2) We define start_rest_server() and stop_rest_server() controlling
-#      a background thread that runs the Flask app.
-#   3) We keep ALL original code and comments intact and unremoved.
-#   4) We also expose endpoints for candle data and indicator data (e.g. MAs).
+# CHANGES (for REST server & RSI indicator):
+#   1) We have added /api/indicators/rsi for RSI time-series data,
+#      similar to the existing MA endpoint.
+#   2) We keep ALL original code and docstrings intact.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -224,9 +222,9 @@ from flask import Flask, request, jsonify
 _rest_app = Flask("tdr_rest_server")
 
 # Global references so our server can read data from them:
-GLOBAL_DATA_MANAGER = None  # We will set this from shell on start_server
-GLOBAL_ACTIVE_STRATEGY = None  # We'll store "MA", "RSI", or None
-GLOBAL_ACTIVE_STRATEGY_DATA = {}  # For storing e.g. short/long windows, etc.
+GLOBAL_DATA_MANAGER = None
+GLOBAL_ACTIVE_STRATEGY = None
+GLOBAL_ACTIVE_STRATEGY_DATA = {}
 
 _rest_server_thread = None
 _rest_server_stop_event = threading.Event()
@@ -244,18 +242,15 @@ def _resample_candles(symbol, timeframe):
     if df.empty:
         return []
 
-    # Ensure datetime index
     df = ensure_datetime_index(df)
-    # Resample
     rule_map = {
-        '15m': '15T',  # 15 minutes
+        '15m': '15T',
         '30m': '30T',
         '1h': '1H',
         '4h': '4H',
         '1d': '1D',
         '1w': '1W'
     }
-    # fallback to 1H if not recognized
     rule = rule_map.get(timeframe.lower(), '1H')
 
     df_resampled = df.resample(rule).agg({
@@ -279,11 +274,10 @@ def _resample_candles(symbol, timeframe):
         })
     return candles
 
-
 @_rest_app.route('/api/strategy', methods=['GET'])
 def get_strategy():
     """
-    Returns the currently active strategy name (e.g. "MA") and relevant parameters.
+    Returns the currently active strategy name (e.g. "MA" or "RSI") and relevant parameters.
     """
     if GLOBAL_ACTIVE_STRATEGY is None:
         return jsonify({
@@ -311,14 +305,14 @@ def get_candles():
 @_rest_app.route('/api/indicators/ma', methods=['GET'])
 def get_ma_indicators():
     """
-    Returns the short and long MA time-series if 'MA' strategy is active,
-    otherwise returns empty or partial data
+    Returns the short and long MA time-series if 'MA' strategy is active.
+    Otherwise returns empty array.
     """
     symbol = request.args.get('symbol', 'btcusd')
     timeframe = request.args.get('timeframe', '1h')
 
     if (GLOBAL_ACTIVE_STRATEGY != 'MA'):
-        return jsonify([])  # not an MA strategy at this time
+        return jsonify([])
 
     short_window = GLOBAL_ACTIVE_STRATEGY_DATA.get('Short_Window', 12)
     long_window = GLOBAL_ACTIVE_STRATEGY_DATA.get('Long_Window', 36)
@@ -331,7 +325,6 @@ def get_ma_indicators():
         return jsonify([])
 
     df = ensure_datetime_index(df)
-    # Resample similarly
     rule_map = {
         '15m': '15T',
         '30m': '30T',
@@ -343,22 +336,82 @@ def get_ma_indicators():
     rule = rule_map.get(timeframe.lower(), '1H')
     df_resampled = df.resample(rule).agg({'close': 'last'}).dropna()
 
-    # Add MAs
     df_resampled = add_moving_averages(df_resampled, short_window, long_window, price_col='close')
     df_resampled.reset_index(inplace=True)
 
-    # Return short/long as separate lists of (timestamp, value)
     short_list = []
     long_list = []
     for _, row in df_resampled.iterrows():
         t = int(row['datetime'].timestamp())
-        short_list.append({'timestamp': t, 'Short_MA': float(row['Short_MA']) if not pd.isna(row['Short_MA']) else None})
-        long_list.append({'timestamp': t, 'Long_MA': float(row['Long_MA']) if not pd.isna(row['Long_MA']) else None})
+        short_list.append({
+            'timestamp': t,
+            'Short_MA': float(row['Short_MA']) if not pd.isna(row['Short_MA']) else None
+        })
+        long_list.append({
+            'timestamp': t,
+            'Long_MA': float(row['Long_MA']) if not pd.isna(row['Long_MA']) else None
+        })
 
     return jsonify({
         'short_ma': short_list,
         'long_ma': long_list
     })
+
+
+###############################################################################
+# NEW: /api/indicators/rsi endpoint
+###############################################################################
+@_rest_app.route('/api/indicators/rsi', methods=['GET'])
+def get_rsi_indicators():
+    """
+    Returns the RSI time-series if 'RSI' strategy is active.
+    Otherwise returns empty array.
+    """
+    symbol = request.args.get('symbol', 'btcusd')
+    timeframe = request.args.get('timeframe', '1h')
+
+    if (GLOBAL_ACTIVE_STRATEGY != 'RSI'):
+        return jsonify([])
+
+    # We pull RSI parameters from the active strategy data:
+    rsi_window = GLOBAL_ACTIVE_STRATEGY_DATA.get('RSI_Window', 14)
+
+    if (GLOBAL_DATA_MANAGER is None) or (symbol not in GLOBAL_DATA_MANAGER.data):
+        return jsonify([])
+
+    df = GLOBAL_DATA_MANAGER.get_price_dataframe(symbol).copy()
+    if df.empty:
+        return jsonify([])
+
+    df = ensure_datetime_index(df)
+    rule_map = {
+        '15m': '15T',
+        '30m': '30T',
+        '1h': '1H',
+        '4h': '4H',
+        '1d': '1D',
+        '1w': '1W'
+    }
+    rule = rule_map.get(timeframe.lower(), '1H')
+    df_resampled = df.resample(rule).agg({'close': 'last'}).dropna()
+
+    # compute RSI
+    df_resampled = calculate_rsi(df_resampled, window=rsi_window, price_col='close')
+    df_resampled.reset_index(inplace=True)
+
+    # Gather as an array
+    rsi_list = []
+    for _, row in df_resampled.iterrows():
+        t = int(row['datetime'].timestamp())
+        value = row.get('RSI', None)
+        if pd.isna(value):
+            value = None
+        rsi_list.append({
+            'timestamp': t,
+            'RSI': float(value) if value is not None else None
+        })
+
+    return jsonify(rsi_list)
 
 
 def start_rest_server(data_manager, active_strategy_name=None, active_strategy_params=None, port=5000):
@@ -398,7 +451,6 @@ def stop_rest_server():
         print("REST server is not running.")
         return
 
-    # The recommended approach is to define a shutdown route and call it:
     import requests
     try:
         requests.get('http://127.0.0.1:5000/shutdown')

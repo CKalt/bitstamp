@@ -4,11 +4,11 @@
  * A simple Next.js page that:
  *   - fetches candlestick data from tdr.py's REST server
  *   - fetches MA lines if "MA" is the active strategy
+ *   - fetches RSI if "RSI" is the active strategy
  *   - draws a candle chart
+ *   - draws an RSI chart if RSI is active
  *   - polls for updates every 60 seconds
  *   - allows the user to switch time frames
- *
- * PLEASE ensure your Python server is running at localhost:5000
  ********************************************************************/
 import React, { useEffect, useState, useCallback } from 'react';
 import {
@@ -44,6 +44,10 @@ export default function HomePage() {
   const [candles, setCandles] = useState([]);
   const [timeframe, setTimeframe] = useState('1h');
   const [maData, setMaData] = useState({ short_ma: [], long_ma: [] });
+  /********************************************************************
+   * NEW CODE: we also track RSI data
+   ********************************************************************/
+  const [rsiData, setRsiData] = useState([]);
   const [strategy, setStrategy] = useState(null);
 
   const fetchData = useCallback(async () => {
@@ -63,8 +67,18 @@ export default function HomePage() {
         const maRes = await fetch(`http://127.0.0.1:5000/api/indicators/ma?symbol=btcusd&timeframe=${timeframe}`);
         const maJson = await maRes.json();
         setMaData(maJson);
+        setRsiData([]); // Clear RSI data
+      }
+      // 4) If strategy is RSI, fetch the RSI data
+      else if (stratJson.strategy === "RSI") {
+        setMaData({ short_ma: [], long_ma: [] }); // Clear MA data
+        const rsiRes = await fetch(`http://127.0.0.1:5000/api/indicators/rsi?symbol=btcusd&timeframe=${timeframe}`);
+        const rsiJson = await rsiRes.json();
+        setRsiData(rsiJson);
       } else {
+        // For any other strategy
         setMaData({ short_ma: [], long_ma: [] });
+        setRsiData([]);
       }
     } catch (err) {
       console.error("Error fetching data", err);
@@ -81,8 +95,7 @@ export default function HomePage() {
     setTimeframe(e.target.value);
   };
 
-  // We transform the data into chart.js-friendly format:
-  // Chart.js can do candlestick if we have each data point in the form {x: <time>, o, h, l, c}.
+  // Create chart data for the candlestick chart
   const candleDataForChart = candles.map((c) => ({
     x: new Date(c.timestamp * 1000),
     o: c.open,
@@ -101,6 +114,13 @@ export default function HomePage() {
     y: pt.Long_MA
   }));
 
+  // Transform RSI data => {x, y}
+  const rsiChartData = rsiData.map((pt) => ({
+    x: new Date(pt.timestamp * 1000),
+    y: pt.RSI
+  }));
+
+  // Candle + MA chart
   const chartData = {
     datasets: [
       {
@@ -132,7 +152,7 @@ export default function HomePage() {
     ]
   };
 
-  const options = {
+  const chartOptions = {
     responsive: true,
     scales: {
       x: {
@@ -144,6 +164,39 @@ export default function HomePage() {
       y: {
         position: 'left'
       },
+    }
+  };
+
+  // If RSI is active, we display a second chart
+  const rsiDataset = {
+    datasets: [
+      {
+        label: 'RSI',
+        data: rsiChartData,
+        type: 'line',
+        fill: false,
+        borderColor: 'rgba(75, 192, 192, 1)',
+        tension: 0,
+        pointRadius: 0,
+        borderWidth: 1
+      }
+    ]
+  };
+
+  const rsiOptions = {
+    responsive: true,
+    scales: {
+      x: {
+        type: 'time',
+        time: {
+          tooltipFormat: 'MMM dd HH:mm',
+        }
+      },
+      y: {
+        beginAtZero: true,
+        max: 100,
+        position: 'left'
+      }
     }
   };
 
@@ -169,9 +222,16 @@ export default function HomePage() {
         <p>Active Strategy: None</p>
       )}
 
-      <div style={{ height: '600px', background: '#fafafa', padding: '1rem' }}>
-        <Chart data={chartData} options={options} />
+      <div style={{ height: '600px', background: '#fafafa', padding: '1rem', marginBottom: '2rem' }}>
+        <Chart data={chartData} options={chartOptions} />
       </div>
+
+      {strategy && strategy.strategy === "RSI" && (
+        <div style={{ height: '300px', background: '#fff', padding: '1rem' }}>
+          <h2>RSI</h2>
+          <Chart data={rsiDataset} options={rsiOptions} />
+        </div>
+      )}
     </div>
   );
 }
