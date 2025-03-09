@@ -16,3 +16,4 @@ dash-html-components
 dash-bootstrap-components
 numpy==1.24.3
 tabulate
+flask
