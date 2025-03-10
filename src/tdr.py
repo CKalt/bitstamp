@@ -6,7 +6,8 @@
 # CHANGES (for REST server & RSI indicator):
 #   1) We have added /api/indicators/rsi for RSI time-series data,
 #      similar to the existing MA endpoint.
-#   2) We keep ALL original code and docstrings intact.
+#   2) We restore the main() function and the if __name__ == '__main__' block.
+#   3) We keep ALL original logic and comments intact.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -216,8 +217,6 @@ def main():
 ###############################################################################
 # BEGIN: NEW CODE FOR FLASK-BASED REST SERVER
 ###############################################################################
-### NEW CODE ###
-
 from flask import Flask, request, jsonify
 _rest_app = Flask("tdr_rest_server")
 
@@ -273,6 +272,7 @@ def _resample_candles(symbol, timeframe):
             'volume': float(row['volume']),
         })
     return candles
+
 
 @_rest_app.route('/api/strategy', methods=['GET'])
 def get_strategy():
@@ -478,3 +478,8 @@ def shutdown_server():
 
 ### END NEW CODE ###
 ###############################################################################
+
+# RESTORED: We place back the call to main() at the bottom:
+if __name__ == '__main__':
+    set_start_method('spawn')
+    main()
