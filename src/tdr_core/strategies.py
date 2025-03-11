@@ -6,6 +6,7 @@
 # CONTEXT AND CHANGES:
 #   1) We add get_status() to MACrossoverStrategy so that "status" command works.
 #   2) We keep all original logic and comments, only adding the new method.
+#   3) We fix the syntax error on line with `remaining_trades_today`.
 ###############################################################################
 
 import pandas as pd
@@ -369,6 +370,7 @@ class MACrossoverStrategy:
             status['win_rate'] = 0.0
             status['average_profit_per_trade'] = 0.0
 
+        # Fix the parenthesis so it closes properly:
         status['remaining_trades_today'] = max(0, self.max_trades_per_day - self.trade_count_today)
 
         # If we wanted to measure "MA proximity," we could do so here, akin to RSI
@@ -674,9 +676,9 @@ class RSITradingStrategy:
             status['win_rate'] = 0.0
             status['average_profit_per_trade'] = 0.0
 
-        status['remaining_trades_today'] = max(0, self.max_trades_per_day - self.trade_count_today]
+        status['remaining_trades_today'] = max(0, self.max_trades_per_day - self.trade_count_today)
 
-        # If we want to measure 'rsi_proximity', we do it here. Already done in code.
+        # We measure 'rsi_proximity'
         last_rsi = None
         rsi_proximity = None
         if not self.df_rsi.empty:
