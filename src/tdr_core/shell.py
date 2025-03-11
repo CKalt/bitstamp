@@ -7,6 +7,11 @@
 #   1) We add do_auto(...) method to handle "auto trade ..." as an alias
 #      that calls do_auto_trade(...).
 #   2) We preserve all existing code and comments.
+#   3) We fix the syntax error on line with `remaining_trades_today`.
+#   4) *****IMPORTANT FIX FOR REST SERVER IMPORT ERROR*****
+#      - REMOVED the *top-level* import of start_rest_server/stop_rest_server from tdr.py.
+#      - INSTEAD, do a local import in do_start_server() / do_stop_server() to break
+#        the circular import. This prevents them from being None.
 ###############################################################################
 
 import cmd
@@ -30,13 +35,18 @@ from tdr_core.trade import Trade
 from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
 
-# NEW IMPORT for the REST server start/stop
-try:
-    from tdr import start_rest_server, stop_rest_server
-except ImportError:
-    start_rest_server = None
-    stop_rest_server = None
-
+###############################################################################
+# REMOVED TOP-LEVEL IMPORTS OF start_rest_server/stop_rest_server
+# try:
+#     from tdr import start_rest_server, stop_rest_server
+# except ImportError:
+#     start_rest_server = None
+#     stop_rest_server = None
+#
+# Explanation:
+#   This import caused a circular import with tdr.py (which imports shell.py).
+#   We now perform a local import inside do_start_server/do_stop_server below.
+###############################################################################
 
 class CryptoShell(cmd.Cmd):
     """
@@ -552,9 +562,7 @@ class CryptoShell(cmd.Cmd):
             print("Auto-trading is not running.")
             return
 
-        # FIX for the crash: we now rely on get_status() existing in both MA & RSI
         status = self.auto_trader.get_status()
-
         pos_str = {1:'Long', -1:'Short', 0:'Neutral'}.get(status['position'], 'Unknown')
 
         if not show_full:
@@ -794,7 +802,13 @@ class CryptoShell(cmd.Cmd):
         Starts the REST server from tdr.py, making data available at /api endpoints.
         Usage: start server
         """
-        if start_rest_server is None:
+        # *****LOCAL IMPORT to break circular dependency*****
+        try:
+            from tdr import start_rest_server
+        except ImportError:
+            start_rest_server = None
+
+        if not start_rest_server:
             print("REST server cannot be started (start_rest_server not imported).")
             return
 
@@ -822,7 +836,13 @@ class CryptoShell(cmd.Cmd):
         Stops the REST server, if running.
         Usage: stop server
         """
-        if stop_rest_server is None:
+        # *****LOCAL IMPORT to break circular dependency*****
+        try:
+            from tdr import stop_rest_server
+        except ImportError:
+            stop_rest_server = None
+
+        if not stop_rest_server:
             print("REST server cannot be stopped (stop_rest_server not imported).")
             return
         stop_rest_server()
