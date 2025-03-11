@@ -4,9 +4,9 @@
 # Full File Path: src/tdr_core/shell.py
 #
 # CHANGES:
-#   1) We add two interactive commands: 'start server' and 'stop server'.
-#   2) They call tdr.py's start_rest_server(...) / stop_rest_server().
-#   3) We keep ALL original code and docstrings intact.
+#   1) We add do_auto(...) method to handle "auto trade ..." as an alias
+#      that calls do_auto_trade(...).
+#   2) We preserve all existing code and comments.
 ###############################################################################
 
 import cmd
@@ -30,15 +30,10 @@ from tdr_core.trade import Trade
 from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
 
-# --------------------------------------------------------------------------
-# NEW IMPORT: We import start_rest_server, stop_rest_server from tdr.py
-# to implement the 'start server' and 'stop server' commands
-# --------------------------------------------------------------------------
+# NEW IMPORT for the REST server start/stop
 try:
     from tdr import start_rest_server, stop_rest_server
 except ImportError:
-    # If tdr cannot be imported here for some reason, we skip, 
-    # but the user will not have the new commands functional.
     start_rest_server = None
     stop_rest_server = None
 
@@ -83,7 +78,6 @@ class CryptoShell(cmd.Cmd):
             'stop_auto_trade': 'stop_auto_trade',
             'status': 'status [long]',
             'chart': 'chart btcusd 1H',
-            # NEW EXAMPLES for server
             'start server': 'start server',
             'stop server': 'stop server'
         }
@@ -318,6 +312,21 @@ class CryptoShell(cmd.Cmd):
         else:
             return None
 
+    ###########################################################################
+    # NEW CODE: do_auto(...) to handle "auto trade ..." as an alias for do_auto_trade
+    ###########################################################################
+    def do_auto(self, arg):
+        """
+        Usage: auto trade <amount><btc|usd> <long|short|neutral>
+        An alias for the original 'auto_trade' command
+        """
+        args = arg.strip().split(maxsplit=1)
+        if len(args) == 2 and args[0].lower() == "trade":
+            # pass the remainder to do_auto_trade
+            self.do_auto_trade(args[1])
+        else:
+            print("Usage: auto trade <amount><btc|usd> <long|short|neutral>")
+
     def do_auto_trade(self, arg):
         """
         Start auto-trading using the best strategy from best_strategy.json.
@@ -543,7 +552,9 @@ class CryptoShell(cmd.Cmd):
             print("Auto-trading is not running.")
             return
 
+        # FIX for the crash: we now rely on get_status() existing in both MA & RSI
         status = self.auto_trader.get_status()
+
         pos_str = {1:'Long', -1:'Short', 0:'Neutral'}.get(status['position'], 'Unknown')
 
         if not show_full:
@@ -778,9 +789,6 @@ class CryptoShell(cmd.Cmd):
         print("Dash app is running at http://127.0.0.1:8050/")
         time.sleep(1)
 
-    ###########################################################################
-    # NEW CODE: "start server" and "stop server" interactive commands
-    ###########################################################################
     def do_start_server(self, arg):
         """
         Starts the REST server from tdr.py, making data available at /api endpoints.
@@ -790,11 +798,9 @@ class CryptoShell(cmd.Cmd):
             print("REST server cannot be started (start_rest_server not imported).")
             return
 
-        # Attempt to guess if we have an active strategy:
         active_strat_name = None
         active_strat_params = {}
         if self.auto_trader:
-            # Example: If it's an MA strategy
             if isinstance(self.auto_trader, MACrossoverStrategy):
                 active_strat_name = 'MA'
                 active_strat_params = {
@@ -808,11 +814,7 @@ class CryptoShell(cmd.Cmd):
                     'Overbought': self.auto_trader.overbought,
                     'Oversold': self.auto_trader.oversold
                 }
-            else:
-                # You could fill out more if you have more strategy classes
-                active_strat_name = None
 
-        # Start the Flask REST server on port 5000:
         start_rest_server(self.data_manager, active_strat_name, active_strat_params, port=5000)
 
     def do_stop_server(self, arg):
