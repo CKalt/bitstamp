@@ -7,6 +7,12 @@
 #   1) We add get_status() to MACrossoverStrategy so that "status" command works.
 #   2) We keep all original logic and comments, only adding the new method.
 #   3) We fix the syntax error on line with `remaining_trades_today`.
+#   4) *****IMPORTANT FIXES for partial trades counting as single daily trade,
+#      and for setting theoretical entry price if there's no mismatch.*****
+#   5) We fill in buy_in_three_parts() / rsi_buy_in_three_parts() to do partial 
+#      trades but only count as 1 trade. 
+#   6) We add "proximity" fields in get_status for both MA & RSI to show how close
+#      we are to a reversal or boundary cross.
 ###############################################################################
 
 import pandas as pd
@@ -240,7 +246,15 @@ class MACrossoverStrategy:
             self.trade_count_today = 0
             self.daily_limit_reached_logged = False
 
+        # ### CHANGED: We only do actual trades (partial or otherwise) if there's 
+        # a mismatch between self.position and 'latest_signal'. 
+        # For a CROSSOVER strategy: 
+        #   signal == 1 => we want to be long
+        #   signal == -1 => we want to be short
+        #   self.position is the current actual position (1=long, -1=short, 0=flat).
+        # If self.position already matches latest_signal => no new trades. 
         if latest_signal == 1 and self.position <= 0:
+            # i.e. we want to go long, but currently short or neutral
             if self.trade_count_today >= self.max_trades_per_day:
                 if not self.daily_limit_reached_logged:
                     self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping MA buy.")
@@ -249,11 +263,13 @@ class MACrossoverStrategy:
             self.logger.info(f"Buy signal triggered at {current_price}")
             self.position = 1
             self.last_trade_reason = "MA Crossover: short above long."
+            # ### CHANGED: Use partial trades to buy if the user 
+            # is currently short or no position. 
             self.buy_in_three_parts(current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time)
-            self.trade_count_today += 1
             self.last_signal_time = signal_time
 
         elif latest_signal == -1 and self.position >= 0:
+            # we want to go short, but currently long or neutral
             if self.trade_count_today >= self.max_trades_per_day:
                 if not self.daily_limit_reached_logged:
                     self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping MA sell.")
@@ -263,26 +279,142 @@ class MACrossoverStrategy:
             self.position = -1
             self.last_trade_reason = "MA Crossover: short below long."
             trade_btc = round(self.balance_btc, 8)
+            # Sell entire BTC to go short
             self.execute_trade("sell", current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                               signal_time, trade_btc, is_partial=False)
+                               signal_time, trade_btc, is_partial=False, count_as_daily_trade=False)
+            # Now that we've sold our BTC, we are effectively "flat" in a local sense, 
+            # but position=-1 means short. For a real short, you'd need borrowed BTC, 
+            # but for simulation, we treat negative balance_btc as short.
+            # Set negative balance:
+            short_btc = self.balance_usd / current_price if current_price>0 else 0
+            self.execute_trade("short", current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                               signal_time, short_btc, is_partial=False, count_as_daily_trade=False)
+            # ### CHANGED: Only now increment daily trade count once
             self.trade_count_today += 1
             self.last_signal_time = signal_time
 
+    ############################################################################
+    # NEW CODE: buy_in_three_parts => partial buys but only count 1 trade total
+    ############################################################################
     def buy_in_three_parts(self, price, timestamp, signal_time):
         """
-        Partial buy logic (unchanged).
+        Partial buy logic: we might have constraints on how much USD can be spent in one trade.
+        We do 3 partial trades, but it counts only as one daily trade in total.
         """
-        pass
+        # If we are currently short (balance_btc<0), let's "buy to cover" that first. 
+        if self.balance_btc < 0:
+            cover_btc = abs(self.balance_btc)
+            self.execute_trade(
+                "buy",
+                price,
+                timestamp,
+                signal_time,
+                cover_btc,
+                is_partial=True,
+                count_as_daily_trade=False
+            )
+        # Now we assume we have some USD to buy with; for simulation let's just buy 
+        # the entire self.balance_usd worth of BTC in 3 partial increments 
+        # (or if we started neutral with some user-declared USD).
+        total_usd = self.balance_usd
+        # We'll do 3 partial amounts:
+        partial_usd = total_usd / 3.0
+        for i in range(3):
+            # If partial_usd is 0 or near 0, skip
+            if partial_usd <= 0:
+                continue
+            buy_btc = partial_usd / price if price > 0 else 0
+            self.execute_trade(
+                "buy",
+                price,
+                timestamp,
+                signal_time,
+                buy_btc,
+                is_partial=True,
+                count_as_daily_trade=False
+            )
+        # Finally, count as 1 daily trade:
+        self.trade_count_today += 1
 
-    def execute_trade(self, trade_type, price, timestamp, signal_time, trade_btc, is_partial=False):
+    def execute_trade(self, trade_type, price, timestamp, signal_time, trade_btc,
+                      is_partial=False, count_as_daily_trade=False):
         """
-        Partial or single trade logic (unchanged).
+        Partial or single trade logic. 
+        'trade_type' can be 'buy', 'sell', or 'short' in this simulation context.
+        If count_as_daily_trade=True, we increment daily limit. 
+        If partial, we do not increment daily limit (we do it once at the end).
         """
-        pass
+        if abs(trade_btc) < 1e-8:
+            return
+
+        fee = self.calculate_fee(trade_btc, price)
+
+        # ### CHANGED: we treat 'sell' of BTC as increasing USD 
+        # and decreasing BTC, or 'buy' as the opposite. 
+        # 'short' means we create negative BTC.
+        if trade_type == "buy":
+            cost_usd = trade_btc * price
+            self.balance_btc += trade_btc
+            self.balance_usd -= cost_usd
+            self.balance_usd -= fee
+            # set last_trade_price
+            self.last_trade_price = price
+        elif trade_type == "sell":
+            # we are selling the given BTC
+            proceeds = trade_btc * price
+            self.balance_btc -= trade_btc
+            self.balance_usd += proceeds
+            self.balance_usd -= fee
+            self.last_trade_price = price
+        elif trade_type == "short":
+            # in a real environment, shorting would involve borrowed BTC. For simulation:
+            # we create negative BTC
+            self.balance_btc -= trade_btc
+            # No immediate cost_usd since we are using borrowed BTC. 
+            # In a real setting, you'd store short cost basis, etc. 
+            # We'll just treat it as a negative BTC position.
+            self.last_trade_price = price
+        else:
+            self.logger.error(f"Unknown trade_type '{trade_type}'")
+            return
+
+        self.total_fees_paid += fee
+
+        # Record the trade in self.trade_log
+        trade_obj = Trade(
+            trade_type=trade_type,
+            symbol=self.symbol,
+            amount=trade_btc,
+            price=price,
+            timestamp=datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S'),
+            reason=self.last_trade_reason,
+            data_source="SIMULATION",
+            signal_timestamp=signal_time,
+            live_trading=self.live_trading,
+            order_result={"partial": is_partial}
+        )
+        self.trade_log.append(trade_obj)
+
+        # If we are counting this as a daily trade
+        if count_as_daily_trade:
+            self.trade_count_today += 1
+
+        # ### CHANGED: Update position_size, position_cost_basis if this is the first trade 
+        # after being neutral, or if we are flipping from short to long, etc. 
+        # In practice, you'd handle logic for partial merges, etc. 
+        # For minimal changes, let's do:
+        if self.position != 0:
+            # If we newly established or flipped position, set cost basis and size
+            # We'll approximate that the entire position is at 'price' for a theoretical entry
+            self.position_size = self.balance_btc   # negative if short
+            self.position_cost_basis = abs(self.balance_btc) * price
+        else:
+            # If position=0 => no open position
+            self.position_size = 0.0
+            self.position_cost_basis = 0.0
 
     ############################################################################
-    # NEW CODE: get_status() method, similar to RSITradingStrategy, so "status"
-    # command won't crash. This is a minimal consistent approach:
+    # NEW CODE: get_status() method, with MA Proximity
     ############################################################################
     def get_status(self):
         """
@@ -297,8 +429,6 @@ class MACrossoverStrategy:
             'last_trade_signal_timestamp': self.last_trade_signal_timestamp.strftime('%Y-%m-%d %H:%M:%S')
                 if self.last_trade_signal_timestamp else None,
 
-            # We do not have specifically named "MA" params stored here,
-            # but you could add them if you wish:
             'short_window': self.short_window,
             'long_window': self.long_window,
 
@@ -317,7 +447,6 @@ class MACrossoverStrategy:
             'theoretical_trade': self.theoretical_trade
         }
 
-        # Mark-to-market
         cp = self.data_manager.get_current_price(self.symbol) or 0.0
         if cp <= 0 and self.last_trade_price:
             cp = self.last_trade_price
@@ -370,11 +499,22 @@ class MACrossoverStrategy:
             status['win_rate'] = 0.0
             status['average_profit_per_trade'] = 0.0
 
-        # Fix the parenthesis so it closes properly:
         status['remaining_trades_today'] = max(0, self.max_trades_per_day - self.trade_count_today)
 
-        # If we wanted to measure "MA proximity," we could do so here, akin to RSI
-        # but for simplicity we skip. You can add a 'ma_signal_proximity' if desired.
+        # ### ADDED: Compute how close we are to an MA crossover. 
+        # We'll do a basic approach: distance between short_ma and long_ma 
+        # relative to long_ma. The smaller it is, the closer to flipping.
+        if not self.df_ma.empty:
+            short_ma = self.df_ma.iloc[-1].get('Short_MA', 0.0)
+            long_ma = self.df_ma.iloc[-1].get('Long_MA', 0.0)
+            if long_ma != 0:
+                diff = abs(short_ma - long_ma)
+                ma_signal_proximity = diff / abs(long_ma)
+                status['ma_signal_proximity'] = ma_signal_proximity
+            else:
+                status['ma_signal_proximity'] = None
+        else:
+            status['ma_signal_proximity'] = None
 
         return status
 
@@ -550,8 +690,9 @@ class RSITradingStrategy:
             self.trade_count_today = 0
             self.daily_limit_reached_logged = False
 
-        # BUY if RSI_Signal=1 and position <= 0
+        # ### CHANGED: Only do trades if there's a mismatch
         if latest_signal == 1 and self.position <= 0:
+            # we want to go long, but currently short or neutral
             if self.trade_count_today >= self.max_trades_per_day:
                 if not self.daily_limit_reached_logged:
                     self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping RSI buy.")
@@ -561,11 +702,10 @@ class RSITradingStrategy:
             self.position = 1
             self.last_trade_reason = f"RSI < {self.oversold}"
             self.rsi_buy_in_three_parts(current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time)
-            self.trade_count_today += 1
             self.last_signal_time = signal_time
 
-        # SELL if RSI_Signal=-1 and position >= 0
         elif latest_signal == -1 and self.position >= 0:
+            # we want to go short, but currently long or neutral
             if self.trade_count_today >= self.max_trades_per_day:
                 if not self.daily_limit_reached_logged:
                     self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping RSI sell.")
@@ -577,25 +717,111 @@ class RSITradingStrategy:
             self.last_trade_reason = f"RSI > {self.overbought}"
             trade_btc = round(self.balance_btc, 8)
             self.execute_trade("sell", current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                               signal_time, trade_btc, is_partial=False)
+                               signal_time, trade_btc, is_partial=False, count_as_daily_trade=False)
+            # Now we are effectively flat, let's go short in sim:
+            short_btc = self.balance_usd / current_price if current_price>0 else 0
+            self.execute_trade("short", current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                               signal_time, short_btc, is_partial=False, count_as_daily_trade=False)
             self.trade_count_today += 1
             self.last_signal_time = signal_time
 
+    ############################################################################
+    # NEW CODE: rsi_buy_in_three_parts => partial buys but only count 1 trade total
+    ############################################################################
     def rsi_buy_in_three_parts(self, price, timestamp, signal_time):
         """
-        Partial buy logic if you want multiple partial entries.
+        Partial buy logic for RSI approach: 3 partial buys = 1 trade total
         """
-        pass
+        if self.balance_btc < 0:
+            cover_btc = abs(self.balance_btc)
+            self.execute_trade(
+                "buy",
+                price,
+                timestamp,
+                signal_time,
+                cover_btc,
+                is_partial=True,
+                count_as_daily_trade=False
+            )
+        total_usd = self.balance_usd
+        partial_usd = total_usd / 3.0
+        for i in range(3):
+            if partial_usd <= 0:
+                continue
+            buy_btc = partial_usd / price if price>0 else 0
+            self.execute_trade(
+                "buy",
+                price,
+                timestamp,
+                signal_time,
+                buy_btc,
+                is_partial=True,
+                count_as_daily_trade=False
+            )
+        self.trade_count_today += 1
 
-    def execute_trade(self, trade_type, price, timestamp, signal_time, trade_btc, is_partial=False):
+    def execute_trade(self, trade_type, price, timestamp, signal_time, trade_btc,
+                      is_partial=False, count_as_daily_trade=False):
         """
-        Partial or single trade logic.
+        Partial or single trade logic for RSI. Matches MA approach for consistency.
         """
-        pass
+        if abs(trade_btc) < 1e-8:
+            return
+
+        fee = self.calculate_fee(trade_btc, price)
+        if trade_type == "buy":
+            cost_usd = trade_btc * price
+            self.balance_btc += trade_btc
+            self.balance_usd -= cost_usd
+            self.balance_usd -= fee
+            self.last_trade_price = price
+        elif trade_type == "sell":
+            proceeds = trade_btc * price
+            self.balance_btc -= trade_btc
+            self.balance_usd += proceeds
+            self.balance_usd -= fee
+            self.last_trade_price = price
+        elif trade_type == "short":
+            self.balance_btc -= trade_btc
+            self.last_trade_price = price
+        else:
+            self.logger.error(f"Unknown trade_type '{trade_type}'")
+            return
+
+        self.total_fees_paid += fee
+
+        trade_obj = Trade(
+            trade_type=trade_type,
+            symbol=self.symbol,
+            amount=trade_btc,
+            price=price,
+            timestamp=datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S'),
+            reason=self.last_trade_reason,
+            data_source="SIMULATION",
+            signal_timestamp=signal_time,
+            live_trading=self.live_trading,
+            order_result={"partial": is_partial}
+        )
+        self.trade_log.append(trade_obj)
+
+        if count_as_daily_trade:
+            self.trade_count_today += 1
+
+        if self.position != 0:
+            self.position_size = self.balance_btc
+            self.position_cost_basis = abs(self.balance_btc) * price
+        else:
+            self.position_size = 0.0
+            self.position_cost_basis = 0.0
+
+    def calculate_fee(self, trade_amount, price):
+        trade_value = trade_amount * price
+        return trade_value * self.fee_percentage
 
     def get_status(self):
         """
-        Return a dictionary with the RSI strategy's current status.
+        Return a dictionary with the RSI strategy's current status, 
+        including rsi_proximity.
         """
         status = {
             'running': self.running,
@@ -678,7 +904,7 @@ class RSITradingStrategy:
 
         status['remaining_trades_today'] = max(0, self.max_trades_per_day - self.trade_count_today)
 
-        # We measure 'rsi_proximity'
+        # We measure 'rsi_proximity' => distance from RSI to either oversold or overbought
         last_rsi = None
         rsi_proximity = None
         if not self.df_rsi.empty:
@@ -694,3 +920,4 @@ class RSITradingStrategy:
         status['rsi_proximity'] = rsi_proximity
 
         return status
+
