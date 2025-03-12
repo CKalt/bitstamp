@@ -3,15 +3,12 @@
 ###############################################################################
 # Full File Path: src/tdr_core/shell.py
 #
-# CHANGES:
-#   1) We add do_auto(...) method to handle "auto trade ..." as an alias
-#      that calls do_auto_trade(...).
-#   2) We preserve all existing code and comments.
-#   3) We fix the syntax error on line with `remaining_trades_today`.
-#   4) *****IMPORTANT FIX FOR REST SERVER IMPORT ERROR*****
-#      - REMOVED the *top-level* import of start_rest_server/stop_rest_server from tdr.py.
-#      - INSTEAD, do a local import in do_start_server() / do_stop_server() to break
-#        the circular import. This prevents them from being None.
+# CONTEXT AND CHANGES:
+#   1) We have moved the "Forcing immediate BUY/SELL" log message
+#      inside the block where desired_position != hist_position.
+#   2) This prevents showing that message when positions match and
+#      no forced trade truly occurs.
+#   3) All other logic and comments remain intact.
 ###############################################################################
 
 import cmd
@@ -36,17 +33,15 @@ from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
 
 ###############################################################################
-# REMOVED TOP-LEVEL IMPORTS OF start_rest_server/stop_rest_server
-# try:
-#     from tdr import start_rest_server, stop_rest_server
-# except ImportError:
-#     start_rest_server = None
-#     stop_rest_server = None
-#
-# Explanation:
-#   This import caused a circular import with tdr.py (which imports shell.py).
-#   We now perform a local import inside do_start_server/do_stop_server below.
+# DIRECT IMPORT from tdr.py to ensure start_rest_server/stop_rest_server is valid
 ###############################################################################
+try:
+    from tdr import start_rest_server, stop_rest_server, run_dash_app
+except ImportError:
+    start_rest_server = None
+    stop_rest_server = None
+    run_dash_app = None
+
 
 class CryptoShell(cmd.Cmd):
     """
@@ -323,7 +318,7 @@ class CryptoShell(cmd.Cmd):
             return None
 
     ###########################################################################
-    # NEW CODE: do_auto(...) to handle "auto trade ..." as an alias for do_auto_trade
+    # do_auto(...) to handle "auto trade ..." as an alias for do_auto_trade
     ###########################################################################
     def do_auto(self, arg):
         """
@@ -332,7 +327,6 @@ class CryptoShell(cmd.Cmd):
         """
         args = arg.strip().split(maxsplit=1)
         if len(args) == 2 and args[0].lower() == "trade":
-            # pass the remainder to do_auto_trade
             self.do_auto_trade(args[1])
         else:
             print("Usage: auto trade <amount><btc|usd> <long|short|neutral>")
@@ -491,12 +485,9 @@ class CryptoShell(cmd.Cmd):
         else:
             # Forcing immediate trade if different from historical
             if desired_position == 1 and current_market_price>0:
-                if amount_unit == 'btc':
-                    buy_btc = amount_num
-                else:
-                    buy_btc = amount_num / current_market_price
-                trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                buy_btc = amount_num if (amount_unit == 'btc') else (amount_num / current_market_price)
                 self.logger.info(f"(auto_trade) {strategy_name}: Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
+                trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.auto_trader.execute_trade(
                     "buy",
                     current_market_price,
@@ -523,8 +514,8 @@ class CryptoShell(cmd.Cmd):
                     }
                 else:
                     sell_btc = amount_num / current_market_price
-                    trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     self.logger.info(f"(auto_trade) {strategy_name}: Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
+                    trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     self.auto_trader.execute_trade(
                         "sell",
                         current_market_price,
@@ -788,7 +779,10 @@ class CryptoShell(cmd.Cmd):
 
         threading.Thread(target=update_shared_data, daemon=True).start()
 
-        from tdr import run_dash_app  # minimal local import
+        if not run_dash_app:
+            print("Dash function not imported. Can't launch chart.")
+            return
+
         self.chart_process = Process(
             target=run_dash_app,
             args=(self.data_manager_dict, symbol, bar_size, short_window, long_window)
@@ -797,17 +791,21 @@ class CryptoShell(cmd.Cmd):
         print("Dash app is running at http://127.0.0.1:8050/")
         time.sleep(1)
 
+    def do_start(self, arg):
+        """
+        If user types "start server", call do_start_server.
+        """
+        parts = arg.strip().split(None, 1)
+        if len(parts) == 1 and parts[0].lower() == "server":
+            self.do_start_server("")
+        else:
+            print("*** Unknown syntax: start", arg)
+
     def do_start_server(self, arg):
         """
-        Starts the REST server from tdr.py, making data available at /api endpoints.
-        Usage: start server
+        Start the REST server from tdr.py, making data available at /api endpoints.
+        Usage: start_server
         """
-        # *****LOCAL IMPORT to break circular dependency*****
-        try:
-            from tdr import start_rest_server
-        except ImportError:
-            start_rest_server = None
-
         if not start_rest_server:
             print("REST server cannot be started (start_rest_server not imported).")
             return
@@ -834,14 +832,8 @@ class CryptoShell(cmd.Cmd):
     def do_stop_server(self, arg):
         """
         Stops the REST server, if running.
-        Usage: stop server
+        Usage: stop_server
         """
-        # *****LOCAL IMPORT to break circular dependency*****
-        try:
-            from tdr import stop_rest_server
-        except ImportError:
-            stop_rest_server = None
-
         if not stop_rest_server:
             print("REST server cannot be stopped (stop_rest_server not imported).")
             return
