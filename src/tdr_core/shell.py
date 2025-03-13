@@ -4,11 +4,11 @@
 # Full File Path: src/tdr_core/shell.py
 #
 # CONTEXT AND CHANGES:
-#   1) We remove the "Forcing immediate BUY/SELL" log line from the 'if match'
-#      branch, ensuring it only appears in the 'else' (mismatch) branch.
-#   2) All other logic, comments, features remain intact.
-#   3) We keep a minimal code diff so that there's an actual change,
-#      not just comments.
+#   1) We preserve the fix that logs "Forcing immediate BUY" only in the
+#      mismatch block.
+#   2) We now also convert last_action to uppercase, so "Go LONG" or
+#      "GO LONG " will be recognized as "GO LONG" and set hist_position=1.
+#   3) This ensures we do not erroneously treat a match as a mismatch.
 ###############################################################################
 
 import cmd
@@ -387,8 +387,12 @@ class CryptoShell(cmd.Cmd):
         do_live       = best_strategy_params.get('do_live_trades', False)
         max_trades_day= best_strategy_params.get('max_trades_per_day', 5)
 
-        # Decide hist_position from best_strategy.json's "Last_Signal_Action"
-        last_action = best_strategy_params.get('Last_Signal_Action', None)
+        # ---------------------------------------------------------------------
+        # FIX: Make sure we handle "Go LONG", "go long", etc. by uppercasing.
+        # ---------------------------------------------------------------------
+        last_action_raw = best_strategy_params.get('Last_Signal_Action', None)
+        last_action = last_action_raw.strip().upper() if isinstance(last_action_raw, str) else None
+
         if last_action == "GO LONG":
             hist_position = 1
         elif last_action == "GO SHORT":
@@ -399,9 +403,7 @@ class CryptoShell(cmd.Cmd):
         def user_has_btc():
             if not self.auto_trader:
                 return False
-            if self.auto_trader.balance_btc > 1e-8:
-                return True
-            return False
+            return (self.auto_trader.balance_btc > 1e-8)
 
         # Setup strategy instance
         if strategy_name == 'MA':
@@ -452,9 +454,7 @@ class CryptoShell(cmd.Cmd):
 
         current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
 
-        # ---------------------------------------------------------------------
-        # CHANGE: Only log "Forcing immediate" lines inside ELSE => mismatch
-        # ---------------------------------------------------------------------
+        # If hist_position == desired_position => no forced trade
         if desired_position == hist_position:
             self.logger.info("(auto_trade) Positions match. No forced trade needed.")
             if desired_position == 1 and amount_unit == 'btc' and current_market_price>0:
@@ -521,8 +521,9 @@ class CryptoShell(cmd.Cmd):
                     }
 
                 else:
+                    forced_sell_btc = amount_num / current_market_price
                     self.logger.info(
-                        f"(auto_trade) {strategy_name}: Forcing immediate SELL for {amount_num/current_market_price:.6f} BTC at ${current_market_price:.2f}."
+                        f"(auto_trade) {strategy_name}: Forcing immediate SELL for {forced_sell_btc:.6f} BTC at ${current_market_price:.2f}."
                     )
                     trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     self.auto_trader.execute_trade(
@@ -530,7 +531,7 @@ class CryptoShell(cmd.Cmd):
                         current_market_price,
                         trade_ts,
                         datetime.now(),
-                        (amount_num / current_market_price)
+                        forced_sell_btc
                     )
 
         self.auto_trader.start()
