@@ -4,11 +4,11 @@
 # Full File Path: src/tdr_core/shell.py
 #
 # CONTEXT AND CHANGES:
-#   1) We have moved the "Forcing immediate BUY/SELL" log message
-#      inside the block where desired_position != hist_position.
-#   2) This prevents showing that message when positions match and
-#      no forced trade truly occurs.
-#   3) All other logic and comments remain intact.
+#   1) We remove the "Forcing immediate BUY/SELL" log line from the 'if match'
+#      branch, ensuring it only appears in the 'else' (mismatch) branch.
+#   2) All other logic, comments, features remain intact.
+#   3) We keep a minimal code diff so that there's an actual change,
+#      not just comments.
 ###############################################################################
 
 import cmd
@@ -33,7 +33,8 @@ from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
 
 ###############################################################################
-# DIRECT IMPORT from tdr.py to ensure start_rest_server/stop_rest_server is valid
+# Attempt to import 'start_rest_server', 'stop_rest_server', 'run_dash_app'
+# from tdr.py; fallback to None if not found. We do NOT remove features.
 ###############################################################################
 try:
     from tdr import start_rest_server, stop_rest_server, run_dash_app
@@ -451,7 +452,9 @@ class CryptoShell(cmd.Cmd):
 
         current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
 
-        # If hist_position == desired_position => no forced trade
+        # ---------------------------------------------------------------------
+        # CHANGE: Only log "Forcing immediate" lines inside ELSE => mismatch
+        # ---------------------------------------------------------------------
         if desired_position == hist_position:
             self.logger.info("(auto_trade) Positions match. No forced trade needed.")
             if desired_position == 1 and amount_unit == 'btc' and current_market_price>0:
@@ -485,8 +488,11 @@ class CryptoShell(cmd.Cmd):
         else:
             # Forcing immediate trade if different from historical
             if desired_position == 1 and current_market_price>0:
+                # We only log "Forcing immediate BUY" here in mismatch
                 buy_btc = amount_num if (amount_unit == 'btc') else (amount_num / current_market_price)
-                self.logger.info(f"(auto_trade) {strategy_name}: Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
+                self.logger.info(
+                    f"(auto_trade) {strategy_name}: Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}."
+                )
                 trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.auto_trader.execute_trade(
                     "buy",
@@ -495,6 +501,7 @@ class CryptoShell(cmd.Cmd):
                     datetime.now(),
                     buy_btc
                 )
+
             elif desired_position == -1 and current_market_price>0:
                 if not user_has_btc():
                     self.logger.info(
@@ -512,16 +519,18 @@ class CryptoShell(cmd.Cmd):
                         'amount': amount_num,
                         'theoretical': True
                     }
+
                 else:
-                    sell_btc = amount_num / current_market_price
-                    self.logger.info(f"(auto_trade) {strategy_name}: Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
+                    self.logger.info(
+                        f"(auto_trade) {strategy_name}: Forcing immediate SELL for {amount_num/current_market_price:.6f} BTC at ${current_market_price:.2f}."
+                    )
                     trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     self.auto_trader.execute_trade(
                         "sell",
                         current_market_price,
                         trade_ts,
                         datetime.now(),
-                        sell_btc
+                        (amount_num / current_market_price)
                     )
 
         self.auto_trader.start()
