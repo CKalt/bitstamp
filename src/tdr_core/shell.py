@@ -11,14 +11,10 @@
 #   3) We add a line in "status" output indicating whether do_live_trades=True/False.
 #   4) We keep all existing logic, comments, and formatting unless explicitly
 #      updated to reflect these enhancements.
-#
-# ADDITIONAL FIXES PER REQUEST:
-#   - Removed the unwanted log line for "Forcing immediate BUY..." in do_auto_trade
-#     when positions match. Also removed the corresponding "Forcing immediate SELL..."
-#     line so that no forced message appears unless we truly do a mismatch trade.
-#   - Added a small hasattr() check in do_status to guard against any older
-#     version of strategies that might not implement get_status(), preventing
-#     an AttributeError crash.
+#   5) BUGFIX: Stopping the double-BTC problem when the user’s declared position
+#      already matches the strategy’s. Instead of setting `position_size = amount_num`,
+#      we now set `balance_btc = amount_num` so the strategy does not end up
+#      adding them together.
 ###############################################################################
 
 import cmd
@@ -348,12 +344,10 @@ class CryptoShell(cmd.Cmd):
         Start auto-trading using the best strategy from best_strategy.json.
 
         If hist_position == desired_position, we skip forcing an immediate trade
-        but still set a theoretical trade if requested.
-
-        If there's a mismatch, we forcibly trade (and previously we had logging
-        stating "Forcing immediate BUY..." or "Forcing immediate SELL..." but
-        have removed that line to honor the request that it not be displayed
-        when there's no real mismatch or we want to keep forced trades quieter.
+        but still set real holdings if the user claims to have '2.10btc' or '234462usd',
+        i.e. sets self.auto_trader.balance_btc or balance_usd accordingly.
+        This ensures we do NOT double the position by also setting position_size
+        directly. The strategy's own code will map balance_btc -> position_size.
         """
         if self.auto_trader and self.auto_trader.running:
             print("Auto-trading is already running. Stop it first.")
@@ -469,15 +463,11 @@ class CryptoShell(cmd.Cmd):
             # Positions match => skip forced trade
             if desired_position == 1:
                 self.logger.info("(auto_trade) Skipping immediate BUY (positions match). Theoretical trade only.")
-            elif desired_position == -1:
-                self.logger.info("(auto_trade) Skipping immediate SELL (positions match). Theoretical trade only.")
-            else:
-                self.logger.info("(auto_trade) Positions are both neutral. Skipping forced trade.")
+                # BUGFIX: Set real BTC holdings to exactly the user’s claim, so final is 2.10 BTC
+                if current_market_price > 0:
+                    self.auto_trader.balance_btc = amount_num
+                    self.auto_trader.position_cost_basis = amount_num * current_market_price
 
-            # We still set a theoretical trade record if requested
-            if desired_position == 1 and amount_unit == 'btc' and current_market_price>0:
-                self.auto_trader.position_size = amount_num
-                self.auto_trader.position_cost_basis = amount_num * current_market_price
                 self.logger.info(
                     f"(auto_trade) Theoretical LONG cost basis set: {self.auto_trader.position_cost_basis:.2f} "
                     f"for {amount_num} BTC at ${current_market_price:.2f}."
@@ -489,27 +479,32 @@ class CryptoShell(cmd.Cmd):
                     'theoretical': True
                 }
 
-            elif desired_position == -1 and amount_unit == 'usd' and current_market_price>0:
-                short_btc = amount_num / current_market_price
-                self.auto_trader.position_size = -short_btc
-                self.auto_trader.position_cost_basis = short_btc * current_market_price
-                self.logger.info(
-                    f"(auto_trade) Theoretical SHORT cost basis set: {self.auto_trader.position_cost_basis:.2f} "
-                    f"for {short_btc:.6f} BTC at ${current_market_price:.2f}."
-                )
-                self.auto_trader.theoretical_trade = {
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'direction': 'short',
-                    'amount': amount_num,
-                    'theoretical': True
-                }
+            elif desired_position == -1:
+                self.logger.info("(auto_trade) Skipping immediate SELL (positions match). Theoretical trade only.")
+                if current_market_price > 0:
+                    short_btc = amount_num / current_market_price
+                    self.auto_trader.balance_btc = -short_btc
+                    self.auto_trader.position_cost_basis = short_btc * current_market_price
+                    self.auto_trader.last_trade_price = current_market_price
+
+                    self.logger.info(
+                        f"(auto_trade) Theoretical SHORT cost basis set: {self.auto_trader.position_cost_basis:.2f} "
+                        f"for {short_btc:.6f} BTC at ${current_market_price:.2f}."
+                    )
+                    self.auto_trader.theoretical_trade = {
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'direction': 'short',
+                        'amount': amount_num,
+                        'theoretical': True
+                    }
+
+            else:
+                self.logger.info("(auto_trade) Positions are both neutral. Skipping forced trade.")
 
         else:
             # Mismatch => forcibly do immediate trade
             if desired_position == 1 and current_market_price>0:
                 buy_btc = amount_num if (amount_unit == 'btc') else (amount_num / current_market_price)
-                # REMOVED the direct log line that said "Forcing immediate BUY..."
-                # as per request. We do the trade without that particular INFO message.
                 trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.auto_trader.execute_trade(
                     "buy",
@@ -523,10 +518,9 @@ class CryptoShell(cmd.Cmd):
                 if (self.auto_trader.balance_btc < 1e-8):
                     self.logger.info(f"(auto_trade) {strategy_name}: No BTC to sell => skipping forced SELL. Setting theoretical short anyway.")
                     short_btc = amount_num / current_market_price
-                    self.auto_trader.position_size = - short_btc
+                    self.auto_trader.balance_btc = - short_btc
                     self.auto_trader.position_cost_basis = short_btc * current_market_price
                     self.auto_trader.last_trade_price = current_market_price
-                    self.auto_trader.balance_btc = -short_btc
 
                     self.auto_trader.theoretical_trade = {
                         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -536,8 +530,6 @@ class CryptoShell(cmd.Cmd):
                     }
                 else:
                     forced_sell_btc = amount_num / current_market_price
-                    # REMOVED the direct log line "Forcing immediate SELL..."
-                    # to avoid the undesired console message.
                     trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     self.auto_trader.execute_trade(
                         "sell",
