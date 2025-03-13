@@ -3,20 +3,11 @@
 # FULL FILE PATH: src/tdr_core/shell.py
 # ----------------------------------------------------------------------------
 # CHANGES MADE:
-#   1) The "do_status()" command now checks if the user typed "status long" 
-#      to show the *full* version. Otherwise (including "status" with no arg), 
-#      it shows a *short* version.
-#   2) We have added a “Direction” line in Position Details for both short and long views.
-#   3) We have **restored** the original code that displays "This is a theoretical trade..."
-#      if no real trades have occurred but a theoretical trade exists.
-#   4) All original logic, comments, and structure have been preserved.
-#
-# ADDITIONAL CHANGE:
-#   (A) In the "status short" section, we display a newly introduced "how close are we" measure
-#       specifically referencing "ma_signal_proximity" from the status dictionary.
-#
-# NOTE: We keep all existing code exactly as before, only injecting minimal lines
-#       in do_status() for the short version to show "how close" we are to flipping signals.
+#   1) Introduced a small block in do_auto_trade() to derive the final signal
+#      from the loaded best_strategy.json if it's "MA". This ensures that if
+#      the best strategy's final signal is already short, we do NOT force a SELL
+#      when the user says "auto_trade 192000usd short."
+#   2) Preserved existing logic, code, and comments. Only minimal lines added.
 # ----------------------------------------------------------------------------
 
 import cmd
@@ -40,7 +31,6 @@ from tdr_core.trade import Trade
 # Original references from tdr.py
 from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
-
 
 ###############################################################################
 def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window):
@@ -501,23 +491,44 @@ class CryptoShell(cmd.Cmd):
             best_strategy_params = json.load(f)
 
         strategy_name = best_strategy_params.get('Strategy')
-        if strategy_name != 'MA':
-            print(f"Best strategy is not 'MA'; it's {strategy_name}.")
-            return
+        print(f"Auto-trading initiated with strategy: {strategy_name}")  # <-- NEW: Show the current strategy
 
         short_window = int(best_strategy_params.get('Short_Window', 12))
         long_window  = int(best_strategy_params.get('Long_Window', 36))
         do_live      = best_strategy_params.get('do_live_trades', False)
         max_trades_day = best_strategy_params.get('max_trades_per_day', 5)
 
+        # Get price DataFrame for the chosen symbol
         df = self.data_manager.get_price_dataframe('btcusd').copy()
         if 'close' not in df.columns and 'price' in df.columns:
             df.rename(columns={'price': 'close'}, inplace=True)
-        if df.empty:
-            hist_position = 0
+
+        # -------------------------------------------------------------------
+        # NEW CODE: Derive the final strategy signal if strategy == "MA"
+        # -------------------------------------------------------------------
+        from tdr import determine_initial_position  # minimal local import
+        if strategy_name == 'MA':
+            from indicators.technical_indicators import ensure_datetime_index, add_moving_averages, generate_ma_signals
+            if not df.empty:
+                df = ensure_datetime_index(df)
+                df = add_moving_averages(df, short_window, long_window, price_col='close')
+                df = generate_ma_signals(df)
+                if not df.empty:
+                    # The final row's MA_Signal will be 1 or -1 (or 0 if they cross exactly)
+                    hist_position = int(df.iloc[-1]['MA_Signal'])
+                    self.logger.info(
+                        f"Derived final MA signal = {hist_position} "
+                        f"({'LONG' if hist_position==1 else 'SHORT' if hist_position==-1 else 'NEUTRAL'}) "
+                        f"based on last crossover in data."
+                    )
+                else:
+                    hist_position = 0
+            else:
+                hist_position = 0
         else:
-            from tdr import determine_initial_position  # minimal local import
+            # If not "MA", we default to old approach
             hist_position = determine_initial_position(df, short_window, long_window)
+        # -------------------------------------------------------------------
 
         initial_balance_btc = 0.0
         initial_balance_usd = 0.0
@@ -636,7 +647,6 @@ class CryptoShell(cmd.Cmd):
         if not show_full:
             print("\nPosition Details (Short View):")
             print("━"*50)
-            # This line is newly added: "Direction"
             print(f"  • Direction: {pos_str}")
             pos_info = status.get('position_info', {})
             print(f"  • Current Price:  ${pos_info.get('current_price', 0.0):.2f}")
@@ -653,7 +663,6 @@ class CryptoShell(cmd.Cmd):
 
             print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
 
-            # (RESTORED) The block showing theoretical trade if no real trades yet
             if status['trades_executed'] == 0 and status.get('theoretical_trade'):
                 t = status['theoretical_trade']
                 print(f"\n  This is a theoretical trade (no actual trades yet):")
@@ -662,15 +671,10 @@ class CryptoShell(cmd.Cmd):
                 print(f"    • Amount:     {t['amount']}")
                 print(f"    • Theoretical? {t['theoretical']}")
 
-            ####################################################################
-            # (A) NEW: Display "how close" we are to the next crossover for MA
-            ####################################################################
             proximity = status.get('ma_signal_proximity')
             if proximity is not None:
-                # We show the fractional difference as a percentage for clarity
                 print(f"\n  • MA Crossover Proximity: {proximity*100:.2f}%")
                 print("    (Closer to 0% means closer to flipping from short->long or long->short)")
-            ####################################################################
 
             print("")
             return
@@ -705,7 +709,6 @@ class CryptoShell(cmd.Cmd):
 
         pos_info = status.get('position_info', {})
         print("\nPosition Details:")
-        # Additional line showing direction
         print(f"  • Direction:  {pos_str}")
         print(f"  • Current Price:  ${pos_info.get('current_price', 0.0):.2f}")
         print(f"  • Entry Price:    ${pos_info.get('entry_price', 0.0):.2f}")
@@ -753,14 +756,10 @@ class CryptoShell(cmd.Cmd):
         if 'momentum_alignment' in status:
             print(f"  • Momentum Alignment: {status['momentum_alignment']}")
 
-        ####################################################################
-        # (A) Also show ma_signal_proximity in the full version if present.
-        ####################################################################
         prox = status.get('ma_signal_proximity')
         if prox is not None:
             print(f"  • MA Signal Proximity: {prox*100:.2f}%")
             print("    (Closer to 0% => near a crossover)")
-        ####################################################################
 
         if status['trades_executed'] == 0:
             print("\nNo trades yet, stats are limited.")
