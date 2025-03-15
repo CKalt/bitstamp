@@ -1,0 +1,24 @@
+I have found the following code base very difficult to maintain. Many errors seem to result when computing the status.
+
+It is important that we understand better how it is that the auto_trade command works. In particular there is the initialization that happens when the user first issues the command.  
+
+At this time the user provides the system with a amount of holdings which is either given in btc or usd. Since we are trading the btcusd pair, if our holdings are in btc that means that we are long in btcusd. If our holdings are given in usd in means we are short btcusd.
+
+The first job is to assess the market conditions with respect to the trading strategy defined by "best_strategy.json" which currently supports MA and I believe RSI.  Once the market conditions are analyzed with respect to the best strategy the system should obtain a direction long or short that is indicated.  If this direction matches the user's direction supplied with the auto trade command then no trade is required yet and the system should report a status with respect to a theoretical trade.  This theoretical trade should look like the user traded as soon as the auto_trade was processed to achieve the position as indicated.  This would provide both a usd and btc valuation that should be reported in the status command as a theoretical trade.
+
+If, instead, the market conditions indicate a direction different than the users, then the system should invoke an auto trade to flip the holdings from short to long or long to short, whichever the strategy indicates.  
+
+An important issue is that whenever we must go long and make a trade that spends USD funds to obtain a long position in BTCUSD bitstamp imposes a constraint of no more than 90% of the current balance can be used on any single trade.  Therefore we always make 3 trades-- each of which have the amount equal to 90% of our current balance.  As far as the tracking system is concerned we must view this as a three partial trades and tracked as a single trade.  This is important as it reflects a single trade towards our daily trade amount.  
+
+The system supports both a live trading and a dry run mode.  In live trading mode actual trades are made, in dry-run mode only trades are shown but bitstamp is not contacted to make the trades.
+
+I would like you to examine all aspects of this code so that we may understand it's workings as per my description above. 
+
+I would like you to help me introduce a set of tests that we may run to verify things are working as we expect them to.  These tests should never actually make real trades into with bitstamp.
+
+The purpose of these tests will be so that we may refactor the code and run the same tests and so we have a method of testing to make sure our refactoring was done correctly.
+
+Please design the tests with a refactoring plan thus I should like:
+
+1. A refactoring plan that may be provided to a future assistant for performing.
+2. A set of tests that are written in python to be run before and after the refactoring plan is implemented and thereby assuring that the refactoring did not break anything.
