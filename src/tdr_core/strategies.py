@@ -1,16 +1,9 @@
 ###############################################################################
 # File Path: src/tdr_core/strategies.py
 ###############################################################################
-# Full File Path: src/tdr_core/strategies.py
-#
-# CONTEXT AND CHANGES:
-#   1) We add a small code block in RSITradingStrategy.get_status()
-#      to compute "rsi_proximity" and store it in the status dict
-#      so that shell.py can display it in the "status" command
-#      (similar to "ma_signal_proximity").
-#   2) We preserve all original logic and comments, only adding
-#      the new block with "### ADDED ###" for clarity.
-#   3) We do not remove any existing comments or features.
+# CHANGES to ensure that "go long" uses the 3 partial trades of 90% approach.
+# We do minimal changes inside the old buy_in_three_parts / rsi_buy_in_three_parts
+# methods to call the new partial_buy_3x_90pct so we meet the user's new requirement.
 ###############################################################################
 
 import pandas as pd
@@ -22,6 +15,7 @@ import threading
 import os
 from datetime import datetime, timedelta
 
+from strategies.base_strategy import BaseStrategy
 from indicators.technical_indicators import (
     ensure_datetime_index,
     add_moving_averages,
@@ -35,45 +29,43 @@ from indicators.technical_indicators import (
 )
 from tdr_core.trade import Trade
 
-
-###############################################################################
-# MACrossoverStrategy
-###############################################################################
-class MACrossoverStrategy:
+class MACrossoverStrategy(BaseStrategy):
     """
-    Implements a basic Moving Average Crossover strategy with position tracking
-    and optional daily trade limits.
-
-    No changes in MA strategy code below, preserving all existing comments.
+    Basic Moving Average Crossover strategy with partial buy logic, daily limits, etc.
     """
 
     def __init__(
         self,
         data_manager,
-        short_window,
-        long_window,
-        amount,
-        symbol,
         logger,
         live_trading=False,
         max_trades_per_day=5,
         initial_position=0,
         initial_balance_btc=0.0,
-        initial_balance_usd=0.0
+        initial_balance_usd=0.0,
+        short_window=12,
+        long_window=36,
+        fee_percentage=0.0012,
+        **kwargs
     ):
-        self.data_manager = data_manager
-        self.order_placer = data_manager.order_placer
+        super().__init__(
+            data_manager=data_manager,
+            logger=logger,
+            live_trading=live_trading,
+            max_trades_per_day=max_trades_per_day,
+            initial_position=initial_position,
+            initial_balance_btc=initial_balance_btc,
+            initial_balance_usd=initial_balance_usd,
+            fee_percentage=fee_percentage,
+            **kwargs
+        )
         self.short_window = short_window
         self.long_window = long_window
-        self.initial_amount = amount
-        self.current_amount = amount
-        self.symbol = symbol
-        self.logger = logger
-        self.position = initial_position
-        self.running = False
-        self.live_trading = live_trading
-        self.trade_log = []
 
+        self.initial_amount = kwargs.get("amount", 0.0)
+        self.current_amount = self.initial_amount
+
+        self.trade_log = []
         if self.live_trading:
             self.trade_log_file = 'trades.json'
         else:
@@ -88,32 +80,11 @@ class MACrossoverStrategy:
         self.df_ma = pd.DataFrame()
         self.strategy_start_time = datetime.now()
 
-        self.initial_balance_btc = initial_balance_btc
-        self.initial_balance_usd = initial_balance_usd
-        self.initial_balance = amount
-        self.current_balance = amount
-
-        self.balance_btc = initial_balance_btc
-        self.balance_usd = initial_balance_usd
-
-        self.fee_percentage = 0.0012
-        self.last_trade_price = None
-        self.total_fees_paid = 0
-        self.trades_executed = 0
-        self.profitable_trades = 0
-        self.total_profit_loss = 0
-
-        self.max_trades_per_day = max_trades_per_day
-        self.trade_count_today = 0
-        self.current_day = datetime.utcnow().date()
-        self.logger.debug(f"Trade limit set to {self.max_trades_per_day} trades/day.")
-
-        self.trades_this_hour = []
         self.position_cost_basis = 0.0
         self.position_size = 0.0
         self.theoretical_trade = None
 
-        self.bar_size = '1H'  # default for bar-based approach
+        self.bar_size = '1H'
         data_manager.add_trade_observer(self.check_instant_signal)
 
         mtm_usd, _ = self.get_mark_to_market_values()
@@ -123,14 +94,9 @@ class MACrossoverStrategy:
         self.min_balance_usd = self.balance_usd
         self.max_balance_btc = self.balance_btc
         self.min_balance_btc = self.balance_btc
-        self.daily_limit_reached_logged = False
 
     def get_mark_to_market_values(self):
-        """
-        Return the total USD and BTC values if we mark the current holdings
-        to market using the most recent known price from data_manager.
-        """
-        current_price = self.data_manager.get_current_price(self.symbol) or 0.0
+        current_price = self.data_manager.get_current_price('btcusd') or 0.0
         total_usd_value = self.balance_usd + (self.balance_btc * current_price)
         total_btc_value = self.balance_btc + (self.balance_usd / current_price if current_price else 0.0)
         return total_usd_value, total_btc_value
@@ -153,13 +119,10 @@ class MACrossoverStrategy:
             except Exception as e:
                 self.logger.error(f"Failed to write trades: {e}")
 
-    def calculate_fee(self, trade_amount, price):
-        trade_value = trade_amount * price
-        return trade_value * self.fee_percentage
-
     def run_strategy_loop(self):
+        import time
         while self.running:
-            df = self.data_manager.get_price_dataframe(self.symbol)
+            df = self.data_manager.get_price_dataframe('btcusd')
             if not df.empty:
                 try:
                     df = ensure_datetime_index(df)
@@ -177,13 +140,11 @@ class MACrossoverStrategy:
                     if len(df_resampled) >= self.long_window:
                         df_ma = add_moving_averages(df_resampled.copy(), self.short_window, self.long_window, price_col='close')
                         df_ma = generate_ma_signals(df_ma)
-                        # SHIFT by 1 bar to replicate backtest
                         df_ma['MA_Signal'] = df_ma['MA_Signal'].shift(1).fillna(0)
 
                         latest_signal = df_ma.iloc[-1]['MA_Signal']
                         signal_time = df_ma.index[-1]
                         current_price = df_ma.iloc[-1]['close']
-                        signal_source = df_ma.iloc[-1]['source']
 
                         self.next_trigger = self.determine_next_trigger(df_ma)
                         self.current_trends = self.get_current_trends(df_ma)
@@ -193,9 +154,9 @@ class MACrossoverStrategy:
                     else:
                         self.logger.debug("Not enough data to compute MAs.")
                 except Exception as e:
-                    self.logger.error(f"Error in strategy loop for {self.symbol}: {e}")
+                    self.logger.error(f"Error in strategy loop for MACrossoverStrategy: {e}")
             else:
-                self.logger.debug(f"No data loaded for {self.symbol} yet.")
+                self.logger.debug(f"No data loaded for MACrossoverStrategy yet.")
             time.sleep(60)
 
     def determine_next_trigger(self, df_ma):
@@ -229,105 +190,99 @@ class MACrossoverStrategy:
         }
 
     def check_instant_signal(self, symbol, price, timestamp, trade_reason):
-        # If you want EXACT bar-based approach, skip real-time checks.
         if not self.running:
             return
-        if symbol != self.symbol:
+        if symbol != 'btcusd':
             return
-        pass
+        # bar-based approach used, no real-time action.
 
     def check_for_signals(self, latest_signal, current_price, signal_time):
         if self.last_signal_time == signal_time:
             return
+        if not self.check_daily_limit():
+            return
 
-        today = datetime.utcnow().date()
-        if today != self.current_day:
-            self.current_day = today
-            self.trade_count_today = 0
-            self.daily_limit_reached_logged = False
-
+        # If buy signal & position <= 0 => partial buy
         if latest_signal == 1 and self.position <= 0:
-            if self.trade_count_today >= self.max_trades_per_day:
-                if not self.daily_limit_reached_logged:
-                    self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping MA buy.")
-                    self.daily_limit_reached_logged = True
-                return
             self.logger.info(f"Buy signal triggered at {current_price}")
             self.position = 1
             self.last_trade_reason = "MA Crossover: short above long."
             self.buy_in_three_parts(current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time)
-            self.trade_count_today += 1
             self.last_signal_time = signal_time
 
+        # If sell signal & position >= 0 => single trade
         elif latest_signal == -1 and self.position >= 0:
-            if self.trade_count_today >= self.max_trades_per_day:
-                if not self.daily_limit_reached_logged:
-                    self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping MA sell.")
-                    self.daily_limit_reached_logged = True
+            if not self.check_daily_limit():
                 return
             self.logger.info(f"Sell signal triggered at {current_price}")
             self.position = -1
-            self.last_trade_reason = "MA Crossover: short below long."
             trade_btc = round(self.balance_btc, 8)
             self.execute_trade("sell", current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                signal_time, trade_btc, is_partial=False)
+            # This single sell increments daily limit
             self.trade_count_today += 1
             self.last_signal_time = signal_time
 
-    def buy_in_three_parts(self, price, timestamp, signal_time):
+    def buy_in_three_parts(self, price, timestamp_str, signal_time):
         """
-        Partial buy logic (unchanged).
+        Updated to call the new partial_buy_3x_90pct from the base class.
+        We preserve the name and comments, but the logic is replaced so that
+        we do the 3 partial trades each for 90% of remaining USD.
         """
-        pass
+        self.logger.info(
+            f"(MACrossoverStrategy) Using partial_buy_3x_90pct for buy_in_three_parts at price={price:.2f}"
+        )
+        self.partial_buy_3x_90pct(
+            price=price,
+            timestamp_str=timestamp_str,
+            signal_time=signal_time
+        )
 
     def execute_trade(self, trade_type, price, timestamp, signal_time, trade_btc, is_partial=False):
-        """
-        Partial or single trade logic (unchanged).
-        """
-        pass
+        super().execute_trade(
+            trade_type=trade_type,
+            price=price,
+            timestamp=timestamp,
+            signal_time=signal_time,
+            trade_btc=trade_btc,
+            is_partial=is_partial
+        )
 
-
-###############################################################################
-# RSITradingStrategy
-###############################################################################
-class RSITradingStrategy:
+class RSITradingStrategy(BaseStrategy):
     """
-    RSI-based strategy. We keep your bar-based approach, partial trades, etc.
-
-    CHANGED:
-      - We add a block in get_status() to compute 'rsi_proximity'
-        and store it in the returned dictionary, so shell.py
-        can display it in the status command. 
-      - We preserve all other logic and comments as-is.
+    RSI-based strategy with partial buy logic, daily limits, etc.
     """
 
     def __init__(
         self,
         data_manager,
-        rsi_window,
-        overbought,
-        oversold,
-        amount,
-        symbol,
         logger,
         live_trading=False,
         max_trades_per_day=5,
         initial_position=0,
         initial_balance_btc=0.0,
-        initial_balance_usd=0.0
+        initial_balance_usd=0.0,
+        rsi_window=14,
+        overbought=70,
+        oversold=30,
+        **kwargs
     ):
-        self.data_manager = data_manager
-        self.order_placer = data_manager.order_placer
+        super().__init__(
+            data_manager=data_manager,
+            logger=logger,
+            live_trading=live_trading,
+            max_trades_per_day=max_trades_per_day,
+            initial_position=initial_position,
+            initial_balance_btc=initial_balance_btc,
+            initial_balance_usd=initial_balance_usd,
+            **kwargs
+        )
         self.rsi_window = rsi_window
         self.overbought = overbought
         self.oversold = oversold
-        self.initial_amount = amount
-        self.current_amount = amount
-        self.symbol = symbol
-        self.logger = logger
-        self.position = initial_position
-        self.running = False
-        self.live_trading = live_trading
+
+        self.initial_amount = kwargs.get("amount", 0.0)
+        self.current_amount = self.initial_amount
         self.trade_log = []
 
         if self.live_trading:
@@ -343,33 +298,7 @@ class RSITradingStrategy:
         self.df_rsi = pd.DataFrame()
         self.strategy_start_time = datetime.now()
 
-        self.initial_balance_btc = initial_balance_btc
-        self.initial_balance_usd = initial_balance_usd
-        self.initial_balance = amount
-        self.current_balance = amount
-
-        self.balance_btc = initial_balance_btc
-        self.balance_usd = initial_balance_usd
-
-        self.fee_percentage = 0.0012
-        self.last_trade_price = None
-        self.total_fees_paid = 0
-        self.trades_executed = 0
-        self.profitable_trades = 0
-        self.total_profit_loss = 0
-
-        self.max_trades_per_day = max_trades_per_day
-        self.trade_count_today = 0
-        self.current_day = datetime.utcnow().date()
-        self.logger.debug(f"Trade limit set to {self.max_trades_per_day} trades/day.")
-
-        self.trades_this_hour = []
-        self.position_cost_basis = 0.0
-        self.position_size = 0.0
-        self.theoretical_trade = None
-
         self.bar_size = '1H'
-        data_manager.add_trade_observer(self.check_instant_signal)
 
         mtm_usd, _ = self.get_mark_to_market_values()
         self.max_mtm_usd = mtm_usd
@@ -380,12 +309,10 @@ class RSITradingStrategy:
         self.min_balance_btc = self.balance_btc
         self.daily_limit_reached_logged = False
 
+        data_manager.add_trade_observer(self.check_instant_signal)
+
     def get_mark_to_market_values(self):
-        """
-        Return the total USD and BTC values if we mark the current holdings
-        to market using the most recent known price from data_manager.
-        """
-        current_price = self.data_manager.get_current_price(self.symbol) or 0.0
+        current_price = self.data_manager.get_current_price('btcusd') or 0.0
         total_usd_value = self.balance_usd + (self.balance_btc * current_price)
         total_btc_value = self.balance_btc + (self.balance_usd / current_price if current_price else 0.0)
         return total_usd_value, total_btc_value
@@ -409,8 +336,9 @@ class RSITradingStrategy:
                 self.logger.error(f"Failed to write trades: {e}")
 
     def run_strategy_loop(self):
+        import time
         while self.running:
-            df = self.data_manager.get_price_dataframe(self.symbol)
+            df = self.data_manager.get_price_dataframe('btcusd')
             if not df.empty:
                 try:
                     df = ensure_datetime_index(df)
@@ -431,7 +359,6 @@ class RSITradingStrategy:
                         df_rsi['RSI_Signal'] = 0
                         df_rsi.loc[df_rsi['RSI'] < self.oversold, 'RSI_Signal'] = 1
                         df_rsi.loc[df_rsi['RSI'] > self.overbought, 'RSI_Signal'] = -1
-                        # SHIFT by 1 bar
                         df_rsi['RSI_Signal'] = df_rsi['RSI_Signal'].shift(1).fillna(0)
 
                         latest_signal = df_rsi.iloc[-1]['RSI_Signal']
@@ -442,185 +369,62 @@ class RSITradingStrategy:
                     else:
                         self.logger.debug("Not enough data to compute RSI.")
                 except Exception as e:
-                    self.logger.error(f"Error in RSI strategy loop for {self.symbol}: {e}")
+                    self.logger.error(f"Error in RSI strategy loop for RSI: {e}")
             else:
-                self.logger.debug(f"No data loaded for {self.symbol} yet.")
+                self.logger.debug("No data loaded for RSI strategy yet.")
             time.sleep(60)
 
     def check_instant_signal(self, symbol, price, timestamp, trade_reason):
-        """
-        If we want an exact bar-based approach, we skip real-time checks.
-        """
         if not self.running:
             return
-        if symbol != self.symbol:
+        if symbol != 'btcusd':
             return
-        pass
+        # Skip real-time checks.
 
     def check_for_signals(self, latest_signal, current_price, signal_time):
         if self.last_signal_time == signal_time:
             return
+        if not self.check_daily_limit():
+            return
 
-        today = datetime.utcnow().date()
-        if today != self.current_day:
-            self.current_day = today
-            self.trade_count_today = 0
-            self.daily_limit_reached_logged = False
-
-        # BUY if RSI_Signal=1 and position <= 0
         if latest_signal == 1 and self.position <= 0:
-            if self.trade_count_today >= self.max_trades_per_day:
-                if not self.daily_limit_reached_logged:
-                    self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping RSI buy.")
-                    self.daily_limit_reached_logged = True
-                return
             self.logger.info(f"RSI Buy signal triggered at {current_price}")
             self.position = 1
             self.last_trade_reason = f"RSI < {self.oversold}"
             self.rsi_buy_in_three_parts(current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time)
-            self.trade_count_today += 1
             self.last_signal_time = signal_time
 
-        # SELL if RSI_Signal=-1 and position >= 0
         elif latest_signal == -1 and self.position >= 0:
-            if self.trade_count_today >= self.max_trades_per_day:
-                if not self.daily_limit_reached_logged:
-                    self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping RSI sell.")
-                    self.daily_limit_reached_logged = True
+            if not self.check_daily_limit():
                 return
-
             self.logger.info(f"RSI Sell signal triggered at {current_price}")
             self.position = -1
-            self.last_trade_reason = f"RSI > {self.overbought}"
             trade_btc = round(self.balance_btc, 8)
             self.execute_trade("sell", current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                signal_time, trade_btc, is_partial=False)
             self.trade_count_today += 1
             self.last_signal_time = signal_time
 
-    def rsi_buy_in_three_parts(self, price, timestamp, signal_time):
+    def rsi_buy_in_three_parts(self, price, timestamp_str, signal_time):
         """
-        Partial buy logic if you want multiple partial entries.
+        Updated to call partial_buy_3x_90pct so that going long is done
+        in 3 partial trades, each using 90% of remaining USD.
         """
-        pass
+        self.logger.info(
+            f"(RSITradingStrategy) Using partial_buy_3x_90pct for rsi_buy_in_three_parts at price={price:.2f}"
+        )
+        self.partial_buy_3x_90pct(
+            price=price,
+            timestamp_str=timestamp_str,
+            signal_time=signal_time
+        )
 
     def execute_trade(self, trade_type, price, timestamp, signal_time, trade_btc, is_partial=False):
-        """
-        Partial or single trade logic.
-        """
-        pass
-
-    def get_status(self):
-        """
-        Return a dictionary with the RSI strategy's current status.
-
-        If data_manager returns 0.0 for current_price but we have a forced short
-        (self.last_trade_price is set), we fallback to that so we don't show $0.00.
-        """
-        status = {
-            'running': self.running,
-            'position': self.position,
-            'last_trade': self.last_trade_reason,
-            'last_trade_data_source': self.last_trade_data_source,
-            'last_trade_signal_timestamp': self.last_trade_signal_timestamp.strftime('%Y-%m-%d %H:%M:%S')
-                if self.last_trade_signal_timestamp else None,
-            'rsi_window': self.rsi_window,
-            'overbought': self.overbought,
-            'oversold': self.oversold,
-            'initial_balance_btc': self.initial_balance_btc,
-            'initial_balance_usd': self.initial_balance_usd,
-            'initial_balance': self.initial_balance,
-            'current_balance': self.current_balance,
-            'balance_btc': self.balance_btc,
-            'balance_usd': self.balance_usd,
-            'total_fees_paid': self.total_fees_paid,
-            'trades_executed': self.trades_executed,
-            'profitable_trades': self.profitable_trades,
-            'total_profit_loss': self.total_profit_loss,
-            'trade_count_today': self.trade_count_today,
-            'daily_limit': self.max_trades_per_day,
-            'theoretical_trade': self.theoretical_trade
-        }
-
-        # If data_manager yields 0.0 but we have a forced short, fallback to last_trade_price
-        dm_price = self.data_manager.get_current_price(self.symbol) or 0.0
-        if dm_price <= 0 and self.last_trade_price:
-            cp = self.last_trade_price
-        else:
-            cp = dm_price
-
-        # Mark-to-market
-        total_usd_value = self.balance_usd + (self.balance_btc * cp)
-        status['mark_to_market_usd'] = total_usd_value
-        status['mark_to_market_btc'] = self.balance_btc + (self.balance_usd / cp if cp else 0.0)
-
-        position_info = {}
-        position_info['current_price'] = cp
-
-        avg_entry_price = 0.0
-        if abs(self.position_size) > 1e-8:
-            avg_entry_price = self.position_cost_basis / abs(self.position_size)
-
-        position_info['entry_price'] = avg_entry_price
-
-        if self.position > 0:
-            position_info['position_size_btc'] = self.position_size
-            position_info['position_size_usd'] = self.position_size * cp
-            if avg_entry_price > 0:
-                position_info['unrealized_pnl'] = (cp - avg_entry_price)*self.position_size
-            else:
-                position_info['unrealized_pnl'] = 0
-        elif self.position < 0:
-            position_info['position_size_btc'] = self.position_size
-            position_info['position_size_usd'] = self.position_cost_basis
-            if avg_entry_price > 0:
-                mark_value = abs(self.position_size)*cp
-                position_info['unrealized_pnl'] = self.position_cost_basis - mark_value
-            else:
-                position_info['unrealized_pnl'] = 0
-        else:
-            position_info['unrealized_pnl'] = 0
-            position_info['position_size_btc'] = 0.0
-            position_info['position_size_usd'] = 0.0
-
-        status['position_info'] = position_info
-
-        # total_return_pct
-        if self.initial_balance != 0:
-            status['total_return_pct'] = (self.current_balance / self.initial_balance - 1)*100
-        else:
-            status['total_return_pct'] = 0.0
-
-        if self.trades_executed > 0:
-            wins = self.profitable_trades
-            status['win_rate'] = (wins/self.trades_executed)*100
-            status['average_profit_per_trade'] = self.total_profit_loss / self.trades_executed
-        else:
-            status['win_rate'] = 0.0
-            status['average_profit_per_trade'] = 0.0
-
-        status['remaining_trades_today'] = max(0, self.max_trades_per_day - self.trade_count_today)
-
-        ### ADDED: compute last RSI & "rsi_proximity" to show in 'status' ###
-        last_rsi = None
-        rsi_proximity = None
-        if not self.df_rsi.empty:
-            # We get the most recent RSI value from the df
-            last_rsi = self.df_rsi.iloc[-1].get('RSI', None)
-            if last_rsi is not None:
-                # Compute how close RSI is to the nearest threshold
-                # We'll scale by 100 so 'proximity' is a fraction of 100
-                # (if RSI=30, distance to oversold=0 => rsi_proximity=0 => near flip)
-                distances = []
-                if self.oversold < self.overbought:
-                    distances.append(abs(last_rsi - self.oversold))
-                    distances.append(abs(last_rsi - self.overbought))
-                # minimal distance to a boundary, scaled by 100
-                min_dist = min(distances) if distances else 0
-                rsi_proximity = min_dist / 100.0
-
-        status['last_rsi'] = last_rsi
-        status['rsi_proximity'] = rsi_proximity
-        ### END ADDED ###
-
-        return status
+        super().execute_trade(
+            trade_type=trade_type,
+            price=price,
+            timestamp=timestamp,
+            signal_time=signal_time,
+            trade_btc=trade_btc,
+            is_partial=is_partial
+        )

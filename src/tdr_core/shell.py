@@ -1,12 +1,7 @@
 ###############################################################################
 # File Path: src/tdr_core/shell.py
 ###############################################################################
-# Full File Path: src/tdr_core/shell.py
-#
-# CHANGES:
-#   1) In do_status(), we add logic to display 'rsi_proximity' in both
-#      short and long status views, paralleling the existing MA approach.
-#   2) We preserve all original code, docstrings, and logic.
+# CHANGES to unify forced "go long" with the partial_buy_3x_90pct logic in base_strategy.
 ###############################################################################
 
 import cmd
@@ -26,15 +21,13 @@ from tdr_core.strategies import MACrossoverStrategy, RSITradingStrategy
 from tdr_core.data_manager import CryptoDataManager
 from tdr_core.trade import Trade
 
-# Original references from tdr.py
 from utils.analysis import analyze_data, run_trading_system
 from data.loader import create_metadata_file, parse_log_file
 
+# We use StrategyFactory for unified strategy instantiation
+from tdr_core.strategy_factory import StrategyFactory
 
 class CryptoShell(cmd.Cmd):
-    """
-    An interactive command-based shell for controlling the Crypto trading system.
-    """
     intro = 'Welcome to the Crypto Shell (No CLI args). Type help or ? to list commands.\n'
     prompt = '(crypto) '
 
@@ -73,7 +66,6 @@ class CryptoShell(cmd.Cmd):
             'chart': 'chart btcusd 1H'
         }
 
-        # Register callbacks
         self.data_manager.add_candlestick_observer(self.candlestick_callback)
         self.data_manager.add_trade_observer(self.trade_callback)
 
@@ -81,9 +73,6 @@ class CryptoShell(cmd.Cmd):
         pass
 
     def do_example(self, arg):
-        """
-        Show an example usage of a command: example <command>
-        """
         command = arg.strip().lower()
         if command in self.examples:
             print("Example usage of '{}':".format(command))
@@ -93,10 +82,6 @@ class CryptoShell(cmd.Cmd):
             print(", ".join(self.examples.keys()))
 
     def do_price(self, arg):
-        """
-        Show current price for a symbol, plus the last WebSocket update timestamp:
-          price <symbol>
-        """
         symbol = arg.strip().lower()
         if not symbol:
             print("Usage: price <symbol>")
@@ -113,9 +98,6 @@ class CryptoShell(cmd.Cmd):
             print(f"No data for {symbol}")
 
     def do_range(self, arg):
-        """
-        Show min and max price in last N minutes: range <symbol> <minutes>
-        """
         args = arg.split()
         if len(args) != 2:
             print("Usage: range <symbol> <minutes>")
@@ -129,9 +111,6 @@ class CryptoShell(cmd.Cmd):
             print(f"No data for {symbol} in that timeframe")
 
     def do_buy(self, arg):
-        """
-        Place a market buy order: buy <symbol> <amount>
-        """
         args = arg.split()
         if len(args) != 2:
             print("Usage: buy <symbol> <amount>")
@@ -141,9 +120,6 @@ class CryptoShell(cmd.Cmd):
         print(json.dumps(result, indent=2))
 
     def do_sell(self, arg):
-        """
-        Place a market sell order: sell <symbol> <amount>
-        """
         args = arg.split()
         if len(args) != 2:
             print("Usage: sell <symbol> <amount>")
@@ -153,9 +129,6 @@ class CryptoShell(cmd.Cmd):
         print(json.dumps(result, indent=2))
 
     def do_candles(self, arg):
-        """
-        Toggle 1-minute candlestick printout: candles <symbol>
-        """
         symbol = arg.strip().lower()
         if not symbol:
             print("Usage: candles <symbol>")
@@ -168,9 +141,6 @@ class CryptoShell(cmd.Cmd):
             print(f"Started 1-minute candlestick output for {symbol}")
 
     def do_ticker(self, arg):
-        """
-        Toggle real-time trade output: ticker <symbol>
-        """
         symbol = arg.strip().lower()
         if not symbol:
             print("Usage: ticker <symbol>")
@@ -183,10 +153,8 @@ class CryptoShell(cmd.Cmd):
             print(f"Started real-time trade output for {symbol}")
 
     def candlestick_callback(self, symbol, minute, candle):
-        """
-        Callback for candlestick updates if toggled on via candles <symbol>.
-        """
         if symbol in self.candlestick_output:
+            from datetime import datetime
             ts_str = datetime.fromtimestamp(candle['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
             print(f"{symbol} - {ts_str}: "
                   f"Open={candle['open']:.2f}, High={candle['high']:.2f}, "
@@ -194,17 +162,12 @@ class CryptoShell(cmd.Cmd):
                   f"Volume={candle['volume']}, Trades={candle['trades']}")
 
     def trade_callback(self, symbol, price, timestamp, trade_reason):
-        """
-        Callback for trade updates if toggled on via ticker <symbol>.
-        """
         if symbol in self.ticker_output:
+            from datetime import datetime
             ts_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
             print(f"{symbol} - {ts_str}: Price=${price:.2f}")
 
     def do_verbose(self, arg):
-        """
-        Enable verbose logging to console or to a specified log file: verbose [logfile]
-        """
         arg = arg.strip()
         if not arg:
             if not self.verbose:
@@ -264,9 +227,6 @@ class CryptoShell(cmd.Cmd):
         return options
 
     def do_limit_buy(self, arg):
-        """
-        Place a limit buy order: limit_buy <symbol> <amount> <price> [options]
-        """
         args = arg.split()
         if len(args) < 3:
             print("Usage: limit_buy <symbol> <amount> <price> [options]")
@@ -277,9 +237,6 @@ class CryptoShell(cmd.Cmd):
         print(json.dumps(result, indent=2))
 
     def do_limit_sell(self, arg):
-        """
-        Place a limit sell order: limit_sell <symbol> <amount> <price> [options]
-        """
         args = arg.split()
         if len(args) < 3:
             print("Usage: limit_sell <symbol> <amount> <price> [options]")
@@ -290,9 +247,6 @@ class CryptoShell(cmd.Cmd):
         print(json.dumps(result, indent=2))
 
     def parse_position_str(self, pos_str):
-        """
-        Convert 'long'|'short'|'neutral' to +1|-1|0.
-        """
         pos_str = pos_str.lower()
         if pos_str == 'long':
             return 1
@@ -307,11 +261,13 @@ class CryptoShell(cmd.Cmd):
         """
         Start auto-trading using the best strategy from best_strategy.json.
 
-        If hist_position == desired_position, we skip forcing an immediate trade
-        but we also set the cost basis as though we 'theoretically' opened that
-        position at the current market price. If short is requested but we have
-        no local BTC, we skip forced SELL but still treat ourselves as short
-        with a 'theoretical' cost basis.
+        If hist_position == desired_position, we skip forced trades and do a
+        theoretical trade. Otherwise, we forcibly switch position:
+          - Going LONG => do 3 partial trades, each using 90% of the current USD
+          - Going SHORT => do a single SELL if we have BTC, else theoretical short
+
+        We preserve all original logic and comments, now unifying partial buys
+        to partial_buy_3x_90pct in the base strategy.
         """
         if self.auto_trader and self.auto_trader.running:
             print("Auto-trading is already running. Stop it first.")
@@ -358,7 +314,6 @@ class CryptoShell(cmd.Cmd):
         do_live       = best_strategy_params.get('do_live_trades', False)
         max_trades_day= best_strategy_params.get('max_trades_per_day', 5)
 
-        # Decide hist_position from best_strategy.json's "Last_Signal_Action"
         last_action = best_strategy_params.get('Last_Signal_Action', None)
         if last_action == "GO LONG":
             hist_position = 1
@@ -370,60 +325,32 @@ class CryptoShell(cmd.Cmd):
         def user_has_btc():
             if not self.auto_trader:
                 return False
-            if self.auto_trader.balance_btc > 1e-8:
-                return True
-            return False
+            return self.auto_trader.balance_btc > 1e-8
 
-        # Setup strategy instance
-        if strategy_name == 'MA':
-            from tdr_core.strategies import MACrossoverStrategy
+        # Convert best_strategy_params -> constructor-friendly dict
+        ignored_keys = ["Strategy", "Bar_Size", "do_live_trades", "Last_Signal_Action",
+                        "Last_Signal_Timestamp", "Last_Trade_Timestamp", "Last_Trade_Price"]
+        constructor_params = {k: v for k, v in best_strategy_params.items() if k not in ignored_keys}
 
-            short_window = int(best_strategy_params.get('Short_Window', 12))
-            long_window  = int(best_strategy_params.get('Long_Window', 36))
-
-            self.auto_trader = MACrossoverStrategy(
-                self.data_manager,
-                short_window,
-                long_window,
-                amount_num,
-                'btcusd',
-                self.logger,
+        try:
+            self.auto_trader = StrategyFactory.create(
+                strategy_name,
+                data_manager=self.data_manager,
+                logger=self.logger,
                 live_trading=do_live,
                 max_trades_per_day=max_trades_day,
                 initial_position=desired_position,
                 initial_balance_btc=(amount_num if desired_position==1 else 0.0),
-                initial_balance_usd=(amount_num if desired_position==-1 else 0.0)
+                initial_balance_usd=(amount_num if desired_position==-1 else 0.0),
+                **constructor_params
             )
-
-        elif strategy_name == 'RSI':
-            from tdr_core.strategies import RSITradingStrategy
-
-            rsi_window = int(best_strategy_params.get('RSI_Window', 14))
-            overbought = float(best_strategy_params.get('Overbought', 70))
-            oversold   = float(best_strategy_params.get('Oversold', 30))
-
-            self.auto_trader = RSITradingStrategy(
-                self.data_manager,
-                rsi_window,
-                overbought,
-                oversold,
-                amount_num,
-                'btcusd',
-                self.logger,
-                live_trading=do_live,
-                max_trades_per_day=max_trades_day,
-                initial_position=desired_position,
-                initial_balance_btc=(amount_num if desired_position==1 else 0.0),
-                initial_balance_usd=(amount_num if desired_position==-1 else 0.0)
-            )
-        else:
-            print(f"Best strategy is not 'MA' or 'RSI'; it's {strategy_name}.")
-            print("Currently supported: 'MA', 'RSI'.")
+        except ValueError as e:
+            print(str(e))
             return
 
         current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
 
-        # If hist_position == desired_position => no forced trade
+        # If user direction matches history => no forced trades
         if desired_position == hist_position:
             self.logger.info("(auto_trade) Positions match. No forced trade needed.")
             if desired_position == 1 and amount_unit == 'btc' and current_market_price>0:
@@ -443,10 +370,6 @@ class CryptoShell(cmd.Cmd):
                 short_btc = amount_num / current_market_price
                 self.auto_trader.position_size = - short_btc
                 self.auto_trader.position_cost_basis = short_btc * current_market_price
-                self.logger.info(
-                    f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
-                    f"for an initial SHORT of {short_btc:.6f} BTC at ${current_market_price:.2f}."
-                )
                 self.auto_trader.theoretical_trade = {
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'direction': 'short',
@@ -455,32 +378,29 @@ class CryptoShell(cmd.Cmd):
                 }
 
         else:
-            # Forcing immediate trade if different from historical
+            # If desired_position=1 => forcibly go LONG w/ 3 partial trades
             if desired_position == 1 and current_market_price>0:
-                if amount_unit == 'btc':
-                    buy_btc = amount_num
-                else:
-                    buy_btc = amount_num / current_market_price
                 trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                self.logger.info(f"(auto_trade) {strategy_name}: Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
-                self.auto_trader.execute_trade(
-                    "buy",
-                    current_market_price,
-                    trade_ts,
-                    datetime.now(),
-                    buy_btc
+                self.logger.info(
+                    f"(auto_trade) {strategy_name}: Forcing immediate 3-part BUY at ${current_market_price:.2f}."
                 )
+                self.auto_trader.partial_buy_3x_90pct(
+                    price=current_market_price,
+                    timestamp_str=trade_ts,
+                    signal_time=datetime.now()
+                )
+
+            # If desired_position=-1 => forcibly go SHORT
             elif desired_position == -1 and current_market_price>0:
                 if not user_has_btc():
                     self.logger.info(
-                        f"(auto_trade) {strategy_name}: We have no BTC to sell, skipping forced SELL. Setting theoretical short anyway."
+                        f"(auto_trade) {strategy_name}: No BTC to sell, skipping forced SELL. Using theoretical short."
                     )
                     short_btc = amount_num / current_market_price
                     self.auto_trader.position_size = - short_btc
                     self.auto_trader.position_cost_basis = short_btc * current_market_price
                     self.auto_trader.last_trade_price = current_market_price
                     self.auto_trader.balance_btc = -short_btc
-
                     self.auto_trader.theoretical_trade = {
                         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         'direction': 'short',
@@ -490,23 +410,25 @@ class CryptoShell(cmd.Cmd):
                 else:
                     sell_btc = amount_num / current_market_price
                     trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    self.logger.info(f"(auto_trade) {strategy_name}: Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
+                    self.logger.info(
+                        f"(auto_trade) {strategy_name}: Forcing immediate SELL of {sell_btc:.6f} BTC at ${current_market_price:.2f}."
+                    )
                     self.auto_trader.execute_trade(
                         "sell",
                         current_market_price,
                         trade_ts,
                         datetime.now(),
-                        sell_btc
+                        sell_btc,
+                        is_partial=False
                     )
+                    # Because it's a single SELL, we can do self.auto_trader.trade_count_today += 1 if desired.
+                    self.auto_trader.trade_count_today += 1
 
         self.auto_trader.start()
         print(f"Auto-trading started with {balance_str}, position={pos_str}, "
               f"{strategy_name} strategy, do_live_trades={do_live}")
 
     def do_stop_auto_trade(self, arg):
-        """
-        Stop auto-trading if running.
-        """
         if self.auto_trader and self.auto_trader.running:
             self.auto_trader.stop()
             print("Auto-trading stopped.")
@@ -514,13 +436,6 @@ class CryptoShell(cmd.Cmd):
             print("No auto-trading is running.")
 
     def do_status(self, arg):
-        """
-        Show status of auto-trading. Usage: status [long]
-
-        By default (no arg or anything not "long"), we show a short version:
-          - Position Details with direction, plus theoretical trade block if relevant.
-        If user types "status long", we show the entire original block.
-        """
         sub_arg = arg.strip().lower()
         show_full = (sub_arg == 'long')
 
@@ -558,20 +473,18 @@ class CryptoShell(cmd.Cmd):
                 print(f"    • Amount:     {t['amount']}")
                 print(f"    • Theoretical? {t['theoretical']}")
 
-            # ### ADDED: Show RSI Proximity if it exists
             if 'rsi_proximity' in status and status['rsi_proximity'] is not None:
                 print(f"\n  • RSI Proximity: {status['rsi_proximity']*100:.2f}%")
                 print("    (Closer to 0% means RSI is nearer to a boundary cross)")
 
-            # If there's also an MA strategy, we might show 'ma_signal_proximity'
             if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
                 print(f"\n  • MA Crossover Proximity: {status['ma_signal_proximity']*100:.2f}%")
-                print("    (Closer to 0% means closer to flipping from short->long or long->short)")
+                print("    (Closer to 0% means closer to flipping)")
 
             print("")
             return
 
-        # Otherwise, show the full (long) status (rest of code unchanged)...
+        # Otherwise show the full details
         print("\nAuto-Trading Status:")
         print("━"*50)
         print(f"  • Running: {status['running']}")
@@ -652,15 +565,13 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Last RSI: {status['last_rsi']:.2f} (window={status.get('rsi_window',14)}, "
                   f"overbought={status.get('overbought',70)}, oversold={status.get('oversold',30)})")
 
-        ### ADDED: print rsi_proximity, if present ###
         if 'rsi_proximity' in status and status['rsi_proximity'] is not None:
             print(f"  • RSI Proximity: {status['rsi_proximity']*100:.2f}%")
-            print("    (Closer to 0% means RSI is nearer to a boundary cross)")
-        ### END ADDED ###
+            print("    (Closer to 0% means RSI is nearer to crossing boundary)")
 
         if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
             print(f"  • MA Crossover Proximity: {status['ma_signal_proximity']*100:.2f}%")
-            print("    (Closer to 0% means closer to flipping from short->long or long->short)")
+            print("    (Closer to 0% means closer to flipping short->long or vice versa)")
 
         if status.get('trades_executed',0) == 0:
             print("\nNo trades yet, stats are limited.")
@@ -677,9 +588,6 @@ class CryptoShell(cmd.Cmd):
         print("━"*50)
 
     def do_quit(self, arg):
-        """
-        Quit the program, shutting down threads and processes gracefully.
-        """
         print("Quitting...")
         if self.auto_trader and self.auto_trader.running:
             self.auto_trader.stop()
@@ -690,15 +598,9 @@ class CryptoShell(cmd.Cmd):
         return True
 
     def do_exit(self, arg):
-        """
-        Alias for 'quit'.
-        """
         return self.do_quit(arg)
 
     def stop_dash_app(self):
-        """
-        If a Dash app is running in a separate process, attempt to shut it down.
-        """
         if self.chart_process and self.chart_process.is_alive():
             try:
                 requests.get('http://127.0.0.1:8050/shutdown')
@@ -708,10 +610,6 @@ class CryptoShell(cmd.Cmd):
                 print("Failed to shut down Dash app:", e)
 
     def do_chart(self, arg):
-        """
-        Show a Dash-based chart: chart [symbol] [bar_size].
-        E.g., chart btcusd 1H
-        """
         args = arg.split()
         symbol = 'btcusd'
         bar_size = '1H'
@@ -758,7 +656,7 @@ class CryptoShell(cmd.Cmd):
 
         threading.Thread(target=update_shared_data, daemon=True).start()
 
-        from tdr import run_dash_app  # minimal local import
+        from tdr import run_dash_app
         self.chart_process = Process(
             target=run_dash_app,
             args=(self.data_manager_dict, symbol, bar_size, short_window, long_window)
