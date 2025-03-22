@@ -10,8 +10,11 @@
 #   3) We add lines to show whether we are in LIVE or DRY-RUN mode,
 #      and skip printing zero placeholders, using "N/A" if no real position.
 #   4) We emphasize if the last trade was "theoretical."
-#   5) ### NEW FIX ### We now set position_size, position_cost_basis,
-#      and last_signal_time after a forced trade so we don't double-sell.
+#   5) We set position_size, position_cost_basis, and last_signal_time
+#      after a forced trade so we don't double-sell.
+#   6) ### ADDED FIX ### If user says "auto_trade 2.30btc long" and that
+#      physically means they are already long, we skip the forced trade
+#      (do not increment trades, do not log a trade).
 ###############################################################################
 
 import cmd
@@ -428,15 +431,37 @@ class CryptoShell(cmd.Cmd):
 
         current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
 
-        if desired_position == hist_position:
-            # No forced trade, just theoretical
-            self.logger.info("(auto_trade) Positions match. No forced trade needed.")
-            if desired_position == 1 and amount_unit == 'btc' and current_market_price>0:
+        # ### ADDED FIX ###
+        # If the user says "2.30btc long" and that physically means they're
+        # already long, we do NOT want to do an actual forced trade. We skip
+        # incrementing trades, skip writing to trades.json, etc.
+        # We'll unify this with the "hist_position == desired_position" scenario.
+
+        # If the user physically says "X btc" and "long," that obviously
+        # means they hold BTC. We'll skip forced trade.
+        # Similarly, if user says "Y usd" and "short," skip forced trade.
+
+        # We'll define a small helper:
+        def position_physically_matches_user():
+            if desired_position == 1 and amount_unit == 'btc':
+                return True
+            if desired_position == -1 and amount_unit == 'usd':
+                return True
+            return False
+
+        # Now incorporate the "hist_position" logic as well:
+        physically_same = position_physically_matches_user()
+        hist_same = (desired_position == hist_position)
+
+        if physically_same or hist_same:
+            # We skip forced trade and treat it as theoretical
+            self.logger.info("(auto_trade) Positions match. No forced trade needed (theoretical only).")
+
+            if desired_position == 1 and amount_unit == 'btc' and current_market_price > 0:
                 self.auto_trader.position_size = amount_num
                 self.auto_trader.position_cost_basis = amount_num * current_market_price
                 self.logger.info(
-                    f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
-                    f"for an initial LONG of {amount_num} BTC at ${current_market_price:.2f}."
+                    f"(auto_trade) Theoretical LONG of {amount_num} BTC at ${current_market_price:.2f}."
                 )
                 self.auto_trader.theoretical_trade = {
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -444,13 +469,12 @@ class CryptoShell(cmd.Cmd):
                     'amount': amount_num,
                     'theoretical': True
                 }
-            elif desired_position == -1 and amount_unit == 'usd' and current_market_price>0:
+            elif desired_position == -1 and amount_unit == 'usd' and current_market_price > 0:
                 short_btc = amount_num / current_market_price
-                self.auto_trader.position_size = - short_btc
+                self.auto_trader.position_size = -short_btc
                 self.auto_trader.position_cost_basis = short_btc * current_market_price
                 self.logger.info(
-                    f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
-                    f"for an initial SHORT of {short_btc:.6f} BTC at ${current_market_price:.2f}."
+                    f"(auto_trade) Theoretical SHORT of {short_btc:.6f} BTC at ${current_market_price:.2f}."
                 )
                 self.auto_trader.theoretical_trade = {
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -458,14 +482,15 @@ class CryptoShell(cmd.Cmd):
                     'amount': amount_num,
                     'theoretical': True
                 }
-            # ### NEW FIX ### also set last_signal_time to avoid immediate bar-based flip
+
+            # We also set last_signal_time to "now" to avoid immediate bar-based flip
             self.auto_trader.last_signal_time = datetime.now()
 
         else:
-            # Forcing immediate trade if different from historical
+            # Forcing immediate trade if different from historical or user input
             trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-            if desired_position == 1 and current_market_price>0:
+            if desired_position == 1 and current_market_price > 0:
                 if amount_unit == 'btc':
                     buy_btc = amount_num
                 else:
@@ -478,18 +503,18 @@ class CryptoShell(cmd.Cmd):
                     datetime.now(),
                     buy_btc
                 )
-                # ### NEW FIX ### set correct size, cost basis, and last_signal_time
+                # set correct size, cost basis, and last_signal_time
                 self.auto_trader.position_size = buy_btc
                 self.auto_trader.position_cost_basis = buy_btc * current_market_price
                 self.auto_trader.last_signal_time = datetime.now()
 
-            elif desired_position == -1 and current_market_price>0:
+            elif desired_position == -1 and current_market_price > 0:
                 if not user_has_btc():
                     self.logger.info(
                         f"(auto_trade) {strategy_name}: We have no BTC to sell, skipping forced SELL. Setting theoretical short anyway."
                     )
                     short_btc = amount_num / current_market_price
-                    self.auto_trader.position_size = - short_btc
+                    self.auto_trader.position_size = -short_btc
                     self.auto_trader.position_cost_basis = short_btc * current_market_price
                     self.auto_trader.last_trade_price = current_market_price
                     self.auto_trader.balance_btc = -short_btc
@@ -500,7 +525,7 @@ class CryptoShell(cmd.Cmd):
                         'amount': amount_num,
                         'theoretical': True
                     }
-                    self.auto_trader.last_signal_time = datetime.now()  # ### NEW FIX ###
+                    self.auto_trader.last_signal_time = datetime.now()
                 else:
                     sell_btc = amount_num / current_market_price
                     self.logger.info(f"(auto_trade) {strategy_name}: Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
@@ -511,8 +536,7 @@ class CryptoShell(cmd.Cmd):
                         datetime.now(),
                         sell_btc
                     )
-                    # ### NEW FIX ### set correct negative size, cost basis, last_signal_time
-                    self.auto_trader.position_size = - sell_btc
+                    self.auto_trader.position_size = -sell_btc
                     self.auto_trader.position_cost_basis = sell_btc * current_market_price
                     self.auto_trader.last_signal_time = datetime.now()
 
@@ -547,7 +571,7 @@ class CryptoShell(cmd.Cmd):
 
         status = self.auto_trader.get_status()
 
-        # NEW: Show whether we are in dry-run or live mode
+        # Show whether we are in dry-run or live mode
         mode_str = "LIVE" if self.auto_trader.live_trading else "DRY-RUN"
         print(f"\nCurrent Trading Mode: {mode_str}")
 
@@ -622,7 +646,7 @@ class CryptoShell(cmd.Cmd):
             print("")
             return
 
-        # Otherwise, the full status ...
+        # Otherwise, show full status ...
         print("\nAuto-Trading Status (Full View):")
         print("━" * 50)
         print(f"  • Running: {status['running']}")
