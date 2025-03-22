@@ -285,65 +285,14 @@ def main():
             bar_frequencies=args.bar_frequencies  # NEW
         )
 
-        ################################################################
-        # CHANGED: We have commented out the previously mocked data that 
-        # used to show a "fake" strategy result. This prevents confusion 
-        # when real results show "No strategies met the criteria."
-        ################################################################
+        # We currently skip printing mocked data.
 
-        # OLD CODE (Commented):
-        """
-        # Example: Define detailed strategy results (mocked; replace with actual 
-        # data from `run_trading_system`)
-        detailed_strategy_results = {
-            "MA": {
-                "Frequency": args.high_frequency,
-                "Short_Window": 12,
-                "Long_Window": 36,
-                "Final_Balance": 10262.35,
-                "Total_Return": 2.62,
-                "Total_Trades": 45,
-                "Average_Trades_Per_Day": 1.45,
-                "Profit_Factor": 1.03,
-                "Sharpe_Ratio": 0.15
-            },
-            "RSI": {
-                "RSI_Window": 14,
-                "Overbought": 80,
-                "Oversold": 35,
-                "Final_Balance": 10479.78,
-                "Total_Return": 4.80,
-                "Total_Trades": 80,
-                "Average_Trades_Per_Day": 2.58,
-                "Profit_Factor": 1.17,
-                "Sharpe_Ratio": 0.41
-            },
-            "RAMM": {
-                "MA_Short": 6,
-                "MA_Long": 35,
-                "RSI_Period": 12,
-                "RSI_Overbought": 65,
-                "RSI_Oversold": 35,
-                "Regime_Lookback": 20,
-                "Final_Balance": 10133.44,
-                "Total_Return": 1.33,
-                "Total_Trades": 50,
-                "Average_Trades_Per_Day": 1.61,
-                "Profit_Factor": 1.14,
-                "Sharpe_Ratio": 0.18
-            }
-        """
-        
-        # If you'd like to display real results, consider building a dictionary 
-        # from 'optimization_results' or 'strategy_comparison' as needed:
+        # Create an empty dictionary to pass to display_detailed_strategy_results
         detailed_strategy_results = {}
 
-        # Display detailed strategy results (currently empty unless you populate 
-        # it from your real run)
         print("\n--- Detailed Strategy Results ---")
         display_detailed_strategy_results(detailed_strategy_results)
 
-        # If strategy_comparison is non-empty and has "Strategy" column, show it
         if not strategy_comparison.empty and "Strategy" in strategy_comparison.columns:
             print("\n--- Strategy Comparison ---")
             display_strategy_comparison(strategy_comparison)
@@ -352,65 +301,16 @@ def main():
         else:
             print("\nNo strategy comparison data to display.")
 
-        # Save optimization results to CSV (if any exist)
         optimization_results.to_csv("all_strategy_results.csv", index=False)
         print("\nResults saved to 'all_strategy_results.csv'.")
 
-        ################################################################
-        # NEW LOGIC (ORIGINALLY) that wrote best_strategy.json
-        # BUGFIX: We now comment it out to avoid overwriting the file
-        ################################################################
+        # The below block that writes best_strategy.json is commented out
+        # to avoid overwriting the file with mock data
         """
         if not strategy_comparison.empty:
-            # 1) Identify the best row by total return
-            best_idx = strategy_comparison['Total_Return'].idxmax()
-            best_row = strategy_comparison.loc[best_idx]
-
-            best_strategy_json = {
-                "Frequency": args.high_frequency,
-                "Strategy": best_row['Strategy'],
-                "Short_Window": best_row.get('Short_Window', 0),
-                "Long_Window": best_row.get('Long_Window', 0),
-                "Final_Balance": best_row.get('Final_Balance', 0),
-                "Total_Return": best_row.get('Total_Return', 0),
-                "Total_Trades": best_row.get('Total_Trades', 0),
-                "Profit_Factor": best_row.get('Profit_Factor', 0),
-                "Sharpe_Ratio": best_row.get('Sharpe_Ratio', 0),
-                "Average_Trades_Per_Day": best_row.get('Average_Trades_Per_Day', 0),
-                "start_window_days_back": args.start_window_days_back,
-                "end_window_days_back": args.end_window_days_back
-            }
-
-            def convert_types(obj):
-                import numpy as np
-                import pandas as pd
-                if isinstance(obj, (np.integer, np.int64)):
-                    return int(obj)
-                elif isinstance(obj, (np.floating, np.float64)):
-                    return float(obj)
-                elif isinstance(obj, np.ndarray):
-                    return obj.tolist()
-                elif isinstance(obj, pd.Timestamp):
-                    return obj.isoformat()
-                elif pd.isna(obj):
-                    return None
-                return obj
-
-            best_strategy_json = {
-                key: convert_types(value) for key, value in best_strategy_json.items()
-            }
-
-            # NEW: Ensure do_live_trades = false
-            best_strategy_json["do_live_trades"] = False
-
-            try:
-                with open("best_strategy.json", "w") as f:
-                    json.dump(best_strategy_json, f, indent=4)
-                print("\\nWrote best_strategy.json with new fields:")
-                print(best_strategy_json)
-            except Exception as e:
-                print("Error writing best_strategy.json:")
-                traceback.print_exc()
+            # ...
+            # [commented out code that saves best_strategy.json]
+            pass
         """
 
     except Exception as e:

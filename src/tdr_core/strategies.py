@@ -339,7 +339,6 @@ class MACrossoverStrategy:
             live_trading=self.live_trading
         )
 
-        # Adjust balances
         if trade_type == "buy":
             cost_usd = trade_btc * price
             self.balance_usd -= cost_usd
@@ -352,25 +351,15 @@ class MACrossoverStrategy:
             self.balance_usd -= fee
 
         self.total_fees_paid += fee
-
-        # Book-keeping
         self.trades_executed += 1
-        # Realized P&L if selling
-        if trade_type == "sell" and self.position_size > 0 and not is_partial:
-            # If we had a recognized open position, let's approximate realized PnL
-            # But we skip it for partial sells in this example or if position was 0
-            pass
 
         self.last_trade_price = price
         self.trade_log.append(trade_obj)
 
-        # If we wrote an actual trade, also store if it was profitable
+        # If we sold (not partial) and had a recognized open position:
         if trade_type == "sell" and not is_partial:
-            # simplistic logic
-            if price > self.position_cost_basis / max(self.position_size, 1e-8):
+            if price > (self.position_cost_basis / max(self.position_size, 1e-8)):
                 self.profitable_trades += 1
-                self.logger.debug("Trade ended up profitable.")
-            # compute total_profit_loss incrementally if desired
 
         self.logger.info(f"{trade_type.upper()} {trade_btc:.6f} BTC at ${price:.2f} - partial={is_partial}, fee=${fee:.2f}")
 
@@ -459,11 +448,8 @@ class MACrossoverStrategy:
 
         status['remaining_trades_today'] = max(0, self.max_trades_per_day - self.trade_count_today)
 
-        # For MA, let's compute a rough "ma_signal_proximity" if we want
-        # (similar approach as we do for rsi_proximity in RSI)
+        # For MA, let's compute a rough "ma_signal_proximity"
         if not self.df_ma.empty:
-            # We can approximate by seeing how close short_MA is to long_MA as fraction
-            # of the long_MA, or 0 if that doesn't exist
             last_row = self.df_ma.iloc[-1]
             long_ma = last_row.get('Long_MA', 0.0)
             short_ma = last_row.get('Short_MA', 0.0)
@@ -766,7 +752,6 @@ class RSITradingStrategy:
         self.last_trade_price = price
         self.trade_log.append(trade_obj)
 
-        # simplistic measure for profitability
         if trade_type == "sell" and not is_partial:
             if price > (self.position_cost_basis / max(self.position_size, 1e-8)):
                 self.profitable_trades += 1
@@ -850,7 +835,6 @@ class RSITradingStrategy:
 
         status['position_info'] = position_info
 
-        # total_return_pct
         if self.initial_balance != 0:
             status['total_return_pct'] = (self.current_balance / self.initial_balance - 1)*100
         else:
@@ -866,7 +850,7 @@ class RSITradingStrategy:
 
         status['remaining_trades_today'] = max(0, self.max_trades_per_day - self.trade_count_today)
 
-        ### ADDED: compute last_rsi & "rsi_proximity" ###
+        # ### ADDED: compute last_rsi & rsi_proximity ###
         last_rsi = None
         rsi_proximity = None
         if not self.df_rsi.empty:

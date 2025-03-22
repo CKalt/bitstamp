@@ -10,6 +10,8 @@
 #   3) We add lines to show whether we are in LIVE or DRY-RUN mode,
 #      and skip printing zero placeholders, using "N/A" if no real position.
 #   4) We emphasize if the last trade was "theoretical."
+#   5) ### NEW FIX ### We now set position_size, position_cost_basis,
+#      and last_signal_time after a forced trade so we don't double-sell.
 ###############################################################################
 
 import cmd
@@ -20,7 +22,7 @@ import logging
 import threading
 import requests
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, request
 from multiprocessing import Process, Manager
 
@@ -426,8 +428,8 @@ class CryptoShell(cmd.Cmd):
 
         current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
 
-        # If hist_position == desired_position => no forced trade
         if desired_position == hist_position:
+            # No forced trade, just theoretical
             self.logger.info("(auto_trade) Positions match. No forced trade needed.")
             if desired_position == 1 and amount_unit == 'btc' and current_market_price>0:
                 self.auto_trader.position_size = amount_num
@@ -456,15 +458,18 @@ class CryptoShell(cmd.Cmd):
                     'amount': amount_num,
                     'theoretical': True
                 }
+            # ### NEW FIX ### also set last_signal_time to avoid immediate bar-based flip
+            self.auto_trader.last_signal_time = datetime.now()
 
         else:
             # Forcing immediate trade if different from historical
+            trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
             if desired_position == 1 and current_market_price>0:
                 if amount_unit == 'btc':
                     buy_btc = amount_num
                 else:
                     buy_btc = amount_num / current_market_price
-                trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.logger.info(f"(auto_trade) {strategy_name}: Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
                 self.auto_trader.execute_trade(
                     "buy",
@@ -473,6 +478,11 @@ class CryptoShell(cmd.Cmd):
                     datetime.now(),
                     buy_btc
                 )
+                # ### NEW FIX ### set correct size, cost basis, and last_signal_time
+                self.auto_trader.position_size = buy_btc
+                self.auto_trader.position_cost_basis = buy_btc * current_market_price
+                self.auto_trader.last_signal_time = datetime.now()
+
             elif desired_position == -1 and current_market_price>0:
                 if not user_has_btc():
                     self.logger.info(
@@ -490,9 +500,9 @@ class CryptoShell(cmd.Cmd):
                         'amount': amount_num,
                         'theoretical': True
                     }
+                    self.auto_trader.last_signal_time = datetime.now()  # ### NEW FIX ###
                 else:
                     sell_btc = amount_num / current_market_price
-                    trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     self.logger.info(f"(auto_trade) {strategy_name}: Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
                     self.auto_trader.execute_trade(
                         "sell",
@@ -501,6 +511,10 @@ class CryptoShell(cmd.Cmd):
                         datetime.now(),
                         sell_btc
                     )
+                    # ### NEW FIX ### set correct negative size, cost basis, last_signal_time
+                    self.auto_trader.position_size = - sell_btc
+                    self.auto_trader.position_cost_basis = sell_btc * current_market_price
+                    self.auto_trader.last_signal_time = datetime.now()
 
         self.auto_trader.start()
         print(f"Auto-trading started with {balance_str}, position={pos_str}, "
@@ -545,7 +559,6 @@ class CryptoShell(cmd.Cmd):
             print(f"  • Direction: {pos_str}")
             pos_info = status.get('position_info', {})
 
-            # Instead of showing 0.0, use "N/A" if truly no position
             current_price = pos_info.get('current_price', None)
             if not current_price or current_price <= 0:
                 current_price = "N/A"
@@ -588,7 +601,6 @@ class CryptoShell(cmd.Cmd):
             else:
                 print(f"  • Unrealized PnL:  ${unrealized_pnl:.2f}")
 
-            # If no actual trades but we have a theoretical trade
             if status['trades_executed'] == 0 and status.get('theoretical_trade'):
                 t = status['theoretical_trade']
                 print(f"\n  This is a theoretical trade (no actual trades yet):")
@@ -605,14 +617,12 @@ class CryptoShell(cmd.Cmd):
                 print(f"\n  • MA Crossover Proximity: {status['ma_signal_proximity'] * 100:.2f}%")
                 print("    (Closer to 0% means closer to flipping from short->long or long->short)")
 
-            # Indicate last actual trade was theoretical or not
             if status['trades_executed'] > 0:
-                # If the strategy code logs partial or actual trades, we can show them
                 print(f"\n  Last trade was actual. Trades executed so far: {status['trades_executed']}")
             print("")
             return
 
-        # Otherwise, show the full (long) status ...
+        # Otherwise, the full status ...
         print("\nAuto-Trading Status (Full View):")
         print("━" * 50)
         print(f"  • Running: {status['running']}")
@@ -717,7 +727,7 @@ class CryptoShell(cmd.Cmd):
             print("\nNo trades yet, stats are limited.")
         elif status.get('win_rate', 0.0) < 40:
             print("Warning: Win rate is below 40%. Consider reviewing parameters.")
-        if status.get('current_balance', 0.0) < status.get('initial_balance', 0.0) * 0.9:
+        if status.get('current_balance', 0.0) < status.get('initial_balance', 0.0)*0.9:
             print("Warning: Balance is over 10% below initial.")
         if status.get('remaining_trades_today', 0) <= 1:
             print("Warning: Approaching daily trade limit!")
