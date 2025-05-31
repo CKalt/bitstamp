@@ -1154,61 +1154,70 @@ class CryptoShell(cmd.Cmd):
                print("Failed to shut down Dash app:", e)
 
    def do_chart(self, arg):
-       """
-       Show a Dash-based chart: chart [symbol] [bar_size].
-       E.g., chart btcusd 1H
-       """
-       args = arg.split()
-       symbol = 'btcusd'
-       bar_size = '1H'
-       if len(args) >= 1:
-           symbol = args[0].strip().lower()
-       if len(args) >= 2:
-           bar_size = args[1].strip()
-       if symbol not in self.data_manager.data:
-           print(f"No data for symbol '{symbol}'.")
-           return
+        """
+        Show a Dash-based chart: chart [symbol] [bar_size] [port].
+        E.g., chart btcusd 1H 8051
+        """
+        args = arg.split()
+        symbol = 'btcusd'
+        bar_size = '1H'
+        port = 8050  # default port
+        
+        if len(args) >= 1:
+            symbol = args[0].strip().lower()
+        if len(args) >= 2:
+            bar_size = args[1].strip()
+        if len(args) >= 3:
+            try:
+                port = int(args[2].strip())
+            except ValueError:
+                print("Invalid port number, using 8050")
+                port = 8050
+        
+        if symbol not in self.data_manager.data:
+            print(f"No data for symbol '{symbol}'.")
+            return
 
-       try:
-           import dash
-           from dash import dcc, html
-           from dash.dependencies import Output, Input
-           import plotly.graph_objs as go
-           from flask import Flask, request
-           from multiprocessing import Process
-       except ImportError:
-           print("Install dash & plotly first (pip install dash plotly).")
-           return
+        try:
+            import dash
+            from dash import dcc, html
+            from dash.dependencies import Output, Input
+            import plotly.graph_objs as go
+            from flask import Flask, request
+            from multiprocessing import Process
+        except ImportError:
+            print("Install dash & plotly first (pip install dash plotly).")
+            return
 
-       short_window = 12
-       long_window = 36
-       if self.auto_trader and isinstance(self.auto_trader, MACrossoverStrategy):
-           short_window = self.auto_trader.short_window
-           long_window = self.auto_trader.long_window
-       else:
-           try:
-               with open('best_strategy.json','r') as f:
-                   best_params = json.load(f)
-               if best_params.get('Strategy') == 'MA':
-                   short_window = int(best_params['Short_Window'])
-                   long_window = int(best_params['Long_Window'])
-           except:
-               print("Could not read 'best_strategy.json' for windows. Using defaults.")
+        short_window = 12
+        long_window = 36
+        if self.auto_trader and isinstance(self.auto_trader, MACrossoverStrategy):
+            short_window = self.auto_trader.short_window
+            long_window = self.auto_trader.long_window
+        else:
+            try:
+                with open('best_strategy.json','r') as f:
+                    best_params = json.load(f)
+                if best_params.get('Strategy') == 'MA':
+                    short_window = int(best_params['Short_Window'])
+                    long_window = int(best_params['Long_Window'])
+            except:
+                print("Could not read 'best_strategy.json' for windows. Using defaults.")
 
-       self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
+        self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
 
-       def update_shared_data():
-           while not self.stop_event.is_set():
-               self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
-               time.sleep(60)
+        def update_shared_data():
+            while not self.stop_event.is_set():
+                self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
+                time.sleep(60)
 
-       threading.Thread(target=update_shared_data, daemon=True).start()
+        threading.Thread(target=update_shared_data, daemon=True).start()
 
-       from tdr import run_dash_app  # minimal local import
-       self.chart_process = Process(
-           target=run_dash_app,
-           args=(self.data_manager_dict, symbol, bar_size, short_window, long_window)
-       )
-       self.chart_process.start()
-       print("Dash app is running at http://127.0.0.1:8050/")
-       time.sleep(1)
+        from tdr import run_dash_app  # minimal local import
+        self.chart_process = Process(
+            target=run_dash_app,
+            args=(self.data_manager_dict, symbol, bar_size, short_window, long_window, '0.0.0.0', port)
+        )
+        self.chart_process.start()
+        print(f"Dash app is running at http://127.0.0.1:{port}/")
+        time.sleep(1)
