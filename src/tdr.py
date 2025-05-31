@@ -12,6 +12,8 @@
 #      signal visualization and trade markers.
 #   4) FIXED: DataFrame timestamp column handling and data processing issues.
 #   5) ADDED: Show recent 48 hours of data by default for better visibility.
+#   6) FIXED: Timestamp column preservation in resampling and bypassed
+#      ensure_datetime_index issue by calculating moving averages directly.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -222,7 +224,8 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                 'high': 'max',
                 'low': 'min',
                 'close': 'last',
-                'volume': 'sum'
+                'volume': 'sum',
+                'timestamp': 'last'  # Keep the timestamp column
             }).dropna()
             
             if len(df_resampled) == 0:
@@ -233,10 +236,17 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                 cutoff_time = df_resampled.index[-1] - pd.Timedelta(hours=hours_to_show)
                 df_resampled = df_resampled[df_resampled.index >= cutoff_time]
             
-            # Calculate moving averages
+            # Calculate moving averages - bypass the ensure_datetime_index issue
             if len(df_resampled) >= max(short_window, long_window):
-                df_ma = add_moving_averages(df_resampled.copy(), short_window, long_window, price_col='close')
-                df_ma = generate_ma_signals(df_ma)
+                # Create a copy and manually add moving averages without calling ensure_datetime_index
+                df_ma = df_resampled.copy()
+                df_ma['Short_MA'] = df_ma['close'].rolling(window=short_window).mean()
+                df_ma['Long_MA'] = df_ma['close'].rolling(window=long_window).mean()
+                
+                # Generate signals manually
+                df_ma['MA_Signal'] = 0
+                df_ma.loc[df_ma['Short_MA'] > df_ma['Long_MA'], 'MA_Signal'] = 1
+                df_ma.loc[df_ma['Short_MA'] < df_ma['Long_MA'], 'MA_Signal'] = -1
             else:
                 df_ma = df_resampled.copy()
                 df_ma['Short_MA'] = np.nan
@@ -260,21 +270,27 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
             
             # Add moving averages if we have enough data
             if len(df_ma) >= max(short_window, long_window):
-                fig.add_trace(go.Scatter(
-                    x=df_ma.index,
-                    y=df_ma['Short_MA'],
-                    mode='lines',
-                    name=f'MA({short_window})',
-                    line=dict(color='blue', width=2)
-                ))
+                # Only plot MAs where we have valid data
+                valid_short = df_ma['Short_MA'].dropna()
+                valid_long = df_ma['Long_MA'].dropna()
                 
-                fig.add_trace(go.Scatter(
-                    x=df_ma.index,
-                    y=df_ma['Long_MA'],
-                    mode='lines',
-                    name=f'MA({long_window})',
-                    line=dict(color='orange', width=2)
-                ))
+                if not valid_short.empty:
+                    fig.add_trace(go.Scatter(
+                        x=valid_short.index,
+                        y=valid_short,
+                        mode='lines',
+                        name=f'MA({short_window})',
+                        line=dict(color='blue', width=2)
+                    ))
+                
+                if not valid_long.empty:
+                    fig.add_trace(go.Scatter(
+                        x=valid_long.index,
+                        y=valid_long,
+                        mode='lines',
+                        name=f'MA({long_window})',
+                        line=dict(color='orange', width=2)
+                    ))
                 
                 # Add signal markers
                 buy_signals = df_ma[df_ma['MA_Signal'] == 1]

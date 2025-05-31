@@ -55,3 +55,7 @@ src/
 │   └── helpers.py
 └── bktst.py
 
+
+
+(crypto) auto_trade 1.68btc long
+(crypto) chart btcusd 1H 8051
