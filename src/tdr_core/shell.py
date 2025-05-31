@@ -17,6 +17,8 @@
 #      (do not increment trades, do not log a trade).
 #   7) ADDED: Debug commands for signal analysis (debug_signals, debug_bars,
 #      debug_strategy_state, debug_recent_trades, force_signal_check)
+#   8) FIXED: Improved shutdown mechanism to properly terminate Dash processes
+#      without HTTP connection errors.
 ###############################################################################
 
 import cmd
@@ -665,7 +667,6 @@ class CryptoShell(cmd.Cmd):
         print(f"  • Initial USD Balance: ${status.get('initial_balance_usd', 0.0):.2f}")
         print(f"  • Initial BTC Balance: {status.get('initial_balance_btc', 0.0):.8f}")
         print(f"  • Current USD Balance: ${status.get('balance_usd', 0.0):.2f}")
-        print(f"  • Current BTC Balance: {status.get('balance_btc', 0.0):.8f}")
         print(f"  • Total Return (vs initial): {status.get('total_return_pct', 0.0):.2f}%")
         print(f"  • Total P&L: ${status.get('total_profit_loss', 0.0):.2f}")
         print(f"  • Current Trade Amount: {status.get('current_amount', 0.0):.8f}")
@@ -1213,11 +1214,45 @@ class CryptoShell(cmd.Cmd):
     def stop_dash_app(self):
         """
         If a Dash app is running in a separate process, attempt to shut it down.
+        FIXED: Improved shutdown to properly terminate processes without HTTP errors.
         """
         if self.chart_process and self.chart_process.is_alive():
             try:
-                requests.get('http://127.0.0.1:8050/shutdown')
-                self.chart_process.join()
+                # First, try the HTTP shutdown method (but don't fail if it doesn't work)
+                try:
+                    requests.get('http://127.0.0.1:8050/shutdown', timeout=2)
+                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+                    # This is expected if the process is already dead or unresponsive
+                    pass
+                
+                # Give the process a moment to shut down gracefully
+                self.chart_process.join(timeout=3)
+                
+                # If it's still alive, terminate it forcefully
+                if self.chart_process.is_alive():
+                    print("Dash app didn't shut down gracefully, terminating...")
+                    self.chart_process.terminate()
+                    self.chart_process.join(timeout=2)
+                    
+                    # If it's STILL alive, kill it
+                    if self.chart_process.is_alive():
+                        print("Force killing Dash app process...")
+                        self.chart_process.kill()
+                        self.chart_process.join()
+                
                 print("Dash app shut down.")
+                
             except Exception as e:
-                print("Failed to shut down Dash app:", e)
+                print(f"Error during Dash app shutdown: {e}")
+                # Still try to terminate/kill the process
+                try:
+                    if self.chart_process.is_alive():
+                        self.chart_process.terminate()
+                        self.chart_process.join(timeout=2)
+                        if self.chart_process.is_alive():
+                            self.chart_process.kill()
+                            self.chart_process.join()
+                except:
+                    pass  # Best effort cleanup
+            finally:
+                self.chart_process = None
