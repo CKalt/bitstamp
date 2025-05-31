@@ -667,492 +667,460 @@ class CryptoShell(cmd.Cmd):
         print(f"  • Current USD Balance: ${status.get('balance_usd', 0.0):.2f}")
         print(f"  • Current BTC Balance: {status.get('balance_btc', 0.0):.8f}")
         print(f"  • Total Return (vs initial): {status.get('total_return_pct', 0.0):.2f}%")
-        printprint(f"  • Total P&L: ${status.get('total_profit_loss', 0.0):.2f}")
-       print(f"  • Current Trade Amount: {status.get('current_amount', 0.0):.8f}")
-       print(f"  • Total Fees Paid: ${status.get('total_fees_paid', 0.0):.2f}")
+        print(f"  • Total P&L: ${status.get('total_profit_loss', 0.0):.2f}")
+        print(f"  • Current Trade Amount: {status.get('current_amount', 0.0):.8f}")
+        print(f"  • Total Fees Paid: ${status.get('total_fees_paid', 0.0):.2f}")
 
-       print("\nMark-to-Market & Drawdowns:")
-       print(f"  • Current MTM (USD): ${status.get('mark_to_market_usd', 0.0):.2f}")
-       print(f"  • Current MTM (BTC): {status.get('mark_to_market_btc', 0.0):.8f}")
-       print(f"  • Max MTM (USD): ${status.get('max_mtm_usd', 0.0):.2f}")
-       print(f"  • Min MTM (USD): ${status.get('min_mtm_usd', 0.0):.2f}")
-       print(f"  • Max USD Balance: ${status.get('max_balance_usd', 0.0):.2f}")
-       print(f"  • Min USD Balance: ${status.get('min_balance_usd', 0.0):.2f}")
-       print(f"  • Max BTC Balance: {status.get('max_balance_btc', 0.0):.8f}")
-       print(f"  • Min BTC Balance: {status.get('min_balance_btc', 0.0):.8f}")
+        print("\nMark-to-Market & Drawdowns:")
+        print(f"  • Current MTM (USD): ${status.get('mark_to_market_usd', 0.0):.2f}")
+        print(f"  • Current MTM (BTC): {status.get('mark_to_market_btc', 0.0):.8f}")
+        print(f"  • Max MTM (USD): ${status.get('max_mtm_usd', 0.0):.2f}")
+        print(f"  • Min MTM (USD): ${status.get('min_mtm_usd', 0.0):.2f}")
+        print(f"  • Max USD Balance: ${status.get('max_balance_usd', 0.0):.2f}")
+        print(f"  • Min USD Balance: ${status.get('min_balance_usd', 0.0):.2f}")
+        print(f"  • Max BTC Balance: {status.get('max_balance_btc', 0.0):.8f}")
+        print(f"  • Min BTC Balance: {status.get('min_balance_btc', 0.0):.8f}")
 
-       pos_info = status.get('position_info', {})
-       print("\nPosition Details:")
-       print(f"  • Direction:  {pos_str}")
+        pos_info = status.get('position_info', {})
+        print("\nPosition Details:")
+        print(f"  • Direction:  {pos_str}")
 
-       cp = pos_info.get('current_price', 0.0)
-       cp_str = f"${cp:.2f}" if cp > 0 else "N/A"
-       print(f"  • Current Price:  {cp_str}")
+        cp = pos_info.get('current_price', 0.0)
+        cp_str = f"${cp:.2f}" if cp > 0 else "N/A"
+        print(f"  • Current Price:  {cp_str}")
 
-       ep = pos_info.get('entry_price', 0.0)
-       ep_str = f"${ep:.2f}" if ep > 0 else "N/A"
-       print(f"  • Entry Price:    {ep_str}")
+        ep = pos_info.get('entry_price', 0.0)
+        ep_str = f"${ep:.2f}" if ep > 0 else "N/A"
+        print(f"  • Entry Price:    {ep_str}")
 
-       if status['position'] == 1:
-           print(f"  • Position Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f}")
-           print(f"  • Position Value (USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
-       elif status['position'] == -1:
-           print(f"  • Short Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f} (negative means short)")
-           print(f"  • USD Held:         ${pos_info.get('position_size_usd', 0.0):.2f}")
-       else:
-           print("  • Neutral position, no open BTC or short.")
+        if status['position'] == 1:
+            print(f"  • Position Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f}")
+            print(f"  • Position Value (USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
+        elif status['position'] == -1:
+            print(f"  • Short Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f} (negative means short)")
+            print(f"  • USD Held:         ${pos_info.get('position_size_usd', 0.0):.2f}")
+        else:
+            print("  • Neutral position, no open BTC or short.")
 
-       upnl = pos_info.get('unrealized_pnl', 0.0)
-       if abs(upnl) < 1e-9:
-           print(f"  • Unrealized PnL:  N/A")
-       else:
-           print(f"  • Unrealized PnL:  ${upnl:.2f}")
+        upnl = pos_info.get('unrealized_pnl', 0.0)
+        if abs(upnl) < 1e-9:
+            print(f"  • Unrealized PnL:  N/A")
+        else:
+            print(f"  • Unrealized PnL:  ${upnl:.2f}")
 
-       print("\nTrading Statistics:")
-       print(f"  • Total Trades: {status.get('trades_executed', 0)}")
-       print(f"  • Profitable Trades: {status.get('profitable_trades', 0)}")
-       print(f"  • Win Rate: {status.get('win_rate', 0.0):.1f}%")
+        print("\nTrading Statistics:")
+        print(f"  • Total Trades: {status.get('trades_executed', 0)}")
+        print(f"  • Profitable Trades: {status.get('profitable_trades', 0)}")
+        print(f"  • Win Rate: {status.get('win_rate', 0.0):.1f}%")
 
-       if status.get('trades_executed', 0) > 0:
-           print(f"  • Avg Profit/Trade: ${status.get('average_profit_per_trade', 0.0):.2f}")
-           print(f"  • Avg Fee/Trade: ${status.get('average_fee_per_trade', 0.0):.2f}")
-           print(f"  • Risk/Reward Ratio: {status.get('risk_reward_ratio', 0.0):.2f}")
+        if status.get('trades_executed', 0) > 0:
+            print(f"  • Avg Profit/Trade: ${status.get('average_profit_per_trade', 0.0):.2f}")
+            print(f"  • Avg Fee/Trade: ${status.get('average_fee_per_trade', 0.0):.2f}")
+            print(f"  • Risk/Reward Ratio: {status.get('risk_reward_ratio', 0.0):.2f}")
 
-       if status.get('last_trade', None):
-           print("\nLast Trade Info:")
-           print(f"  • Reason: {status['last_trade']}")
-           print(f"  • Data Source: {status.get('last_trade_data_source','N/A')}")
-           print(f"  • Signal Time: {status.get('last_trade_signal_timestamp','N/A')}")
+        if status.get('last_trade', None):
+            print("\nLast Trade Info:")
+            print(f"  • Reason: {status['last_trade']}")
+            print(f"  • Data Source: {status.get('last_trade_data_source','N/A')}")
+            print(f"  • Signal Time: {status.get('last_trade_signal_timestamp','N/A')}")
 
-       print("\nTechnical Analysis:")
-       if status.get('next_trigger'):
-           print(f"  • {status['next_trigger']}")
-       if status.get('current_trends'):
-           print("  • Current Trends:")
-           for k, v in status['current_trends'].items():
-               print(f"    ◦ {k}: {v}")
-       if 'ma_difference' in status and status['ma_difference'] is not None:
-           print(f"  • MA Difference: {status['ma_difference']:.4f}")
-       if 'ma_slope_difference' in status and status['ma_slope_difference'] is not None:
-           print(f"  • MA Slope Difference: {status['ma_slope_difference']:.4f}")
-       if 'short_ma_momentum' in status:
-           print(f"  • Short MA Momentum: {status['short_ma_momentum']}")
-       if 'long_ma_momentum' in status:
-           print(f"  • Long MA Momentum: {status['long_ma_momentum']}")
-       if 'momentum_alignment' in status:
-           print(f"  • Momentum Alignment: {status['momentum_alignment']}")
+        print("\nTechnical Analysis:")
+        if status.get('next_trigger'):
+            print(f"  • {status['next_trigger']}")
+        if status.get('current_trends'):
+            print("  • Current Trends:")
+            for k, v in status['current_trends'].items():
+                print(f"    ◦ {k}: {v}")
+        if 'ma_difference' in status and status['ma_difference'] is not None:
+            print(f"  • MA Difference: {status['ma_difference']:.4f}")
+        if 'ma_slope_difference' in status and status['ma_slope_difference'] is not None:
+            print(f"  • MA Slope Difference: {status['ma_slope_difference']:.4f}")
+        if 'short_ma_momentum' in status:
+            print(f"  • Short MA Momentum: {status['short_ma_momentum']}")
+        if 'long_ma_momentum' in status:
+            print(f"  • Long MA Momentum: {status['long_ma_momentum']}")
+        if 'momentum_alignment' in status:
+            print(f"  • Momentum Alignment: {status['momentum_alignment']}")
 
-       if 'last_rsi' in status and status['last_rsi'] is not None:
-           print(f"  • Last RSI: {status['last_rsi']:.2f} (window={status.get('rsi_window',14)}, "
-                 f"overbought={status.get('overbought',70)}, oversold={status.get('oversold',30)})")
+        if 'last_rsi' in status and status['last_rsi'] is not None:
+            print(f"  • Last RSI: {status['last_rsi']:.2f} (window={status.get('rsi_window',14)}, "
+                    f"overbought={status.get('overbought',70)}, oversold={status.get('oversold',30)})")
 
-       if 'rsi_proximity' in status and status['rsi_proximity'] is not None:
-           print(f"  • RSI Proximity: {status['rsi_proximity'] * 100:.2f}%")
-           print("    (Closer to 0% means RSI is nearer to a boundary cross)")
+        if 'rsi_proximity' in status and status['rsi_proximity'] is not None:
+            print(f"  • RSI Proximity: {status['rsi_proximity'] * 100:.2f}%")
+            print("    (Closer to 0% means RSI is nearer to a boundary cross)")
 
-       if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
-           print(f"  • MA Crossover Proximity: {status['ma_signal_proximity'] * 100:.2f}%")
-           print("    (Closer to 0% means closer to flipping from short->long or long->short)")
+        if 'ma_signal_proximity' in status and status['ma_signal_proximity'] is not None:
+            print(f"  • MA Crossover Proximity: {status['ma_signal_proximity'] * 100:.2f}%")
+            print("    (Closer to 0% means closer to flipping from short->long or long->short)")
 
-       if status.get('trades_executed', 0) == 0:
-           print("\nNo trades yet, stats are limited.")
-       elif status.get('win_rate', 0.0) < 40:
-           print("Warning: Win rate is below 40%. Consider reviewing parameters.")
-       if status.get('current_balance', 0.0) < status.get('initial_balance', 0.0)*0.9:
-           print("Warning: Balance is over 10% below initial.")
-       if status.get('remaining_trades_today', 0) <= 1:
-           print("Warning: Approaching daily trade limit!")
+        if status.get('trades_executed', 0) == 0:
+            print("\nNo trades yet, stats are limited.")
+        elif status.get('win_rate', 0.0) < 40:
+            print("Warning: Win rate is below 40%. Consider reviewing parameters.")
+        if status.get('current_balance', 0.0) < status.get('initial_balance', 0.0)*0.9:
+            print("Warning: Balance is over 10% below initial.")
+        if status.get('remaining_trades_today', 0) <= 1:
+            print("Warning: Approaching daily trade limit!")
 
-       session_duration = datetime.now() - self.auto_trader.strategy_start_time
-       hours = session_duration.total_seconds() / 3600
-       print(f"\nSession Duration: {hours:.1f} hours\n")
-       print("━" * 50)
+        session_duration = datetime.now() - self.auto_trader.strategy_start_time
+        hours = session_duration.total_seconds() / 3600
+        print(f"\nSession Duration: {hours:.1f} hours\n")
+        print("━" * 50)
 
-   def do_debug_signals(self, arg):
-       """
-       Show detailed signal history and current MA state: debug_signals [bars]
-       """
-       if not self.auto_trader or not self.auto_trader.running:
-           print("Auto-trading is not running.")
-           return
-       
-       bars = 20  # default
-       if arg.strip():
-           try:
-               bars = int(arg.strip())
-           except:
-               print("Invalid number of bars, using 20")
-       
-       if hasattr(self.auto_trader, 'df_ma') and not self.auto_trader.df_ma.empty:
-           df = self.auto_trader.df_ma.copy()
-           
-           print(f"\n=== MA Signal Debug (Last {bars} bars) ===")
-           print(f"Strategy: MA({self.auto_trader.short_window}, {self.auto_trader.long_window})")
-           print(f"Current Position: {self.auto_trader.position}")
-           print(f"Last Signal Time: {self.auto_trader.last_signal_time}")
-           
-           # Show last N bars with signals
-           recent = df.tail(bars)
-           
-           print(f"\n{'Time':<20} {'Close':<10} {'Short MA':<10} {'Long MA':<10} {'Signal':<8} {'Position':<10}")
-           print("=" * 80)
-           
-           for idx, row in recent.iterrows():
-               time_str = idx.strftime('%m-%d %H:%M')
-               close = row.get('close', 0)
-               short_ma = row.get('Short_MA', 0)
-               long_ma = row.get('Long_MA', 0)
-               signal = row.get('MA_Signal', 0)
-               
-               # Determine what position this signal suggests
-               if signal == 1:
-                   pos_str = "LONG"
-               elif signal == -1:
-                   pos_str = "SHORT"
-               else:
-                   pos_str = "HOLD"
-                   
-               print(f"{time_str:<20} {close:<10.2f} {short_ma:<10.2f} {long_ma:<10.2f} {signal:<8} {pos_str:<10}")
-           
-           # Show current crossover state
-           last_row = df.iloc[-1]
-           short_ma = last_row.get('Short_MA', 0)
-           long_ma = last_row.get('Long_MA', 0)
-           current_signal = last_row.get('MA_Signal', 0)
-           
-           print(f"\n=== Current State ===")
-           print(f"Short MA ({self.auto_trader.short_window}): {short_ma:.2f}")
-           print(f"Long MA ({self.auto_trader.long_window}): {long_ma:.2f}")
-           print(f"Short above Long: {'YES' if short_ma > long_ma else 'NO'}")
-           print(f"Last Signal: {current_signal} ({'LONG' if current_signal == 1 else 'SHORT' if current_signal == -1 else 'NEUTRAL'})")
-           print(f"Current Position: {self.auto_trader.position}")
-           
-           # Check for mismatch
-           expected_pos = 1 if short_ma > long_ma else -1
-           if self.auto_trader.position != expected_pos:
-               print(f"\n⚠️  POSITION MISMATCH!")
-               print(f"   Current Position: {self.auto_trader.position}")
-               print(f"   Expected Position: {expected_pos}")
-       elif hasattr(self.auto_trader, 'df_rsi') and not self.auto_trader.df_rsi.empty:
-           df = self.auto_trader.df_rsi.copy()
-           
-           print(f"\n=== RSI Signal Debug (Last {bars} bars) ===")
-           print(f"Strategy: RSI({self.auto_trader.rsi_window}, {self.auto_trader.overbought}, {self.auto_trader.oversold})")
-           print(f"Current Position: {self.auto_trader.position}")
-           print(f"Last Signal Time: {self.auto_trader.last_signal_time}")
-           
-           # Show last N bars with signals
-           recent = df.tail(bars)
-           
-           print(f"\n{'Time':<20} {'Close':<10} {'RSI':<10} {'Signal':<8} {'Position':<10}")
-           print("=" * 70)
-           
-           for idx, row in recent.iterrows():
-               time_str = idx.strftime('%m-%d %H:%M')
-               close = row.get('close', 0)
-               rsi = row.get('RSI', 0)
-               signal = row.get('RSI_Signal', 0)
-               
-               # Determine what position this signal suggests
-               if signal == 1:
-                   pos_str = "LONG"
-               elif signal == -1:
-                   pos_str = "SHORT"
-               else:
-                   pos_str = "HOLD"
-                   
-               print(f"{time_str:<20} {close:<10.2f} {rsi:<10.2f} {signal:<8} {pos_str:<10}")
-           
-           # Show current RSI state
-           last_row = df.iloc[-1]
-           rsi = last_row.get('RSI', 0)
-           current_signal = last_row.get('RSI_Signal', 0)
-           
-           print(f"\n=== Current State ===")
-           print(f"Current RSI: {rsi:.2f}")
-           print(f"Overbought: {self.auto_trader.overbought}")
-           print(f"Oversold: {self.auto_trader.oversold}")
-           print(f"Last Signal: {current_signal} ({'LONG' if current_signal == 1 else 'SHORT' if current_signal == -1 else 'NEUTRAL'})")
-           print(f"Current Position: {self.auto_trader.position}")
-           
-           # Check for mismatch
-           if rsi < self.auto_trader.oversold:
-               expected_pos = 1
-           elif rsi > self.auto_trader.overbought:
-               expected_pos = -1
-           else:
-               expected_pos = self.auto_trader.position  # Hold current
-               
-           if self.auto_trader.position != expected_pos and expected_pos != self.auto_trader.position:
-               print(f"\n⚠️  POSITION MISMATCH!")
-               print(f"   Current Position: {self.auto_trader.position}")
-               print(f"   Expected Position: {expected_pos}")
-       else:
-           print("No MA or RSI data available.")
+    def do_debug_signals(self, arg):
+        """
+        Show detailed signal history and current MA state: debug_signals [bars]
+        """
+        if not self.auto_trader or not self.auto_trader.running:
+            print("Auto-trading is not running.")
+            return
+        
+        bars = 20  # default
+        if arg.strip():
+            try:
+                bars = int(arg.strip())
+            except:
+                print("Invalid number of bars, using 20")
+        
+        if hasattr(self.auto_trader, 'df_ma') and not self.auto_trader.df_ma.empty:
+            df = self.auto_trader.df_ma.copy()
+            
+            print(f"\n=== MA Signal Debug (Last {bars} bars) ===")
+            print(f"Strategy: MA({self.auto_trader.short_window}, {self.auto_trader.long_window})")
+            print(f"Current Position: {self.auto_trader.position}")
+            print(f"Last Signal Time: {self.auto_trader.last_signal_time}")
+            
+            # Show last N bars with signals
+            recent = df.tail(bars)
+            
+            print(f"\n{'Time':<20} {'Close':<10} {'Short MA':<10} {'Long MA':<10} {'Signal':<8} {'Position':<10}")
+            print("=" * 80)
+            
+            for idx, row in recent.iterrows():
+                time_str = idx.strftime('%m-%d %H:%M')
+                close = row.get('close', 0)
+                short_ma = row.get('Short_MA', 0)
+                long_ma = row.get('Long_MA', 0)
+                signal = row.get('MA_Signal', 0)
+                
+                # Determine what position this signal suggests
+                if signal == 1:
+                    pos_str = "LONG"
+                elif signal == -1:
+                    pos_str = "SHORT"
+                else:
+                    pos_str = "HOLD"
+                    
+                print(f"{time_str:<20} {close:<10.2f} {short_ma:<10.2f} {long_ma:<10.2f} {signal:<8} {pos_str:<10}")
+            
+            # Show current crossover state
+            last_row = df.iloc[-1]
+            short_ma = last_row.get('Short_MA', 0)
+            long_ma = last_row.get('Long_MA', 0)
+            current_signal = last_row.get('MA_Signal', 0)
+            
+            print(f"\n=== Current State ===")
+            print(f"Short MA ({self.auto_trader.short_window}): {short_ma:.2f}")
+            print(f"Long MA ({self.auto_trader.long_window}): {long_ma:.2f}")
+            print(f"Short above Long: {'YES' if short_ma > long_ma else 'NO'}")
+            print(f"Last Signal: {current_signal} ({'LONG' if current_signal == 1 else 'SHORT' if current_signal == -1 else 'NEUTRAL'})")
+            print(f"Current Position: {self.auto_trader.position}")
+            
+            # Check for mismatch
+            expected_pos = 1 if short_ma > long_ma else -1
+            if self.auto_trader.position != expected_pos:
+                print(f"\n⚠️  POSITION MISMATCH!")
+                print(f"   Current Position: {self.auto_trader.position}")
+                print(f"   Expected Position: {expected_pos}")
+        elif hasattr(self.auto_trader, 'df_rsi') and not self.auto_trader.df_rsi.empty:
+            df = self.auto_trader.df_rsi.copy()
+            
+            print(f"\n=== RSI Signal Debug (Last {bars} bars) ===")
+            print(f"Strategy: RSI({self.auto_trader.rsi_window}, {self.auto_trader.overbought}, {self.auto_trader.oversold})")
+            print(f"Current Position: {self.auto_trader.position}")
+            print(f"Last Signal Time: {self.auto_trader.last_signal_time}")
+            
+            # Show last N bars with signals
+            recent = df.tail(bars)
+            
+            print(f"\n{'Time':<20} {'Close':<10} {'RSI':<10} {'Signal':<8} {'Position':<10}")
+            print("=" * 70)
+            
+            for idx, row in recent.iterrows():
+                time_str = idx.strftime('%m-%d %H:%M')
+                close = row.get('close', 0)
+                rsi = row.get('RSI', 0)
+                signal = row.get('RSI_Signal', 0)
+                
+                # Determine what position this signal suggests
+                if signal == 1:
+                    pos_str = "LONG"
+                elif signal == -1:
+                    pos_str = "SHORT"
+                else:
+                    pos_str = "HOLD"
+                    
+                print(f"{time_str:<20} {close:<10.2f} {rsi:<10.2f} {signal:<8} {pos_str:<10}")
+            
+            # Show current RSI state
+            last_row = df.iloc[-1]
+            rsi = last_row.get('RSI', 0)
+            current_signal = last_row.get('RSI_Signal', 0)
+            
+            print(f"\n=== Current State ===")
+            print(f"Current RSI: {rsi:.2f}")
+            print(f"Overbought: {self.auto_trader.overbought}")
+            print(f"Oversold: {self.auto_trader.oversold}")
+            print(f"Last Signal: {current_signal} ({'LONG' if current_signal == 1 else 'SHORT' if current_signal == -1 else 'NEUTRAL'})")
+            print(f"Current Position: {self.auto_trader.position}")
+            
+            # Check for mismatch
+            if rsi < self.auto_trader.oversold:
+                expected_pos = 1
+            elif rsi > self.auto_trader.overbought:
+                expected_pos = -1
+            else:
+                expected_pos = self.auto_trader.position  # Hold current
+                
+            if self.auto_trader.position != expected_pos and expected_pos != self.auto_trader.position:
+                print(f"\n⚠️  POSITION MISMATCH!")
+                print(f"   Current Position: {self.auto_trader.position}")
+                print(f"   Expected Position: {expected_pos}")
+        else:
+            print("No MA or RSI data available.")
 
-   def do_debug_bars(self, arg):
-       """
-       Show raw bar data and when bars complete: debug_bars [count]
-       """
-       if not self.auto_trader:
-           print("Auto-trading is not running.")
-           return
-           
-       count = 10
-       if arg.strip():
-           try:
-               count = int(arg.strip())
-           except:
-               print("Invalid count, using 10")
-       
-       # Get raw data
-       df = self.data_manager.get_price_dataframe('btcusd')
-       if df.empty:
-           print("No data available.")
-           return
-       
-       from indicators.technical_indicators import ensure_datetime_index
-       df = ensure_datetime_index(df)
-       
-       # Get current time
-       from datetime import datetime
-       now = datetime.now()
-       
-       # Resample to hourly
-       df_hourly = df.resample('1H').agg({
-           'open': 'first',
-           'high': 'max', 
-           'low': 'min',
-           'close': 'last',
-           'volume': 'sum',
-           'trades': 'sum',
-           'timestamp': 'last',
-           'source': 'last'
-       }).dropna()
-       
-       print(f"\n=== Last {count} Hourly Bars ===")
-       print(f"Current Time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
-       print(f"{'Bar Time':<20} {'Open':<10} {'High':<10} {'Low':<10} {'Close':<10} {'Volume':<12} {'Source':<10}")
-       print("=" * 100)
-       
-       recent_bars = df_hourly.tail(count)
-       for idx, row in recent_bars.iterrows():
-           time_str = idx.strftime('%m-%d %H:%M')
-           print(f"{time_str:<20} {row['open']:<10.2f} {row['high']:<10.2f} {row['low']:<10.2f} {row['close']:<10.2f} {row['volume']:<12.0f} {row['source']:<10}")
-       
-       # Show current incomplete bar
-       last_complete = df_hourly.index[-1]
-       current_hour = now.replace(minute=0, second=0, microsecond=0)
-       
-       if current_hour > last_complete:
-           print(f"\n⚠️  Current hour bar ({current_hour.strftime('%H:%M')}) is incomplete!")
-           print(f"   Last complete bar: {last_complete.strftime('%m-%d %H:%M')}")
-           
-           # Show trades in current incomplete hour
-           current_trades = df[df.index > last_complete]
-           if not current_trades.empty:
-               print(f"   Trades in current hour: {len(current_trades)}")
-               print(f"   Price range: {current_trades['close'].min():.2f} - {current_trades['close'].max():.2f}")
-               print(f"   Latest price: {current_trades['close'].iloc[-1]:.2f}")
+    def do_debug_bars(self, arg):
+        """
+        Show raw bar data and when bars complete: debug_bars [count]
+        """
+        if not self.auto_trader:
+            print("Auto-trading is not running.")
+            return
+            
+        count = 10
+        if arg.strip():
+            try:
+                count = int(arg.strip())
+            except:
+                print("Invalid count, using 10")
+        
+        # Get raw data
+        df = self.data_manager.get_price_dataframe('btcusd')
+        if df.empty:
+            print("No data available.")
+            return
+        
+        from indicators.technical_indicators import ensure_datetime_index
+        df = ensure_datetime_index(df)
+        
+        # Get current time
+        from datetime import datetime
+        now = datetime.now()
+        
+        # Resample to hourly
+        df_hourly = df.resample('1H').agg({
+            'open': 'first',
+            'high': 'max', 
+            'low': 'min',
+            'close': 'last',
+            'volume': 'sum',
+            'trades': 'sum',
+            'timestamp': 'last',
+            'source': 'last'
+        }).dropna()
+        
+        print(f"\n=== Last {count} Hourly Bars ===")
+        print(f"Current Time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"{'Bar Time':<20} {'Open':<10} {'High':<10} {'Low':<10} {'Close':<10} {'Volume':<12} {'Source':<10}")
+        print("=" * 100)
+        
+        recent_bars = df_hourly.tail(count)
+        for idx, row in recent_bars.iterrows():
+            time_str = idx.strftime('%m-%d %H:%M')
+            print(f"{time_str:<20} {row['open']:<10.2f} {row['high']:<10.2f} {row['low']:<10.2f} {row['close']:<10.2f} {row['volume']:<12.0f} {row['source']:<10}")
+        
+        # Show current incomplete bar
+        last_complete = df_hourly.index[-1]
+        current_hour = now.replace(minute=0, second=0, microsecond=0)
+        
+        if current_hour > last_complete:
+            print(f"\n⚠️  Current hour bar ({current_hour.strftime('%H:%M')}) is incomplete!")
+            print(f"   Last complete bar: {last_complete.strftime('%m-%d %H:%M')}")
+            
+            # Show trades in current incomplete hour
+            current_trades = df[df.index > last_complete]
+            if not current_trades.empty:
+                print(f"   Trades in current hour: {len(current_trades)}")
+                print(f"   Price range: {current_trades['close'].min():.2f} - {current_trades['close'].max():.2f}")
+                print(f"   Latest price: {current_trades['close'].iloc[-1]:.2f}")
 
-   def do_debug_strategy_state(self, arg):
-       """
-       Show complete strategy internal state
-       """
-       if not self.auto_trader or not self.auto_trader.running:
-           print("Auto-trading is not running.")
-           return
-       
-       print("\n=== Strategy Internal State ===")
-       print(f"Strategy Type: {type(self.auto_trader).__name__}")
-       print(f"Running: {self.auto_trader.running}")
-       print(f"Position: {self.auto_trader.position}")
-       print(f"Bar Size: {getattr(self.auto_trader, 'bar_size', 'N/A')}")
-       
-       if hasattr(self.auto_trader, 'short_window'):
-           print(f"Short Window: {self.auto_trader.short_window}")
-           print(f"Long Window: {self.auto_trader.long_window}")
-       
-       if hasattr(self.auto_trader, 'rsi_window'):
-           print(f"RSI Window: {self.auto_trader.rsi_window}")
-           print(f"RSI Overbought: {self.auto_trader.overbought}")
-           print(f"RSI Oversold: {self.auto_trader.oversold}")
-       
-       print(f"Last Signal Time: {self.auto_trader.last_signal_time}")
-       print(f"Last Trade Reason: {self.auto_trader.last_trade_reason}")
-       
-       print(f"\nDaily Trading:")
-       print(f"Trade Count Today: {self.auto_trader.trade_count_today}")
-       print(f"Max Trades Per Day: {self.auto_trader.max_trades_per_day}")
-       print(f"Current Day: {self.auto_trader.current_day}")
-       
-       print(f"\nBalances:")
-       print(f"BTC: {self.auto_trader.balance_btc:.8f}")
-       print(f"USD: ${self.auto_trader.balance_usd:.2f}")
-       
-       print(f"\nPosition Details:")
-       print(f"Position Size: {self.auto_trader.position_size:.8f} BTC")
-       print(f"Position Cost Basis: ${self.auto_trader.position_cost_basis:.2f}")
-       
-       # Check if we have current price data
-       current_price = self.data_manager.get_current_price('btcusd')
-       if current_price:
-           print(f"Current Market Price: ${current_price:.2f}")
-           if abs(self.auto_trader.position_size) > 1e-8:
-               avg_entry = self.auto_trader.position_cost_basis / abs(self.auto_trader.position_size)
-               pnl = (current_price - avg_entry) * self.auto_trader.position_size
-               print(f"Avg Entry Price: ${avg_entry:.2f}")
-               print(f"Unrealized PnL: ${pnl:.2f}")
+    def do_debug_strategy_state(self, arg):
+        """
+        Show complete strategy internal state
+        """
+        if not self.auto_trader or not self.auto_trader.running:
+            print("Auto-trading is not running.")
+            return
+        
+        print("\n=== Strategy Internal State ===")
+        print(f"Strategy Type: {type(self.auto_trader).__name__}")
+        print(f"Running: {self.auto_trader.running}")
+        print(f"Position: {self.auto_trader.position}")
+        print(f"Bar Size: {getattr(self.auto_trader, 'bar_size', 'N/A')}")
+        
+        if hasattr(self.auto_trader, 'short_window'):
+            print(f"Short Window: {self.auto_trader.short_window}")
+            print(f"Long Window: {self.auto_trader.long_window}")
+        
+        if hasattr(self.auto_trader, 'rsi_window'):
+            print(f"RSI Window: {self.auto_trader.rsi_window}")
+            print(f"RSI Overbought: {self.auto_trader.overbought}")
+            print(f"RSI Oversold: {self.auto_trader.oversold}")
+        
+        print(f"Last Signal Time: {self.auto_trader.last_signal_time}")
+        print(f"Last Trade Reason: {self.auto_trader.last_trade_reason}")
+        
+        print(f"\nDaily Trading:")
+        print(f"Trade Count Today: {self.auto_trader.trade_count_today}")
+        print(f"Max Trades Per Day: {self.auto_trader.max_trades_per_day}")
+        print(f"Current Day: {self.auto_trader.current_day}")
+        
+        print(f"\nBalances:")
+        print(f"BTC: {self.auto_trader.balance_btc:.8f}")
+        print(f"USD: ${self.auto_trader.balance_usd:.2f}")
+        
+        print(f"\nPosition Details:")
+        print(f"Position Size: {self.auto_trader.position_size:.8f} BTC")
+        print(f"Position Cost Basis: ${self.auto_trader.position_cost_basis:.2f}")
+        
+        # Check if we have current price data
+        current_price = self.data_manager.get_current_price('btcusd')
+        if current_price:
+            print(f"Current Market Price: ${current_price:.2f}")
+            if abs(self.auto_trader.position_size) > 1e-8:
+                avg_entry = self.auto_trader.position_cost_basis / abs(self.auto_trader.position_size)
+                pnl = (current_price - avg_entry) * self.auto_trader.position_size
+                print(f"Avg Entry Price: ${avg_entry:.2f}")
+                print(f"Unrealized PnL: ${pnl:.2f}")
 
-   def do_debug_recent_trades(self, arg):
-       """
-       Show recent actual trades from the trade log
-       """
-       if not self.auto_trader:
-           print("Auto-trading is not running.")
-           return
-       
-       count = 10
-       if arg.strip():
-           try:
-               count = int(arg.strip())
-           except:
-               print("Invalid count, using 10")
-       
-       if not hasattr(self.auto_trader, 'trade_log') or not self.auto_trader.trade_log:
-           print("No trades in log.")
-           return
-       
-       print(f"\n=== Last {count} Actual Trades ===")
-       print(f"{'Time':<20} {'Type':<6} {'Amount':<12} {'Price':<10} {'Reason':<30}")
-       print("=" * 85)
-       
-       recent_trades = self.auto_trader.trade_log[-count:]
-       for trade in recent_trades:
-           time_str = trade.timestamp.strftime('%m-%d %H:%M:%S')
-           print(f"{time_str:<20} {trade.type:<6} {trade.amount:<12.8f} ${trade.price:<9.2f} {trade.reason:<30}")
+    def do_debug_recent_trades(self, arg):
+        """
+        Show recent actual trades from the trade log
+        """
+        if not self.auto_trader:
+            print("Auto-trading is not running.")
+            return
+        
+        count = 10
+        if arg.strip():
+            try:
+                count = int(arg.strip())
+            except:
+                print("Invalid count, using 10")
+        
+        if not hasattr(self.auto_trader, 'trade_log') or not self.auto_trader.trade_log:
+            print("No trades in log.")
+            return
+        
+        print(f"\n=== Last {count} Actual Trades ===")
+        print(f"{'Time':<20} {'Type':<6} {'Amount':<12} {'Price':<10} {'Reason':<30}")
+        print("=" * 85)
+        
+        recent_trades = self.auto_trader.trade_log[-count:]
+        for trade in recent_trades:
+            time_str = trade.timestamp.strftime('%m-%d %H:%M:%S')
+            print(f"{time_str:<20} {trade.type:<6} {trade.amount:<12.8f} ${trade.price:<9.2f} {trade.reason:<30}")
 
-   def do_force_signal_check(self, arg):
-       """
-       Force the strategy to check for signals right now
-       """
-       if not self.auto_trader or not self.auto_trader.running:
-           print("Auto-trading is not running.")
-           return
-       
-       print("Forcing signal check...")
-       
-       try:
-           # Get current data
-           df = self.data_manager.get_price_dataframe('btcusd')
-           current_price = self.data_manager.get_current_price('btcusd')
-           
-           print(f"Current price: ${current_price:.2f}")
-           
-           # Force the strategy loop to run once
-           if hasattr(self.auto_trader, 'df_ma'):
-               # For MA strategy, regenerate signals
-               from indicators.technical_indicators import ensure_datetime_index, add_moving_averages, generate_ma_signals
-               
-               df = ensure_datetime_index(df)
-               df_resampled = df.resample(self.auto_trader.bar_size).agg({
-                   'open': 'first',
-                   'high': 'max',
-                   'low': 'min',
-                   'close': 'last',
-                   'volume': 'sum',
-                   'trades': 'sum',
-                   'timestamp': 'last',
-                   'source': 'last'
-               }).dropna()
+    def do_force_signal_check(self, arg):
+        """
+        Force the strategy to check for signals right now
+        """
+        if not self.auto_trader or not self.auto_trader.running:
+            print("Auto-trading is not running.")
+            return
+        
+        print("Forcing signal check...")
+        
+        try:
+            # Get current data
+            df = self.data_manager.get_price_dataframe('btcusd')
+            current_price = self.data_manager.get_current_price('btcusd')
+            
+            print(f"Current price: ${current_price:.2f}")
+            
+            # Force the strategy loop to run once
+            if hasattr(self.auto_trader, 'df_ma'):
+                # For MA strategy, regenerate signals
+                from indicators.technical_indicators import ensure_datetime_index, add_moving_averages, generate_ma_signals
+                
+                df = ensure_datetime_index(df)
+                df_resampled = df.resample(self.auto_trader.bar_size).agg({
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum',
+                    'trades': 'sum',
+                    'timestamp': 'last',
+                    'source': 'last'
+                }).dropna()
 
-               if len(df_resampled) >= self.auto_trader.long_window:
-                   df_ma = add_moving_averages(df_resampled.copy(), self.auto_trader.short_window, self.auto_trader.long_window, price_col='close')
-                   df_ma = generate_ma_signals(df_ma)
-                   df_ma['MA_Signal'] = df_ma['MA_Signal'].shift(1).fillna(0)
+                if len(df_resampled) >= self.auto_trader.long_window:
+                    df_ma = add_moving_averages(df_resampled.copy(), self.auto_trader.short_window, self.auto_trader.long_window, price_col='close')
+                    df_ma = generate_ma_signals(df_ma)
+                    df_ma['MA_Signal'] = df_ma['MA_Signal'].shift(1).fillna(0)
 
-                   latest_signal = df_ma.iloc[-1]['MA_Signal']
-                   signal_time = df_ma.index[-1]
-                   current_price = df_ma.iloc[-1]['close']
-                   
-                   print(f"Latest signal: {latest_signal} at {signal_time}")
-                   print(f"Current position: {self.auto_trader.position}")
-                   
-                   self.auto_trader.df_ma = df_ma
-                   self.auto_trader.check_for_signals(latest_signal, current_price, signal_time)
-                   
-           elif hasattr(self.auto_trader, 'df_rsi'):
-               # For RSI strategy, regenerate signals
-               from indicators.technical_indicators import ensure_datetime_index, calculate_rsi
-               
-               df = ensure_datetime_index(df)
-               df_resampled = df.resample(self.auto_trader.bar_size).agg({
-                   'open': 'first',
-                   'high': 'max',
-                   'low': 'min',
-                   'close': 'last',
-                   'volume': 'sum',
-                   'trades': 'sum',
-                   'timestamp': 'last',
-                   'source': 'last'
-               }).dropna()
+                    latest_signal = df_ma.iloc[-1]['MA_Signal']
+                    signal_time = df_ma.index[-1]
+                    current_price = df_ma.iloc[-1]['close']
+                    
+                    print(f"Latest signal: {latest_signal} at {signal_time}")
+                    print(f"Current position: {self.auto_trader.position}")
+                    
+                    self.auto_trader.df_ma = df_ma
+                    self.auto_trader.check_for_signals(latest_signal, current_price, signal_time)
+                    
+            elif hasattr(self.auto_trader, 'df_rsi'):
+                # For RSI strategy, regenerate signals
+                from indicators.technical_indicators import ensure_datetime_index, calculate_rsi
+                
+                df = ensure_datetime_index(df)
+                df_resampled = df.resample(self.auto_trader.bar_size).agg({
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum',
+                    'trades': 'sum',
+                    'timestamp': 'last',
+                    'source': 'last'
+                }).dropna()
 
-               if len(df_resampled) >= self.auto_trader.rsi_window:
-                   df_rsi = df_resampled.copy()
-                   df_rsi = calculate_rsi(df_rsi, window=self.auto_trader.rsi_window, price_col='close')
-                   df_rsi['RSI_Signal'] = 0
-                   df_rsi.loc[df_rsi['RSI'] < self.auto_trader.oversold, 'RSI_Signal'] = 1
-                   df_rsi.loc[df_rsi['RSI'] > self.auto_trader.overbought, 'RSI_Signal'] = -1
-                   df_rsi['RSI_Signal'] = df_rsi['RSI_Signal'].shift(1).fillna(0)
+                if len(df_resampled) >= self.auto_trader.rsi_window:
+                    df_rsi = df_resampled.copy()
+                    df_rsi = calculate_rsi(df_rsi, window=self.auto_trader.rsi_window, price_col='close')
+                    df_rsi['RSI_Signal'] = 0
+                    df_rsi.loc[df_rsi['RSI'] < self.auto_trader.oversold, 'RSI_Signal'] = 1
+                    df_rsi.loc[df_rsi['RSI'] > self.auto_trader.overbought, 'RSI_Signal'] = -1
+                    df_rsi['RSI_Signal'] = df_rsi['RSI_Signal'].shift(1).fillna(0)
 
-                   latest_signal = df_rsi.iloc[-1]['RSI_Signal']
-                   signal_time = df_rsi.index[-1]
-                   current_price = df_rsi.iloc[-1]['close']
-                   
-                   print(f"Latest signal: {latest_signal} at {signal_time}")
-                   print(f"Current position: {self.auto_trader.position}")
-                   
-                   self.auto_trader.df_rsi = df_rsi
-                   self.auto_trader.check_for_signals(latest_signal, current_price, signal_time)
-           
-           print("Check completed. Use 'debug_signals' to see if anything changed.")
-           
-       except Exception as e:
-           print(f"Error during forced signal check: {e}")
-           import traceback
-           traceback.print_exc()
-
-   def do_quit(self, arg):
-       """
-       Quit the program, shutting down threads and processes gracefully.
-       """
-       print("Quitting...")
-       if self.auto_trader and self.auto_trader.running:
-           self.auto_trader.stop()
-       if self.chart_process and self.chart_process.is_alive():
-           self.stop_dash_app()
-       if self.stop_event:
-           self.stop_event.set()
-       return True
-
-   def do_exit(self, arg):
-       """
-       Alias for 'quit'.
-       """
-       return self.do_quit(arg)
-
-   def stop_dash_app(self):
-       """
-       If a Dash app is running in a separate process, attempt to shut it down.
-       """
-       if self.chart_process and self.chart_process.is_alive():
-           try:
-               requests.get('http://127.0.0.1:8050/shutdown')
-               self.chart_process.join()
-               print("Dash app shut down.")
-           except Exception as e:
-               print("Failed to shut down Dash app:", e)
-
+                    latest_signal = df_rsi.iloc[-1]['RSI_Signal']
+                    signal_time = df_rsi.index[-1]
+                    current_price = df_rsi.iloc[-1]['close']
+                    
+                    print(f"Latest signal: {latest_signal} at {signal_time}")
+                    print(f"Current position: {self.auto_trader.position}")
+                    
+                    self.auto_trader.df_rsi = df_rsi
+                    self.auto_trader.check_for_signals(latest_signal, current_price, signal_time)
+            
+            print("Check completed. Use 'debug_signals' to see if anything changed.")
+            
+        except Exception as e:
+            print(f"Error during forced signal check: {e}")
+            import traceback
+            traceback.print_exc()
 
     def do_chart(self, arg):
         """
@@ -1222,3 +1190,34 @@ class CryptoShell(cmd.Cmd):
         self.chart_process.start()
         print(f"Dash app is running at http://127.0.0.1:{port}/")
         time.sleep(1)
+
+    def do_quit(self, arg):
+        """
+        Quit the program, shutting down threads and processes gracefully.
+        """
+        print("Quitting...")
+        if self.auto_trader and self.auto_trader.running:
+            self.auto_trader.stop()
+        if self.chart_process and self.chart_process.is_alive():
+            self.stop_dash_app()
+        if self.stop_event:
+            self.stop_event.set()
+        return True
+
+    def do_exit(self, arg):
+        """
+        Alias for 'quit'.
+        """
+        return self.do_quit(arg)
+
+    def stop_dash_app(self):
+        """
+        If a Dash app is running in a separate process, attempt to shut it down.
+        """
+        if self.chart_process and self.chart_process.is_alive():
+            try:
+                requests.get('http://127.0.0.1:8050/shutdown')
+                self.chart_process.join()
+                print("Dash app shut down.")
+            except Exception as e:
+                print("Failed to shut down Dash app:", e)
