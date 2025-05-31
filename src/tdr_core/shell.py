@@ -1153,7 +1153,8 @@ class CryptoShell(cmd.Cmd):
            except Exception as e:
                print("Failed to shut down Dash app:", e)
 
-   def do_chart(self, arg):
+
+    def do_chart(self, arg):
         """
         Show a Dash-based chart: chart [symbol] [bar_size] [port].
         E.g., chart btcusd 1H 8051
