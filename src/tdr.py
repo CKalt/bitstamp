@@ -10,6 +10,8 @@
 #   2) We preserve all original code, docstrings, and logic.
 #   3) ADDED: Complete run_dash_app function for interactive charting with
 #      signal visualization and trade markers.
+#   4) FIXED: DataFrame timestamp column handling and data processing issues.
+#   5) ADDED: Show recent 48 hours of data by default for better visibility.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -138,8 +140,8 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
             ], style={'width': '48%', 'display': 'inline-block'}),
             
             html.Div([
-                html.Label('Number of Bars to Display:'),
-                dcc.Input(id='bars-to-show', type='number', value=100, min=50, max=500)
+                html.Label('Hours to Display:'),
+                dcc.Input(id='hours-to-show', type='number', value=48, min=12, max=168)
             ], style={'width': '48%', 'float': 'right', 'display': 'inline-block'})
         ], style={'padding': '10px'}),
         
@@ -165,9 +167,9 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
          Output('status-info', 'children')],
         [Input('interval-component', 'n_intervals'),
          Input('refresh-interval', 'value'),
-         Input('bars-to-show', 'value')]
+         Input('hours-to-show', 'value')]
     )
-    def update_graph(n, refresh_interval, bars_to_show):
+    def update_graph(n, refresh_interval, hours_to_show):
         try:
             # Update interval component
             if refresh_interval and refresh_interval != 30:
@@ -183,15 +185,36 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
             if not data_dict or not data_dict.get('timestamp'):
                 return {}, "No data available"
             
-            # Convert to DataFrame
+            # Convert to DataFrame - handle both list and dict formats
             df = pd.DataFrame(data_dict)
             
             if df.empty:
                 return {}, "No data available"
             
-            # Ensure datetime index
+            # Ensure we have required columns
+            required_columns = ['timestamp', 'close']
+            for col in required_columns:
+                if col not in df.columns:
+                    return {}, f"Missing required column: {col}"
+            
+            # Handle different column names that might exist
+            if 'price' in df.columns and 'close' not in df.columns:
+                df['close'] = df['price']
+            
+            # Ensure we have OHLC data
+            if 'open' not in df.columns:
+                df['open'] = df['close']
+            if 'high' not in df.columns:
+                df['high'] = df['close']
+            if 'low' not in df.columns:
+                df['low'] = df['close']
+            if 'volume' not in df.columns:
+                df['volume'] = df.get('amount', 0.0)
+            
+            # Create datetime column and set as index
             df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
             df.set_index('datetime', inplace=True)
+            df.sort_index(inplace=True)
             
             # Resample to specified bar size
             df_resampled = df.resample(bar_size).agg({
@@ -199,20 +222,26 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                 'high': 'max',
                 'low': 'min',
                 'close': 'last',
-                'volume': 'sum',
-                'trades': 'sum'
+                'volume': 'sum'
             }).dropna()
             
             if len(df_resampled) == 0:
                 return {}, "No resampled data available"
             
-            # Limit to recent bars
-            if bars_to_show and len(df_resampled) > bars_to_show:
-                df_resampled = df_resampled.tail(bars_to_show)
+            # Limit to recent hours
+            if hours_to_show and len(df_resampled) > 0:
+                cutoff_time = df_resampled.index[-1] - pd.Timedelta(hours=hours_to_show)
+                df_resampled = df_resampled[df_resampled.index >= cutoff_time]
             
             # Calculate moving averages
-            df_ma = add_moving_averages(df_resampled.copy(), short_window, long_window, price_col='close')
-            df_ma = generate_ma_signals(df_ma)
+            if len(df_resampled) >= max(short_window, long_window):
+                df_ma = add_moving_averages(df_resampled.copy(), short_window, long_window, price_col='close')
+                df_ma = generate_ma_signals(df_ma)
+            else:
+                df_ma = df_resampled.copy()
+                df_ma['Short_MA'] = np.nan
+                df_ma['Long_MA'] = np.nan
+                df_ma['MA_Signal'] = 0
             
             # Create the main price chart
             fig = go.Figure()
@@ -229,44 +258,45 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                 decreasing_line_color='red'
             ))
             
-            # Add moving averages
-            fig.add_trace(go.Scatter(
-                x=df_ma.index,
-                y=df_ma['Short_MA'],
-                mode='lines',
-                name=f'MA({short_window})',
-                line=dict(color='blue', width=2)
-            ))
-            
-            fig.add_trace(go.Scatter(
-                x=df_ma.index,
-                y=df_ma['Long_MA'],
-                mode='lines',
-                name=f'MA({long_window})',
-                line=dict(color='orange', width=2)
-            ))
-            
-            # Add signal markers
-            buy_signals = df_ma[df_ma['MA_Signal'] == 1]
-            sell_signals = df_ma[df_ma['MA_Signal'] == -1]
-            
-            if not buy_signals.empty:
+            # Add moving averages if we have enough data
+            if len(df_ma) >= max(short_window, long_window):
                 fig.add_trace(go.Scatter(
-                    x=buy_signals.index,
-                    y=buy_signals['close'],
-                    mode='markers',
-                    marker=dict(symbol='triangle-up', size=15, color='green'),
-                    name='Buy Signals'
+                    x=df_ma.index,
+                    y=df_ma['Short_MA'],
+                    mode='lines',
+                    name=f'MA({short_window})',
+                    line=dict(color='blue', width=2)
                 ))
-            
-            if not sell_signals.empty:
+                
                 fig.add_trace(go.Scatter(
-                    x=sell_signals.index,
-                    y=sell_signals['close'],
-                    mode='markers',
-                    marker=dict(symbol='triangle-down', size=15, color='red'),
-                    name='Sell Signals'
+                    x=df_ma.index,
+                    y=df_ma['Long_MA'],
+                    mode='lines',
+                    name=f'MA({long_window})',
+                    line=dict(color='orange', width=2)
                 ))
+                
+                # Add signal markers
+                buy_signals = df_ma[df_ma['MA_Signal'] == 1]
+                sell_signals = df_ma[df_ma['MA_Signal'] == -1]
+                
+                if not buy_signals.empty:
+                    fig.add_trace(go.Scatter(
+                        x=buy_signals.index,
+                        y=buy_signals['close'],
+                        mode='markers',
+                        marker=dict(symbol='triangle-up', size=15, color='green'),
+                        name='Buy Signals'
+                    ))
+                
+                if not sell_signals.empty:
+                    fig.add_trace(go.Scatter(
+                        x=sell_signals.index,
+                        y=sell_signals['close'],
+                        mode='markers',
+                        marker=dict(symbol='triangle-down', size=15, color='red'),
+                        name='Sell Signals'
+                    ))
             
             # Load and display actual trades if available
             try:
@@ -282,6 +312,12 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                         
                         for trade in trades_data:
                             trade_time = pd.to_datetime(trade['timestamp'])
+                            # Only show trades within our time window
+                            if hours_to_show:
+                                cutoff_time = df_ma.index[-1] - pd.Timedelta(hours=hours_to_show)
+                                if trade_time < cutoff_time:
+                                    continue
+                                    
                             trade_times.append(trade_time)
                             trade_prices.append(trade['price'])
                             trade_colors.append('lightgreen' if trade['type'] == 'buy' else 'lightcoral')
@@ -304,7 +340,7 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
             
             # Update layout
             fig.update_layout(
-                title=f'{symbol.upper()} - {bar_size} Bars (MA {short_window}/{long_window})',
+                title=f'{symbol.upper()} - {bar_size} Bars (MA {short_window}/{long_window}) - Last {hours_to_show}h',
                 xaxis_title='Time',
                 yaxis_title='Price (USD)',
                 template='plotly_white',
@@ -317,21 +353,30 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
             latest_data = df_ma.iloc[-1] if not df_ma.empty else None
             if latest_data is not None:
                 current_price = latest_data['close']
-                short_ma = latest_data['Short_MA']
-                long_ma = latest_data['Long_MA']
-                signal = latest_data['MA_Signal']
+                short_ma = latest_data.get('Short_MA', np.nan)
+                long_ma = latest_data.get('Long_MA', np.nan)
+                signal = latest_data.get('MA_Signal', 0)
                 
                 signal_text = {1: 'BUY', -1: 'SELL', 0: 'HOLD'}.get(signal, 'UNKNOWN')
                 signal_color = {'BUY': 'green', 'SELL': 'red', 'HOLD': 'orange'}.get(signal_text, 'black')
                 
                 status_children = [
                     html.P(f"Current Price: ${current_price:.2f}"),
-                    html.P(f"MA({short_window}): ${short_ma:.2f}"),
-                    html.P(f"MA({long_window}): ${long_ma:.2f}"),
-                    html.P(f"Current Signal: ", style={'display': 'inline'}),
-                    html.Span(signal_text, style={'color': signal_color, 'fontWeight': 'bold'}),
-                    html.P(f"Last Update: {latest_data.name.strftime('%Y-%m-%d %H:%M:%S')}")
+                    html.P(f"Data Points: {len(df_ma)} bars"),
+                    html.P(f"Time Range: {df_ma.index[0].strftime('%m-%d %H:%M')} to {df_ma.index[-1].strftime('%m-%d %H:%M')}")
                 ]
+                
+                if not pd.isna(short_ma) and not pd.isna(long_ma):
+                    status_children.extend([
+                        html.P(f"MA({short_window}): ${short_ma:.2f}"),
+                        html.P(f"MA({long_window}): ${long_ma:.2f}"),
+                        html.P(f"Current Signal: ", style={'display': 'inline'}),
+                        html.Span(signal_text, style={'color': signal_color, 'fontWeight': 'bold'})
+                    ])
+                else:
+                    status_children.append(html.P("Insufficient data for moving averages"))
+                
+                status_children.append(html.P(f"Last Update: {latest_data.name.strftime('%Y-%m-%d %H:%M:%S')}"))
             else:
                 status_children = [html.P("No current data available")]
             
