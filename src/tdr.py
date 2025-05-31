@@ -14,6 +14,8 @@
 #   5) ADDED: Show recent 48 hours of data by default for better visibility.
 #   6) FIXED: Timestamp column preservation in resampling and bypassed
 #      ensure_datetime_index issue by calculating moving averages directly.
+#   7) ADDED: Strategy file parameter and dropdown for viewing alternate
+#      strategies without trading them.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -116,7 +118,7 @@ def setup_logging(verbose):
     return logger
 
 
-def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window, host='0.0.0.0', port=8050):
+def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window, host='0.0.0.0', port=8050, strategy_file='best_strategy.json', strategy_name='MA Strategy'):
     """
     Run the Dash application for interactive charting with signals and trades.
     
@@ -128,8 +130,29 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
         long_window: Long moving average window
         host: Host to bind to (0.0.0.0 for remote access)
         port: Port to bind to
+        strategy_file: Strategy configuration file to use
+        strategy_name: Display name for the strategy
     """
     app = dash.Dash(__name__)
+    
+    # Load available strategy files
+    available_strategies = []
+    for filename in ['best_strategy.json', 'alt_strategy-1.json']:
+        if os.path.exists(filename):
+            try:
+                with open(filename, 'r') as f:
+                    config = json.load(f)
+                if config.get('Strategy') == 'MA':
+                    short_w = config.get('Short_Window', 12)
+                    long_w = config.get('Long_Window', 36)
+                    last_action = config.get('Last_Signal_Action', 'Unknown')
+                    total_return = config.get('Total_Return', 0)
+                    available_strategies.append({
+                        'label': f"{filename}: MA({short_w},{long_w}) - {last_action} - {total_return:.1f}% return",
+                        'value': filename
+                    })
+            except:
+                pass
     
     # Define the layout
     app.layout = html.Div([
@@ -137,8 +160,13 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
         
         html.Div([
             html.Div([
-                html.Label('Refresh Interval (seconds):'),
-                dcc.Input(id='refresh-interval', type='number', value=30, min=5, max=300)
+                html.Label('Strategy:'),
+                dcc.Dropdown(
+                    id='strategy-dropdown',
+                    options=available_strategies,
+                    value=strategy_file,
+                    style={'width': '100%'}
+                )
             ], style={'width': '48%', 'display': 'inline-block'}),
             
             html.Div([
@@ -168,15 +196,27 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
         [Output('price-chart', 'figure'),
          Output('status-info', 'children')],
         [Input('interval-component', 'n_intervals'),
-         Input('refresh-interval', 'value'),
+         Input('strategy-dropdown', 'value'),
          Input('hours-to-show', 'value')]
     )
-    def update_graph(n, refresh_interval, hours_to_show):
+    def update_graph(n, selected_strategy, hours_to_show):
         try:
-            # Update interval component
-            if refresh_interval and refresh_interval != 30:
-                # This would require updating the interval component, but we'll keep it simple
-                pass
+            # Load strategy configuration
+            current_strategy_file = selected_strategy or strategy_file
+            current_short_window = short_window
+            current_long_window = long_window
+            current_strategy_name = strategy_name
+            
+            try:
+                with open(current_strategy_file, 'r') as f:
+                    config = json.load(f)
+                if config.get('Strategy') == 'MA':
+                    current_short_window = int(config.get('Short_Window', short_window))
+                    current_long_window = int(config.get('Long_Window', long_window))
+                    last_action = config.get('Last_Signal_Action', 'Unknown')
+                    current_strategy_name = f"MA({current_short_window}, {current_long_window}) - {last_action}"
+            except Exception as e:
+                print(f"Error loading strategy {current_strategy_file}: {e}")
             
             # Get data from shared dictionary
             if symbol not in data_manager_dict:
@@ -237,11 +277,11 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                 df_resampled = df_resampled[df_resampled.index >= cutoff_time]
             
             # Calculate moving averages - bypass the ensure_datetime_index issue
-            if len(df_resampled) >= max(short_window, long_window):
+            if len(df_resampled) >= max(current_short_window, current_long_window):
                 # Create a copy and manually add moving averages without calling ensure_datetime_index
                 df_ma = df_resampled.copy()
-                df_ma['Short_MA'] = df_ma['close'].rolling(window=short_window).mean()
-                df_ma['Long_MA'] = df_ma['close'].rolling(window=long_window).mean()
+                df_ma['Short_MA'] = df_ma['close'].rolling(window=current_short_window).mean()
+                df_ma['Long_MA'] = df_ma['close'].rolling(window=current_long_window).mean()
                 
                 # Generate signals manually
                 df_ma['MA_Signal'] = 0
@@ -269,7 +309,7 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
             ))
             
             # Add moving averages if we have enough data
-            if len(df_ma) >= max(short_window, long_window):
+            if len(df_ma) >= max(current_short_window, current_long_window):
                 # Only plot MAs where we have valid data
                 valid_short = df_ma['Short_MA'].dropna()
                 valid_long = df_ma['Long_MA'].dropna()
@@ -279,7 +319,7 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                         x=valid_short.index,
                         y=valid_short,
                         mode='lines',
-                        name=f'MA({short_window})',
+                        name=f'MA({current_short_window})',
                         line=dict(color='blue', width=2)
                     ))
                 
@@ -288,7 +328,7 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                         x=valid_long.index,
                         y=valid_long,
                         mode='lines',
-                        name=f'MA({long_window})',
+                        name=f'MA({current_long_window})',
                         line=dict(color='orange', width=2)
                     ))
                 
@@ -314,9 +354,9 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                         name='Sell Signals'
                     ))
             
-            # Load and display actual trades if available
+            # Load and display actual trades if available (only for best_strategy.json)
             try:
-                if os.path.exists('trades.json'):
+                if current_strategy_file == 'best_strategy.json' and os.path.exists('trades.json'):
                     with open('trades.json', 'r') as f:
                         trades_data = json.load(f)
                     
@@ -356,7 +396,7 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
             
             # Update layout
             fig.update_layout(
-                title=f'{symbol.upper()} - {bar_size} Bars (MA {short_window}/{long_window}) - Last {hours_to_show}h',
+                title=f'{symbol.upper()} - {bar_size} Bars - {current_strategy_name} - Last {hours_to_show}h',
                 xaxis_title='Time',
                 yaxis_title='Price (USD)',
                 template='plotly_white',
@@ -377,6 +417,7 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                 signal_color = {'BUY': 'green', 'SELL': 'red', 'HOLD': 'orange'}.get(signal_text, 'black')
                 
                 status_children = [
+                    html.P(f"Strategy: {current_strategy_name}"),
                     html.P(f"Current Price: ${current_price:.2f}"),
                     html.P(f"Data Points: {len(df_ma)} bars"),
                     html.P(f"Time Range: {df_ma.index[0].strftime('%m-%d %H:%M')} to {df_ma.index[-1].strftime('%m-%d %H:%M')}")
@@ -384,8 +425,8 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                 
                 if not pd.isna(short_ma) and not pd.isna(long_ma):
                     status_children.extend([
-                        html.P(f"MA({short_window}): ${short_ma:.2f}"),
-                        html.P(f"MA({long_window}): ${long_ma:.2f}"),
+                        html.P(f"MA({current_short_window}): ${short_ma:.2f}"),
+                        html.P(f"MA({current_long_window}): ${long_ma:.2f}"),
                         html.P(f"Current Signal: ", style={'display': 'inline'}),
                         html.Span(signal_text, style={'color': signal_color, 'fontWeight': 'bold'})
                     ])
