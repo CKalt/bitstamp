@@ -16,6 +16,8 @@
 #      ensure_datetime_index issue by calculating moving averages directly.
 #   7) ADDED: Strategy file parameter and dropdown for viewing alternate
 #      strategies without trading them.
+#   8) MODIFIED: run_dash_app function now accepts alt_strategy_file parameter
+#      and dynamically loads available strategy files for comparison.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -118,7 +120,7 @@ def setup_logging(verbose):
     return logger
 
 
-def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window, host='0.0.0.0', port=8050, strategy_file='best_strategy.json', strategy_name='MA Strategy'):
+def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window, host='0.0.0.0', port=8050, strategy_file='best_strategy.json', strategy_name='MA Strategy', alt_strategy_file=None):
     """
     Run the Dash application for interactive charting with signals and trades.
     
@@ -130,14 +132,27 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
         long_window: Long moving average window
         host: Host to bind to (0.0.0.0 for remote access)
         port: Port to bind to
-        strategy_file: Strategy configuration file to use
+        strategy_file: Primary strategy configuration file to use
         strategy_name: Display name for the strategy
+        alt_strategy_file: Optional alternate strategy file for comparison
     """
     app = dash.Dash(__name__)
     
-    # Load available strategy files
+    # Load available strategy files - UPDATED to be dynamic
     available_strategies = []
-    for filename in ['best_strategy.json', 'alt_strategy-1.json']:
+    
+    # Always include the primary strategy file
+    strategy_files_to_check = ['best_strategy.json']
+    
+    # Add alternate strategy file if provided
+    if alt_strategy_file and alt_strategy_file != 'best_strategy.json':
+        strategy_files_to_check.append(alt_strategy_file)
+    
+    # Also check for common alternate files if no specific alternate was provided
+    if not alt_strategy_file:
+        strategy_files_to_check.extend(['alt_strategy-1.json', 'alt_strategy-2.json', 'alt_strategy-3.json'])
+    
+    for filename in strategy_files_to_check:
         if os.path.exists(filename):
             try:
                 with open(filename, 'r') as f:
@@ -147,12 +162,45 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                     long_w = config.get('Long_Window', 36)
                     last_action = config.get('Last_Signal_Action', 'Unknown')
                     total_return = config.get('Total_Return', 0)
+                    
+                    # Create descriptive label
+                    file_label = "PRIMARY" if filename == 'best_strategy.json' else "ALT"
                     available_strategies.append({
-                        'label': f"{filename}: MA({short_w},{long_w}) - {last_action} - {total_return:.1f}% return",
+                        'label': f"{file_label}: {filename} - MA({short_w},{long_w}) - {last_action} - {total_return:.1f}% return",
                         'value': filename
                     })
-            except:
-                pass
+                elif config.get('Strategy') == 'RSI':
+                    rsi_window = config.get('RSI_Window', 14)
+                    overbought = config.get('Overbought', 70)
+                    oversold = config.get('Oversold', 30)
+                    last_action = config.get('Last_Signal_Action', 'Unknown')
+                    total_return = config.get('Total_Return', 0)
+                    
+                    file_label = "PRIMARY" if filename == 'best_strategy.json' else "ALT"
+                    available_strategies.append({
+                        'label': f"{file_label}: {filename} - RSI({rsi_window},{oversold},{overbought}) - {last_action} - {total_return:.1f}% return",
+                        'value': filename
+                    })
+                else:
+                    # Handle other strategy types
+                    strategy_type = config.get('Strategy', 'Unknown')
+                    total_return = config.get('Total_Return', 0)
+                    last_action = config.get('Last_Signal_Action', 'Unknown')
+                    
+                    file_label = "PRIMARY" if filename == 'best_strategy.json' else "ALT"
+                    available_strategies.append({
+                        'label': f"{file_label}: {filename} - {strategy_type} - {last_action} - {total_return:.1f}% return",
+                        'value': filename
+                    })
+            except Exception as e:
+                print(f"Error loading strategy file {filename}: {e}")
+    
+    # If no strategies were loaded, add a default
+    if not available_strategies:
+        available_strategies.append({
+            'label': 'best_strategy.json (default)',
+            'value': 'best_strategy.json'
+        })
     
     # Define the layout
     app.layout = html.Div([
@@ -206,15 +254,29 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
             current_short_window = short_window
             current_long_window = long_window
             current_strategy_name = strategy_name
+            current_strategy_type = 'MA'  # default
             
             try:
                 with open(current_strategy_file, 'r') as f:
                     config = json.load(f)
-                if config.get('Strategy') == 'MA':
+                    
+                current_strategy_type = config.get('Strategy', 'MA')
+                
+                if current_strategy_type == 'MA':
                     current_short_window = int(config.get('Short_Window', short_window))
                     current_long_window = int(config.get('Long_Window', long_window))
                     last_action = config.get('Last_Signal_Action', 'Unknown')
                     current_strategy_name = f"MA({current_short_window}, {current_long_window}) - {last_action}"
+                elif current_strategy_type == 'RSI':
+                    rsi_window = int(config.get('RSI_Window', 14))
+                    rsi_overbought = int(config.get('Overbought', 70))
+                    rsi_oversold = int(config.get('Oversold', 30))
+                    last_action = config.get('Last_Signal_Action', 'Unknown')
+                    current_strategy_name = f"RSI({rsi_window}, {rsi_oversold}, {rsi_overbought}) - {last_action}"
+                else:
+                    last_action = config.get('Last_Signal_Action', 'Unknown')
+                    current_strategy_name = f"{current_strategy_type} - {last_action}"
+                    
             except Exception as e:
                 print(f"Error loading strategy {current_strategy_file}: {e}")
             
@@ -276,22 +338,39 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                 cutoff_time = df_resampled.index[-1] - pd.Timedelta(hours=hours_to_show)
                 df_resampled = df_resampled[df_resampled.index >= cutoff_time]
             
-            # Calculate moving averages - bypass the ensure_datetime_index issue
-            if len(df_resampled) >= max(current_short_window, current_long_window):
-                # Create a copy and manually add moving averages without calling ensure_datetime_index
-                df_ma = df_resampled.copy()
-                df_ma['Short_MA'] = df_ma['close'].rolling(window=current_short_window).mean()
-                df_ma['Long_MA'] = df_ma['close'].rolling(window=current_long_window).mean()
-                
-                # Generate signals manually
-                df_ma['MA_Signal'] = 0
-                df_ma.loc[df_ma['Short_MA'] > df_ma['Long_MA'], 'MA_Signal'] = 1
-                df_ma.loc[df_ma['Short_MA'] < df_ma['Long_MA'], 'MA_Signal'] = -1
-            else:
-                df_ma = df_resampled.copy()
-                df_ma['Short_MA'] = np.nan
-                df_ma['Long_MA'] = np.nan
-                df_ma['MA_Signal'] = 0
+            # Calculate indicators based on strategy type
+            df_ma = df_resampled.copy()
+            
+            if current_strategy_type == 'MA':
+                # Calculate moving averages - bypass the ensure_datetime_index issue
+                if len(df_resampled) >= max(current_short_window, current_long_window):
+                    df_ma['Short_MA'] = df_ma['close'].rolling(window=current_short_window).mean()
+                    df_ma['Long_MA'] = df_ma['close'].rolling(window=current_long_window).mean()
+                    
+                    # Generate signals manually
+                    df_ma['MA_Signal'] = 0
+                    df_ma.loc[df_ma['Short_MA'] > df_ma['Long_MA'], 'MA_Signal'] = 1
+                    df_ma.loc[df_ma['Short_MA'] < df_ma['Long_MA'], 'MA_Signal'] = -1
+                else:
+                    df_ma['Short_MA'] = np.nan
+                    df_ma['Long_MA'] = np.nan
+                    df_ma['MA_Signal'] = 0
+            elif current_strategy_type == 'RSI':
+                # Calculate RSI
+                if len(df_resampled) >= rsi_window:
+                    delta = df_ma['close'].diff()
+                    gain = (delta.clip(lower=0)).rolling(window=rsi_window).mean()
+                    loss = (-delta.clip(upper=0)).rolling(window=rsi_window).mean()
+                    rs = gain / loss
+                    df_ma['RSI'] = 100 - (100 / (1 + rs))
+                    
+                    # Generate RSI signals
+                    df_ma['RSI_Signal'] = 0
+                    df_ma.loc[df_ma['RSI'] < rsi_oversold, 'RSI_Signal'] = 1
+                    df_ma.loc[df_ma['RSI'] > rsi_overbought, 'RSI_Signal'] = -1
+                else:
+                    df_ma['RSI'] = np.nan
+                    df_ma['RSI_Signal'] = 0
             
             # Create the main price chart
             fig = go.Figure()
@@ -308,8 +387,8 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                 decreasing_line_color='red'
             ))
             
-            # Add moving averages if we have enough data
-            if len(df_ma) >= max(current_short_window, current_long_window):
+            # Add indicators based on strategy type
+            if current_strategy_type == 'MA' and len(df_ma) >= max(current_short_window, current_long_window):
                 # Only plot MAs where we have valid data
                 valid_short = df_ma['Short_MA'].dropna()
                 valid_long = df_ma['Long_MA'].dropna()
@@ -353,6 +432,29 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                         marker=dict(symbol='triangle-down', size=15, color='red'),
                         name='Sell Signals'
                     ))
+                        
+            elif current_strategy_type == 'RSI' and len(df_ma) >= rsi_window:
+                # Add RSI signals
+                buy_signals = df_ma[df_ma['RSI_Signal'] == 1]
+                sell_signals = df_ma[df_ma['RSI_Signal'] == -1]
+                
+                if not buy_signals.empty:
+                    fig.add_trace(go.Scatter(
+                        x=buy_signals.index,
+                        y=buy_signals['close'],
+                        mode='markers',
+                        marker=dict(symbol='triangle-up', size=15, color='green'),
+                        name='RSI Buy Signals'
+                    ))
+                
+                if not sell_signals.empty:
+                    fig.add_trace(go.Scatter(
+                        x=sell_signals.index,
+                        y=sell_signals['close'],
+                        mode='markers',
+                        marker=dict(symbol='triangle-down', size=15, color='red'),
+                        name='RSI Sell Signals'
+                    ))
             
             # Load and display actual trades if available (only for best_strategy.json)
             try:
@@ -395,8 +497,9 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                 print(f"Error loading trades: {e}")
             
             # Update layout
+            strategy_display = f"({current_strategy_file})" if current_strategy_file != 'best_strategy.json' else ""
             fig.update_layout(
-                title=f'{symbol.upper()} - {bar_size} Bars - {current_strategy_name} - Last {hours_to_show}h',
+                title=f'{symbol.upper()} - {bar_size} Bars - {current_strategy_name} {strategy_display} - Last {hours_to_show}h',
                 xaxis_title='Time',
                 yaxis_title='Price (USD)',
                 template='plotly_white',
@@ -409,29 +512,49 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
             latest_data = df_ma.iloc[-1] if not df_ma.empty else None
             if latest_data is not None:
                 current_price = latest_data['close']
-                short_ma = latest_data.get('Short_MA', np.nan)
-                long_ma = latest_data.get('Long_MA', np.nan)
-                signal = latest_data.get('MA_Signal', 0)
-                
-                signal_text = {1: 'BUY', -1: 'SELL', 0: 'HOLD'}.get(signal, 'UNKNOWN')
-                signal_color = {'BUY': 'green', 'SELL': 'red', 'HOLD': 'orange'}.get(signal_text, 'black')
                 
                 status_children = [
                     html.P(f"Strategy: {current_strategy_name}"),
+                    html.P(f"File: {current_strategy_file}"),
                     html.P(f"Current Price: ${current_price:.2f}"),
                     html.P(f"Data Points: {len(df_ma)} bars"),
                     html.P(f"Time Range: {df_ma.index[0].strftime('%m-%d %H:%M')} to {df_ma.index[-1].strftime('%m-%d %H:%M')}")
                 ]
                 
-                if not pd.isna(short_ma) and not pd.isna(long_ma):
-                    status_children.extend([
-                        html.P(f"MA({current_short_window}): ${short_ma:.2f}"),
-                        html.P(f"MA({current_long_window}): ${long_ma:.2f}"),
-                        html.P(f"Current Signal: ", style={'display': 'inline'}),
-                        html.Span(signal_text, style={'color': signal_color, 'fontWeight': 'bold'})
-                    ])
-                else:
-                    status_children.append(html.P("Insufficient data for moving averages"))
+                if current_strategy_type == 'MA':
+                    short_ma = latest_data.get('Short_MA', np.nan)
+                    long_ma = latest_data.get('Long_MA', np.nan)
+                    signal = latest_data.get('MA_Signal', 0)
+                    
+                    if not pd.isna(short_ma) and not pd.isna(long_ma):
+                        signal_text = {1: 'BUY', -1: 'SELL', 0: 'HOLD'}.get(signal, 'UNKNOWN')
+                        signal_color = {'BUY': 'green', 'SELL': 'red', 'HOLD': 'orange'}.get(signal_text, 'black')
+                        
+                        status_children.extend([
+                            html.P(f"MA({current_short_window}): ${short_ma:.2f}"),
+                            html.P(f"MA({current_long_window}): ${long_ma:.2f}"),
+                            html.P(f"Current Signal: ", style={'display': 'inline'}),
+                            html.Span(signal_text, style={'color': signal_color, 'fontWeight': 'bold'})
+                        ])
+                    else:
+                        status_children.append(html.P("Insufficient data for moving averages"))
+                        
+                elif current_strategy_type == 'RSI':
+                    rsi_val = latest_data.get('RSI', np.nan)
+                    signal = latest_data.get('RSI_Signal', 0)
+                    
+                    if not pd.isna(rsi_val):
+                        signal_text = {1: 'BUY', -1: 'SELL', 0: 'HOLD'}.get(signal, 'UNKNOWN')
+                        signal_color = {'BUY': 'green', 'SELL': 'red', 'HOLD': 'orange'}.get(signal_text, 'black')
+                        
+                        status_children.extend([
+                            html.P(f"RSI({rsi_window}): {rsi_val:.2f}"),
+                            html.P(f"Overbought: {rsi_overbought}, Oversold: {rsi_oversold}"),
+                            html.P(f"Current Signal: ", style={'display': 'inline'}),
+                            html.Span(signal_text, style={'color': signal_color, 'fontWeight': 'bold'})
+                        ])
+                    else:
+                        status_children.append(html.P("Insufficient data for RSI"))
                 
                 status_children.append(html.P(f"Last Update: {latest_data.name.strftime('%Y-%m-%d %H:%M:%S')}"))
             else:
@@ -458,6 +581,10 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
     print("For remote access, you can use tools like ngrok:")
     print(f"  ngrok http {port}")
     print("Or access directly if firewall allows.")
+    
+    if alt_strategy_file:
+        print(f"\nLoaded alternate strategy file: {alt_strategy_file}")
+        print("Use the dropdown in the web interface to compare strategies.")
     
     try:
         app.run_server(host=host, port=port, debug=False)

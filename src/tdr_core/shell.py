@@ -19,6 +19,7 @@
 #      debug_strategy_state, debug_recent_trades, force_signal_check)
 #   8) FIXED: Improved shutdown mechanism to properly terminate Dash processes
 #      without HTTP connection errors.
+#   9) MODIFIED: do_chart method now accepts 4th argument for alternate strategy file
 ###############################################################################
 
 import cmd
@@ -82,7 +83,7 @@ class CryptoShell(cmd.Cmd):
             'auto_trade': 'auto_trade 2.47btc long',
             'stop_auto_trade': 'stop_auto_trade',
             'status': 'status [long]',
-            'chart': 'chart btcusd 1H',
+            'chart': 'chart btcusd 1H 8051 [alt_strategy_file]',
             'debug_signals': 'debug_signals [bars]',
             'debug_bars': 'debug_bars [count]',
             'debug_strategy_state': 'debug_strategy_state',
@@ -1125,13 +1126,14 @@ class CryptoShell(cmd.Cmd):
 
     def do_chart(self, arg):
         """
-        Show a Dash-based chart: chart [symbol] [bar_size] [port].
-        E.g., chart btcusd 1H 8051
+        Show a Dash-based chart: chart [symbol] [bar_size] [port] [alt_strategy_file].
+        E.g., chart btcusd 1H 8051 alt_strategy-1.json
         """
         args = arg.split()
         symbol = 'btcusd'
         bar_size = '1H'
         port = 8050  # default port
+        alt_strategy_file = None  # NEW: for alternate strategy file
         
         if len(args) >= 1:
             symbol = args[0].strip().lower()
@@ -1143,6 +1145,12 @@ class CryptoShell(cmd.Cmd):
             except ValueError:
                 print("Invalid port number, using 8050")
                 port = 8050
+        # NEW: Handle 4th argument for alternate strategy file
+        if len(args) >= 4:
+            alt_strategy_file = args[3].strip()
+            if not os.path.exists(alt_strategy_file):
+                print(f"Warning: Alternate strategy file '{alt_strategy_file}' not found. Will only show best_strategy.json")
+                alt_strategy_file = None
         
         if symbol not in self.data_manager.data:
             print(f"No data for symbol '{symbol}'.")
@@ -1186,10 +1194,13 @@ class CryptoShell(cmd.Cmd):
         from tdr import run_dash_app  # minimal local import
         self.chart_process = Process(
             target=run_dash_app,
-            args=(self.data_manager_dict, symbol, bar_size, short_window, long_window, '0.0.0.0', port)
+            args=(self.data_manager_dict, symbol, bar_size, short_window, long_window, '0.0.0.0', port, 'best_strategy.json', 'MA Strategy', alt_strategy_file)  # NEW: Added alt_strategy_file
         )
         self.chart_process.start()
         print(f"Dash app is running at http://127.0.0.1:{port}/")
+        if alt_strategy_file:
+            print(f"Alternate strategy file: {alt_strategy_file}")
+            print("Use the dropdown in the web interface to switch between strategies.")
         time.sleep(1)
 
     def do_quit(self, arg):
