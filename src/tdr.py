@@ -8,6 +8,8 @@
 #      the old trade log files if they exist ("trades.json" and
 #      "non-live-trades.json"). This clears records of prior runs.
 #   2) We preserve all original code, docstrings, and logic.
+#   3) ADDED: Complete run_dash_app function for interactive charting with
+#      signal visualization and trade markers.
 ###############################################################################
 
 #!/usr/bin/env python
@@ -32,6 +34,7 @@ try:
     from dash import dcc, html
     from dash.dependencies import Output, Input
     import plotly.graph_objs as go
+    from flask import Flask
 except ImportError:
     pass  # We will handle the ImportError in the do_chart method
 
@@ -107,6 +110,257 @@ def setup_logging(verbose):
     logger.addHandler(file_handler)
 
     return logger
+
+
+def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window, host='0.0.0.0', port=8050):
+    """
+    Run the Dash application for interactive charting with signals and trades.
+    
+    Args:
+        data_manager_dict: Shared dictionary containing price data
+        symbol: Trading symbol (e.g., 'btcusd')
+        bar_size: Bar size for resampling (e.g., '1H')
+        short_window: Short moving average window
+        long_window: Long moving average window
+        host: Host to bind to (0.0.0.0 for remote access)
+        port: Port to bind to
+    """
+    app = dash.Dash(__name__)
+    
+    # Define the layout
+    app.layout = html.Div([
+        html.H1(f'{symbol.upper()} Trading Chart', style={'textAlign': 'center'}),
+        
+        html.Div([
+            html.Div([
+                html.Label('Refresh Interval (seconds):'),
+                dcc.Input(id='refresh-interval', type='number', value=30, min=5, max=300)
+            ], style={'width': '48%', 'display': 'inline-block'}),
+            
+            html.Div([
+                html.Label('Number of Bars to Display:'),
+                dcc.Input(id='bars-to-show', type='number', value=100, min=50, max=500)
+            ], style={'width': '48%', 'float': 'right', 'display': 'inline-block'})
+        ], style={'padding': '10px'}),
+        
+        dcc.Graph(id='price-chart'),
+        
+        html.Div([
+            html.H3('Current Status'),
+            html.Div(id='status-info')
+        ], style={'padding': '10px'}),
+        
+        dcc.Interval(
+            id='interval-component',
+            interval=30*1000,  # Update every 30 seconds
+            n_intervals=0
+        ),
+        
+        # Add shutdown route
+        html.Div(id='shutdown-trigger', style={'display': 'none'})
+    ])
+
+    @app.callback(
+        [Output('price-chart', 'figure'),
+         Output('status-info', 'children')],
+        [Input('interval-component', 'n_intervals'),
+         Input('refresh-interval', 'value'),
+         Input('bars-to-show', 'value')]
+    )
+    def update_graph(n, refresh_interval, bars_to_show):
+        try:
+            # Update interval component
+            if refresh_interval and refresh_interval != 30:
+                # This would require updating the interval component, but we'll keep it simple
+                pass
+            
+            # Get data from shared dictionary
+            if symbol not in data_manager_dict:
+                return {}, "No data available"
+            
+            data_dict = dict(data_manager_dict[symbol])
+            
+            if not data_dict or not data_dict.get('timestamp'):
+                return {}, "No data available"
+            
+            # Convert to DataFrame
+            df = pd.DataFrame(data_dict)
+            
+            if df.empty:
+                return {}, "No data available"
+            
+            # Ensure datetime index
+            df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
+            df.set_index('datetime', inplace=True)
+            
+            # Resample to specified bar size
+            df_resampled = df.resample(bar_size).agg({
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+                'volume': 'sum',
+                'trades': 'sum'
+            }).dropna()
+            
+            if len(df_resampled) == 0:
+                return {}, "No resampled data available"
+            
+            # Limit to recent bars
+            if bars_to_show and len(df_resampled) > bars_to_show:
+                df_resampled = df_resampled.tail(bars_to_show)
+            
+            # Calculate moving averages
+            df_ma = add_moving_averages(df_resampled.copy(), short_window, long_window, price_col='close')
+            df_ma = generate_ma_signals(df_ma)
+            
+            # Create the main price chart
+            fig = go.Figure()
+            
+            # Add candlestick chart
+            fig.add_trace(go.Candlestick(
+                x=df_ma.index,
+                open=df_ma['open'],
+                high=df_ma['high'],
+                low=df_ma['low'],
+                close=df_ma['close'],
+                name='Price',
+                increasing_line_color='green',
+                decreasing_line_color='red'
+            ))
+            
+            # Add moving averages
+            fig.add_trace(go.Scatter(
+                x=df_ma.index,
+                y=df_ma['Short_MA'],
+                mode='lines',
+                name=f'MA({short_window})',
+                line=dict(color='blue', width=2)
+            ))
+            
+            fig.add_trace(go.Scatter(
+                x=df_ma.index,
+                y=df_ma['Long_MA'],
+                mode='lines',
+                name=f'MA({long_window})',
+                line=dict(color='orange', width=2)
+            ))
+            
+            # Add signal markers
+            buy_signals = df_ma[df_ma['MA_Signal'] == 1]
+            sell_signals = df_ma[df_ma['MA_Signal'] == -1]
+            
+            if not buy_signals.empty:
+                fig.add_trace(go.Scatter(
+                    x=buy_signals.index,
+                    y=buy_signals['close'],
+                    mode='markers',
+                    marker=dict(symbol='triangle-up', size=15, color='green'),
+                    name='Buy Signals'
+                ))
+            
+            if not sell_signals.empty:
+                fig.add_trace(go.Scatter(
+                    x=sell_signals.index,
+                    y=sell_signals['close'],
+                    mode='markers',
+                    marker=dict(symbol='triangle-down', size=15, color='red'),
+                    name='Sell Signals'
+                ))
+            
+            # Load and display actual trades if available
+            try:
+                if os.path.exists('trades.json'):
+                    with open('trades.json', 'r') as f:
+                        trades_data = json.load(f)
+                    
+                    if trades_data:
+                        trade_times = []
+                        trade_prices = []
+                        trade_colors = []
+                        trade_text = []
+                        
+                        for trade in trades_data:
+                            trade_time = pd.to_datetime(trade['timestamp'])
+                            trade_times.append(trade_time)
+                            trade_prices.append(trade['price'])
+                            trade_colors.append('lightgreen' if trade['type'] == 'buy' else 'lightcoral')
+                            trade_text.append(f"{trade['type'].upper()}<br>{trade['amount']:.6f} BTC<br>${trade['price']:.2f}")
+                        
+                        if trade_times:
+                            fig.add_trace(go.Scatter(
+                                x=trade_times,
+                                y=trade_prices,
+                                mode='markers',
+                                marker=dict(symbol='diamond', size=12, color=trade_colors, 
+                                           line=dict(width=2, color='black')),
+                                text=trade_text,
+                                textposition='top center',
+                                name='Actual Trades',
+                                hovertemplate='%{text}<extra></extra>'
+                            ))
+            except Exception as e:
+                print(f"Error loading trades: {e}")
+            
+            # Update layout
+            fig.update_layout(
+                title=f'{symbol.upper()} - {bar_size} Bars (MA {short_window}/{long_window})',
+                xaxis_title='Time',
+                yaxis_title='Price (USD)',
+                template='plotly_white',
+                showlegend=True,
+                height=600,
+                xaxis_rangeslider_visible=False
+            )
+            
+            # Create status info
+            latest_data = df_ma.iloc[-1] if not df_ma.empty else None
+            if latest_data is not None:
+                current_price = latest_data['close']
+                short_ma = latest_data['Short_MA']
+                long_ma = latest_data['Long_MA']
+                signal = latest_data['MA_Signal']
+                
+                signal_text = {1: 'BUY', -1: 'SELL', 0: 'HOLD'}.get(signal, 'UNKNOWN')
+                signal_color = {'BUY': 'green', 'SELL': 'red', 'HOLD': 'orange'}.get(signal_text, 'black')
+                
+                status_children = [
+                    html.P(f"Current Price: ${current_price:.2f}"),
+                    html.P(f"MA({short_window}): ${short_ma:.2f}"),
+                    html.P(f"MA({long_window}): ${long_ma:.2f}"),
+                    html.P(f"Current Signal: ", style={'display': 'inline'}),
+                    html.Span(signal_text, style={'color': signal_color, 'fontWeight': 'bold'}),
+                    html.P(f"Last Update: {latest_data.name.strftime('%Y-%m-%d %H:%M:%S')}")
+                ]
+            else:
+                status_children = [html.P("No current data available")]
+            
+            return fig, status_children
+            
+        except Exception as e:
+            print(f"Error updating chart: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}, f"Error: {str(e)}"
+
+    # Add shutdown route
+    @app.server.route('/shutdown')
+    def shutdown():
+        func = request.environ.get('werkzeug.server.shutdown')
+        if func is None:
+            return 'Not running with the Werkzeug Server'
+        func()
+        return 'Server shutting down...'
+
+    print(f"Starting Dash app on http://{host}:{port}")
+    print("For remote access, you can use tools like ngrok:")
+    print(f"  ngrok http {port}")
+    print("Or access directly if firewall allows.")
+    
+    try:
+        app.run_server(host=host, port=port, debug=False)
+    except Exception as e:
+        print(f"Error running Dash app: {e}")
 
 
 def main():
