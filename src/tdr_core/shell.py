@@ -23,16 +23,11 @@ from flask import Flask, request
 from multiprocessing import Process, Manager
 
 # We'll need references to modules from our codebase:
-from tdr_core.order_placer import OrderPlacer
-from tdr_core.strategies import MACrossoverStrategy
-from tdr_core.data_manager import CryptoDataManager
-from tdr_core.trade import Trade
-
-# Original references from tdr.py
-from utils.analysis import analyze_data, run_trading_system
-from data.loader import create_metadata_file, parse_log_file
+from tdr_core.strategies import MACrossoverStrategy, AdaptiveMultiStrategy
 
 ###############################################################################
+
+
 def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window):
     """
     Dash-based real-time candlestick chart with MA signals.
@@ -94,11 +89,14 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
             return {}
 
         from indicators.technical_indicators import add_moving_averages, generate_ma_signals
-        df_ma = add_moving_averages(df_resampled.copy(), short_window, long_window, price_col='close')
+        df_ma = add_moving_averages(
+            df_resampled.copy(), short_window, long_window, price_col='close')
         df_ma = generate_ma_signals(df_ma)
         df_ma['Signal_Change'] = df_ma['MA_Signal'].diff()
-        df_ma['Buy_Signal_Price'] = np.where(df_ma['Signal_Change'] == 2, df_ma['close'], np.nan)
-        df_ma['Sell_Signal_Price'] = np.where(df_ma['Signal_Change'] == -2, df_ma['close'], np.nan)
+        df_ma['Buy_Signal_Price'] = np.where(
+            df_ma['Signal_Change'] == 2, df_ma['close'], np.nan)
+        df_ma['Sell_Signal_Price'] = np.where(
+            df_ma['Signal_Change'] == -2, df_ma['close'], np.nan)
 
         if relayout_data and 'xaxis.range[0]' in relayout_data and 'xaxis.range[1]' in relayout_data:
             x_start = pd.to_datetime(relayout_data['xaxis.range[0]'])
@@ -111,8 +109,10 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
         if df_visible.empty:
             df_visible = df_ma
 
-        y_min = df_visible[['low','Short_MA','Long_MA','Buy_Signal_Price','Sell_Signal_Price']].min().min()
-        y_max = df_visible[['high','Short_MA','Long_MA','Buy_Signal_Price','Sell_Signal_Price']].max().max()
+        y_min = df_visible[['low', 'Short_MA', 'Long_MA',
+                            'Buy_Signal_Price', 'Sell_Signal_Price']].min().min()
+        y_max = df_visible[['high', 'Short_MA', 'Long_MA',
+                            'Buy_Signal_Price', 'Sell_Signal_Price']].max().max()
         y_padding = (y_max - y_min) * 0.05
         y_min -= y_padding
         y_max += y_padding
@@ -152,7 +152,8 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window)
             name='Sell Signal'
         )
 
-        data = [candlestick, short_ma_line, long_ma_line, buy_signals, sell_signals]
+        data = [candlestick, short_ma_line,
+                long_ma_line, buy_signals, sell_signals]
         layout = go.Layout(
             xaxis=dict(title='Time', range=[x_start, x_end]),
             yaxis=dict(title='Price ($)', range=[y_min, y_max]),
@@ -243,7 +244,8 @@ class CryptoShell(cmd.Cmd):
                 update_str = last_update_time.strftime('%Y-%m-%d %H:%M:%S')
             else:
                 update_str = "unknown (no trades yet)"
-            print(f"Current price of {symbol}: ${price:.2f} (last update: {update_str})")
+            print(
+                f"Current price of {symbol}: ${price:.2f} (last update: {update_str})")
         else:
             print(f"No data for {symbol}")
 
@@ -256,7 +258,8 @@ class CryptoShell(cmd.Cmd):
             print("Usage: range <symbol> <minutes>")
             return
         symbol, minutes = args[0].lower(), int(args[1])
-        min_price, max_price = self.data_manager.get_price_range(symbol, minutes)
+        min_price, max_price = self.data_manager.get_price_range(
+            symbol, minutes)
         if min_price is not None and max_price is not None:
             print(f"Price range for {symbol} over last {minutes} minutes:")
             print(f"Min: ${min_price:.2f}, Max: ${max_price:.2f}")
@@ -322,7 +325,8 @@ class CryptoShell(cmd.Cmd):
         Callback for candlestick updates if toggled on via candles <symbol>.
         """
         if symbol in self.candlestick_output:
-            ts_str = datetime.fromtimestamp(candle['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+            ts_str = datetime.fromtimestamp(
+                candle['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
             print(f"{symbol} - {ts_str}: "
                   f"Open={candle['open']:.2f}, High={candle['high']:.2f}, "
                   f"Low={candle['low']:.2f}, Close={candle['close']:.2f}, "
@@ -333,7 +337,8 @@ class CryptoShell(cmd.Cmd):
         Callback for trade updates if toggled on via ticker <symbol>.
         """
         if symbol in self.ticker_output:
-            ts_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+            ts_str = datetime.fromtimestamp(
+                timestamp).strftime('%Y-%m-%d %H:%M:%S')
             print(f"{symbol} - {ts_str}: Price=${price:.2f}")
 
     def do_verbose(self, arg):
@@ -351,7 +356,8 @@ class CryptoShell(cmd.Cmd):
                 if not debug_handlers:
                     debug_stream_handler = logging.StreamHandler(sys.stderr)
                     debug_stream_handler.setLevel(logging.DEBUG)
-                    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+                    formatter = logging.Formatter(
+                        '%(asctime)s - %(levelname)s - %(message)s')
                     debug_stream_handler.setFormatter(formatter)
                     self.logger.addHandler(debug_stream_handler)
                 self.data_manager.set_verbose(True)
@@ -368,7 +374,8 @@ class CryptoShell(cmd.Cmd):
                 log_file_path = os.path.abspath(log_file)
                 file_handler = logging.FileHandler(log_file_path)
                 file_handler.setLevel(logging.DEBUG)
-                formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+                formatter = logging.Formatter(
+                    '%(asctime)s - %(levelname)s - %(message)s')
                 file_handler.setFormatter(formatter)
                 self.logger.addHandler(file_handler)
                 self.data_manager.set_verbose(True)
@@ -388,14 +395,16 @@ class CryptoShell(cmd.Cmd):
                     try:
                         options[key] = int(value)
                     except ValueError:
-                        print(f"Invalid value for {key}: {value} (should be int).")
+                        print(
+                            f"Invalid value for {key}: {value} (should be int).")
                 elif key == 'client_order_id':
                     options[key] = value
                 elif key == 'limit_price':
                     try:
                         options[key] = float(value)
                     except ValueError:
-                        print(f"Invalid value for {key}: {value} (should be float).")
+                        print(
+                            f"Invalid value for {key}: {value} (should be float).")
         return options
 
     def do_limit_buy(self, arg):
@@ -408,7 +417,8 @@ class CryptoShell(cmd.Cmd):
             return
         symbol, amount, price = args[0].lower(), float(args[1]), float(args[2])
         options = self.parse_order_options(args[3:])
-        result = self.order_placer.place_limit_buy_order(symbol, amount, price, **options)
+        result = self.order_placer.place_limit_buy_order(
+            symbol, amount, price, **options)
         print(json.dumps(result, indent=2))
 
     def do_limit_sell(self, arg):
@@ -421,7 +431,8 @@ class CryptoShell(cmd.Cmd):
             return
         symbol, amount, price = args[0].lower(), float(args[1]), float(args[2])
         options = self.parse_order_options(args[3:])
-        result = self.order_placer.place_limit_sell_order(symbol, amount, price, **options)
+        result = self.order_placer.place_limit_sell_order(
+            symbol, amount, price, **options)
         print(json.dumps(result, indent=2))
 
     def parse_position_str(self, pos_str):
@@ -441,10 +452,10 @@ class CryptoShell(cmd.Cmd):
     def do_auto_trade(self, arg):
         """
         Start auto-trading using the best strategy from best_strategy.json.
-        
+
         Usage:
           auto_trade <amount><btc|usd> <long|short|neutral>
-          
+
         Examples:
           auto_trade 2.47btc long
           auto_trade 234462usd short
@@ -476,10 +487,12 @@ class CryptoShell(cmd.Cmd):
         amount_num = float(match.group(1))
         amount_unit = match.group(3)
         if amount_unit == 'btc' and desired_position != 1:
-            print("Error: If specifying BTC balance, you must start in a 'long' position.")
+            print(
+                "Error: If specifying BTC balance, you must start in a 'long' position.")
             return
         if amount_unit == 'usd' and desired_position != -1:
-            print("Error: If specifying USD balance, you must start in a 'short' position.")
+            print(
+                "Error: If specifying USD balance, you must start in a 'short' position.")
             return
 
         file_path = os.path.abspath('best_strategy.json')
@@ -491,11 +504,12 @@ class CryptoShell(cmd.Cmd):
             best_strategy_params = json.load(f)
 
         strategy_name = best_strategy_params.get('Strategy')
-        print(f"Auto-trading initiated with strategy: {strategy_name}")  # <-- NEW: Show the current strategy
+        # <-- NEW: Show the current strategy
+        print(f"Auto-trading initiated with strategy: {strategy_name}")
 
         short_window = int(best_strategy_params.get('Short_Window', 12))
-        long_window  = int(best_strategy_params.get('Long_Window', 36))
-        do_live      = best_strategy_params.get('do_live_trades', False)
+        long_window = int(best_strategy_params.get('Long_Window', 36))
+        do_live = best_strategy_params.get('do_live_trades', False)
         max_trades_day = best_strategy_params.get('max_trades_per_day', 5)
 
         # Get price DataFrame for the chosen symbol
@@ -511,7 +525,8 @@ class CryptoShell(cmd.Cmd):
             from indicators.technical_indicators import ensure_datetime_index, add_moving_averages, generate_ma_signals
             if not df.empty:
                 df = ensure_datetime_index(df)
-                df = add_moving_averages(df, short_window, long_window, price_col='close')
+                df = add_moving_averages(
+                    df, short_window, long_window, price_col='close')
                 df = generate_ma_signals(df)
                 if not df.empty:
                     # The final row's MA_Signal will be 1 or -1 (or 0 if they cross exactly)
@@ -527,7 +542,8 @@ class CryptoShell(cmd.Cmd):
                 hist_position = 0
         else:
             # If not "MA", we default to old approach
-            hist_position = determine_initial_position(df, short_window, long_window)
+            hist_position = determine_initial_position(
+                df, short_window, long_window)
         # -------------------------------------------------------------------
 
         initial_balance_btc = 0.0
@@ -537,7 +553,7 @@ class CryptoShell(cmd.Cmd):
         elif desired_position == -1:
             initial_balance_usd = amount_num
 
-        self.auto_trader = MACrossoverStrategy(
+        self.auto_trader = AdaptiveMultiStrategy(
             self.data_manager,
             short_window,
             long_window,
@@ -548,10 +564,23 @@ class CryptoShell(cmd.Cmd):
             max_trades_per_day=max_trades_day,
             initial_position=desired_position,
             initial_balance_btc=initial_balance_btc,
-            initial_balance_usd=initial_balance_usd
+            initial_balance_usd=initial_balance_usd,
+            # Adaptive strategy parameters
+            regime_lookback=50,              # Analyze last 50 bars
+            signal_confirmation_bars=2,      # Require 2 confirmed signals
+            min_trade_gap_minutes=30,        # 30min between trades
+            regime_switch_threshold=0.7,     # 70% confidence to switch
+            # Mean reversion for your whipsaw situation
+            rsi_oversold=35,                 # Your RSI is 35.66!
+            rsi_overbought=65,
+            bb_std_dev=2.0,
+            # Breakout parameters
+            volume_threshold=1.5,
+            macd_threshold=0.001
         )
 
-        current_market_price = self.data_manager.get_current_price('btcusd') or 0.0
+        current_market_price = self.data_manager.get_current_price(
+            'btcusd') or 0.0
 
         # If the user starts "long" and hist_position is also long => theoretical
         if desired_position == 1 and hist_position == 1 and current_market_price > 0:
@@ -590,7 +619,8 @@ class CryptoShell(cmd.Cmd):
         if desired_position == 1 and hist_position != 1 and current_market_price > 0:
             buy_btc = amount_num / current_market_price
             trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            self.logger.info(f"(auto_trade) Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
+            self.logger.info(
+                f"(auto_trade) Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
             self.auto_trader.execute_trade(
                 "buy",
                 current_market_price,
@@ -602,7 +632,8 @@ class CryptoShell(cmd.Cmd):
         elif desired_position == -1 and hist_position != -1 and current_market_price > 0:
             sell_btc = amount_num / current_market_price
             trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            self.logger.info(f"(auto_trade) Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
+            self.logger.info(
+                f"(auto_trade) Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
             self.auto_trader.execute_trade(
                 "sell",
                 current_market_price,
@@ -628,7 +659,7 @@ class CryptoShell(cmd.Cmd):
     def do_status(self, arg):
         """
         Show status of auto-trading. Usage: status [long]
-        
+
         By default (no arg or anything not "long"), we show a short version:
           - Position Details with direction, plus theoretical trade block if relevant.
         If user types "status long", we show the entire original block.
@@ -641,7 +672,8 @@ class CryptoShell(cmd.Cmd):
             return
 
         status = self.auto_trader.get_status()
-        pos_str = {1:'Long', -1:'Short', 0:'Neutral'}.get(status['position'], 'Unknown')
+        pos_str = {1: 'Long', -1: 'Short',
+                   0: 'Neutral'}.get(status['position'], 'Unknown')
 
         # If user asked for the short version (default):
         if not show_full:
@@ -649,19 +681,26 @@ class CryptoShell(cmd.Cmd):
             print("━"*50)
             print(f"  • Direction: {pos_str}")
             pos_info = status.get('position_info', {})
-            print(f"  • Current Price:  ${pos_info.get('current_price', 0.0):.2f}")
-            print(f"  • Entry Price:    ${pos_info.get('entry_price', 0.0):.2f}")
+            print(
+                f"  • Current Price:  ${pos_info.get('current_price', 0.0):.2f}")
+            print(
+                f"  • Entry Price:    ${pos_info.get('entry_price', 0.0):.2f}")
 
             if status['position'] == 1:
-                print(f"  • Position Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f}")
-                print(f"  • Position Value (USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
+                print(
+                    f"  • Position Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f}")
+                print(
+                    f"  • Position Value (USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
             elif status['position'] == -1:
-                print(f"  • Short Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f} (negative means short)")
-                print(f"  • USD Held:         ${pos_info.get('position_size_usd', 0.0):.2f}")
+                print(
+                    f"  • Short Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f} (negative means short)")
+                print(
+                    f"  • USD Held:         ${pos_info.get('position_size_usd', 0.0):.2f}")
             else:
                 print("  • Neutral position, no open BTC or short.")
 
-            print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
+            print(
+                f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
 
             if status['trades_executed'] == 0 and status.get('theoretical_trade'):
                 t = status['theoretical_trade']
@@ -674,7 +713,29 @@ class CryptoShell(cmd.Cmd):
             proximity = status.get('ma_signal_proximity')
             if proximity is not None:
                 print(f"\n  • MA Crossover Proximity: {proximity*100:.2f}%")
-                print("    (Closer to 0% means closer to flipping from short->long or long->short)")
+                print(
+                    "    (Closer to 0% means closer to flipping from short->long or long->short)")
+
+            # Show adaptive strategy info in short view
+            if hasattr(self.auto_trader, 'current_regime'):
+                print(f"\n  🎯 Adaptive Strategy:")
+                print(
+                    f"  • Market Regime: {self.auto_trader.current_regime.upper()}")
+                print(
+                    f"  • Confidence: {self.auto_trader.regime_confidence:.1%}")
+                print(
+                    f"  • Active Strategy: {self.auto_trader.active_strategy.upper()}")
+                if self.auto_trader.strategy_switches_today > 0:
+                    print(
+                        f"  • Strategy Switches Today: {self.auto_trader.strategy_switches_today}")
+
+                # Show current strategy performance
+                current_strategy_perf = self.auto_trader.strategy_performance.get(
+                    self.auto_trader.active_strategy, {})
+                trades = current_strategy_perf.get('trades', 0)
+                if trades > 0:
+                    print(
+                        f"  • {self.auto_trader.active_strategy.upper()} Performance: {trades} trades executed")
 
             print("")
             return
@@ -684,15 +745,18 @@ class CryptoShell(cmd.Cmd):
         print("━"*50)
         print(f"  • Running: {status['running']}")
         print(f"  • Position: {pos_str}")
-        print(f"  • Daily Trades: {status['trade_count_today']}/{self.auto_trader.max_trades_per_day}")
-        print(f"  • Remaining Trades Today: {status['remaining_trades_today']}")
+        print(
+            f"  • Daily Trades: {status['trade_count_today']}/{self.auto_trader.max_trades_per_day}")
+        print(
+            f"  • Remaining Trades Today: {status['remaining_trades_today']}")
 
         print("\nAccount Balances & Performance:")
         print(f"  • Initial USD Balance: ${status['initial_balance_usd']:.2f}")
         print(f"  • Initial BTC Balance: {status['initial_balance_btc']:.8f}")
         print(f"  • Current USD Balance: ${status['balance_usd']:.2f}")
         print(f"  • Current BTC Balance: {status['balance_btc']:.8f}")
-        print(f"  • Total Return (vs initial): {status['total_return_pct']:.2f}%")
+        print(
+            f"  • Total Return (vs initial): {status['total_return_pct']:.2f}%")
         print(f"  • Total P&L: ${status['total_profit_loss']:.2f}")
         print(f"  • Current Trade Amount: {status['current_amount']:.8f}")
         print(f"  • Total Fees Paid: ${status['total_fees_paid']:.2f}")
@@ -713,14 +777,19 @@ class CryptoShell(cmd.Cmd):
         print(f"  • Current Price:  ${pos_info.get('current_price', 0.0):.2f}")
         print(f"  • Entry Price:    ${pos_info.get('entry_price', 0.0):.2f}")
         if status['position'] == 1:
-            print(f"  • Position Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f}")
-            print(f"  • Position Value (USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
+            print(
+                f"  • Position Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f}")
+            print(
+                f"  • Position Value (USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
         elif status['position'] == -1:
-            print(f"  • Short Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f} (negative means short)")
-            print(f"  • USD Held:         ${pos_info.get('position_size_usd', 0.0):.2f}")
+            print(
+                f"  • Short Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f} (negative means short)")
+            print(
+                f"  • USD Held:         ${pos_info.get('position_size_usd', 0.0):.2f}")
         else:
             print("  • Neutral position, no open BTC or short.")
-        print(f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
+        print(
+            f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
 
         print("\nTrading Statistics:")
         print(f"  • Total Trades: {status['trades_executed']}")
@@ -728,9 +797,12 @@ class CryptoShell(cmd.Cmd):
         print(f"  • Win Rate: {status['win_rate']:.1f}%")
 
         if status['trades_executed'] > 0:
-            print(f"  • Avg Profit/Trade: ${status['average_profit_per_trade']:.2f}")
-            print(f"  • Avg Fee/Trade: ${status.get('average_fee_per_trade', 0.0):.2f}")
-            print(f"  • Risk/Reward Ratio: {status.get('risk_reward_ratio', 0.0):.2f}")
+            print(
+                f"  • Avg Profit/Trade: ${status['average_profit_per_trade']:.2f}")
+            print(
+                f"  • Avg Fee/Trade: ${status.get('average_fee_per_trade', 0.0):.2f}")
+            print(
+                f"  • Risk/Reward Ratio: {status.get('risk_reward_ratio', 0.0):.2f}")
 
         if status['last_trade']:
             print("\nLast Trade Info:")
@@ -748,7 +820,8 @@ class CryptoShell(cmd.Cmd):
         if status['ma_difference'] is not None:
             print(f"  • MA Difference: {status['ma_difference']:.4f}")
         if status['ma_slope_difference'] is not None:
-            print(f"  • MA Slope Difference: {status['ma_slope_difference']:.4f}")
+            print(
+                f"  • MA Slope Difference: {status['ma_slope_difference']:.4f}")
         if 'short_ma_momentum' in status:
             print(f"  • Short MA Momentum: {status['short_ma_momentum']}")
         if 'long_ma_momentum' in status:
@@ -769,6 +842,47 @@ class CryptoShell(cmd.Cmd):
             print("Warning: Balance is over 10% below initial.")
         if status['remaining_trades_today'] <= 1:
             print("Warning: Approaching daily trade limit!")
+
+        # Show comprehensive adaptive strategy info in long view
+        if hasattr(self.auto_trader, 'current_regime'):
+            print("\nAdaptive Strategy Details:")
+            print("━"*30)
+            print(
+                f"  • Current Market Regime: {self.auto_trader.current_regime.upper()}")
+            print(
+                f"  • Regime Confidence: {self.auto_trader.regime_confidence:.1%}")
+            print(
+                f"  • Active Trading Strategy: {self.auto_trader.active_strategy.upper()}")
+            print(
+                f"  • Strategy Switches Today: {self.auto_trader.strategy_switches_today}")
+            print(
+                f"  • Signal Confirmation: {len(getattr(self.auto_trader, 'signal_history', []))}/{getattr(self.auto_trader, 'signal_confirmation_bars', 2)} bars")
+            print(
+                f"  • Min Trade Gap: {getattr(self.auto_trader, 'min_trade_gap_minutes', 30)} minutes")
+
+            # Show performance by strategy
+            print(f"\n  Strategy Performance Breakdown:")
+            for strategy_name, perf in self.auto_trader.strategy_performance.items():
+                trades = perf.get('trades', 0)
+                profit = perf.get('profit', 0.0)
+                status_icon = "🔵" if strategy_name == self.auto_trader.active_strategy else "⚪"
+                print(
+                    f"    {status_icon} {strategy_name.upper()}: {trades} trades, ${profit:.2f} profit")
+
+            # Explain why current strategy was chosen
+            if self.auto_trader.current_regime == "ranging":
+                print(f"\n  📊 RANGING MARKET DETECTED:")
+                print(f"     • High whipsaw ratio detected (MA crossovers failing)")
+                print(f"     • Switched to MEAN REVERSION strategy")
+                print(f"     • Will buy oversold conditions, sell overbought")
+            elif self.auto_trader.current_regime == "trending":
+                print(f"\n  📈 TRENDING MARKET DETECTED:")
+                print(f"     • Clear directional movement")
+                print(f"     • Using MA CROSSOVER strategy")
+            elif self.auto_trader.current_regime == "volatile":
+                print(f"\n  ⚡ VOLATILE MARKET DETECTED:")
+                print(f"     • High volatility with volume spikes")
+                print(f"     • Using BREAKOUT strategy")
 
         session_duration = datetime.now() - self.auto_trader.strategy_start_time
         hours = session_duration.total_seconds() / 3600
@@ -840,7 +954,7 @@ class CryptoShell(cmd.Cmd):
             long_window = self.auto_trader.long_window
         else:
             try:
-                with open('best_strategy.json','r') as f:
+                with open('best_strategy.json', 'r') as f:
                     best_params = json.load(f)
                 if best_params.get('Strategy') == 'MA':
                     short_window = int(best_params['Short_Window'])
@@ -848,18 +962,21 @@ class CryptoShell(cmd.Cmd):
             except:
                 print("Could not read 'best_strategy.json' for windows. Using defaults.")
 
-        self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
+        self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(
+            symbol).to_dict('list')
 
         def update_shared_data():
             while not self.stop_event.is_set():
-                self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(symbol).to_dict('list')
+                self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(
+                    symbol).to_dict('list')
                 time.sleep(60)
 
         threading.Thread(target=update_shared_data, daemon=True).start()
 
         self.chart_process = Process(
             target=run_dash_app,
-            args=(self.data_manager_dict, symbol, bar_size, short_window, long_window)
+            args=(self.data_manager_dict, symbol,
+                  bar_size, short_window, long_window)
         )
         self.chart_process.start()
         print("Dash app is running at http://127.0.0.1:8050/")
