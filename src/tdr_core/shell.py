@@ -88,12 +88,318 @@ class CryptoShell(cmd.Cmd):
             'debug_bars': 'debug_bars [count]',
             'debug_strategy_state': 'debug_strategy_state',
             'debug_recent_trades': 'debug_recent_trades [count]',
-            'force_signal_check': 'force_signal_check'
+            'force_signal_check': 'force_signal_check',
+            'get_recent_conditions': 'get_recent_conditions [output_file]'
         }
 
         # Register callbacks
         self.data_manager.add_candlestick_observer(self.candlestick_callback)
         self.data_manager.add_trade_observer(self.trade_callback)
+
+    def do_get_recent_conditions(self, arg):
+        """
+        Analyze recent market conditions and generate a comprehensive report.
+        Usage: get-recent-conditions [output_file]
+        """
+        output_file = arg.strip() if arg.strip() else 'recent_conditions_report.json'
+        
+        try:
+            print("Analyzing recent market conditions...")
+            
+            # Get current data
+            df = self.data_manager.get_price_dataframe('btcusd')
+            if df.empty:
+                print("No data available for analysis.")
+                return
+                
+            from indicators.technical_indicators import ensure_datetime_index
+            df = ensure_datetime_index(df)
+            
+            # Get current time and calculate periods
+            from datetime import datetime, timedelta
+            now = datetime.now()
+            
+            periods = {
+                '1week': now - timedelta(weeks=1),
+                '2weeks': now - timedelta(weeks=2), 
+                '4weeks': now - timedelta(weeks=4)
+            }
+            
+            analysis_results = {
+                'analysis_timestamp': now.isoformat(),
+                'data_summary': {
+                    'total_records': len(df),
+                    'date_range': {
+                        'start': df.index[0].isoformat(),
+                        'end': df.index[-1].isoformat()
+                    },
+                    'current_price': float(df['close'].iloc[-1]) if 'close' in df.columns else float(df['price'].iloc[-1])
+                },
+                'periods': {}
+            }
+            
+            # Analyze each time period
+            for period_name, start_date in periods.items():
+                period_df = df[df.index >= start_date].copy()
+                if len(period_df) < 10:  # Need minimum data
+                    continue
+                    
+                period_analysis = self._analyze_period_conditions(period_df, period_name)
+                analysis_results['periods'][period_name] = period_analysis
+            
+            # Current strategy analysis
+            if self.auto_trader and self.auto_trader.running:
+                strategy_analysis = self._analyze_current_strategy_performance()
+                analysis_results['current_strategy'] = strategy_analysis
+            
+            # Market regime detection
+            regime_analysis = self._detect_market_regime(df)
+            analysis_results['market_regime'] = regime_analysis
+            
+            # Trading performance analysis
+            if os.path.exists('trades.json'):
+                trading_analysis = self._analyze_trading_performance()
+                analysis_results['trading_performance'] = trading_analysis
+            
+            # Save results
+            import json
+            with open(output_file, 'w') as f:
+                json.dump(analysis_results, f, indent=2)
+                
+            print(f"Analysis complete! Results saved to {output_file}")
+            
+            # Print summary
+            self._print_conditions_summary(analysis_results)
+            
+        except Exception as e:
+            print(f"Error during analysis: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _analyze_period_conditions(self, df, period_name):
+        """Analyze market conditions for a specific time period"""
+        if df.empty:
+            return {}
+            
+        price_col = 'close' if 'close' in df.columns else 'price'
+        
+        # Basic price metrics
+        price_change = (df[price_col].iloc[-1] / df[price_col].iloc[0] - 1) * 100
+        volatility = df[price_col].pct_change().std() * (24*365)**0.5 * 100  # Annualized
+        
+        # Calculate various indicators
+        df_copy = df.copy()
+        
+        # Moving averages
+        df_copy['ma_short'] = df_copy[price_col].rolling(12).mean()
+        df_copy['ma_long'] = df_copy[price_col].rolling(36).mean()
+        df_copy['ma_signal'] = 0
+        df_copy.loc[df_copy['ma_short'] > df_copy['ma_long'], 'ma_signal'] = 1
+        df_copy.loc[df_copy['ma_short'] < df_copy['ma_long'], 'ma_signal'] = -1
+        
+        # RSI
+        delta = df_copy[price_col].diff()
+        gain = (delta.clip(lower=0)).rolling(14).mean()
+        loss = (-delta.clip(upper=0)).rolling(14).mean()
+        rs = gain / loss
+        df_copy['rsi'] = 100 - (100 / (1 + rs))
+        
+        # Signal changes (whipsawing detection)
+        ma_signal_changes = df_copy['ma_signal'].diff().abs().sum()
+        
+        # Trend consistency
+        price_direction_changes = (df_copy[price_col].diff().apply(lambda x: 1 if x > 0 else -1).diff() != 0).sum()
+        
+        # Recent performance of signals
+        ma_signals = df_copy['ma_signal'].dropna()
+        recent_ma_accuracy = 0
+        if len(ma_signals) > 10:
+            # Simple signal accuracy based on price direction after signal
+            correct_signals = 0
+            total_signals = 0
+            for i in range(10, len(df_copy)):
+                if df_copy['ma_signal'].iloc[i] != 0:
+                    signal = df_copy['ma_signal'].iloc[i]
+                    # Look ahead 5 periods to see if signal was correct
+                    if i + 5 < len(df_copy):
+                        future_return = (df_copy[price_col].iloc[i+5] / df_copy[price_col].iloc[i] - 1)
+                        if (signal == 1 and future_return > 0) or (signal == -1 and future_return < 0):
+                            correct_signals += 1
+                        total_signals += 1
+            
+            recent_ma_accuracy = (correct_signals / total_signals * 100) if total_signals > 0 else 0
+        
+        return {
+            'period': period_name,
+            'data_points': len(df),
+            'price_metrics': {
+                'total_return_pct': price_change,
+                'volatility_annualized_pct': volatility,
+                'max_price': float(df[price_col].max()),
+                'min_price': float(df[price_col].min()),
+                'avg_price': float(df[price_col].mean())
+            },
+            'market_behavior': {
+                'ma_signal_changes': int(ma_signal_changes),
+                'price_direction_changes': int(price_direction_changes),
+                'whipsaw_ratio': ma_signal_changes / len(df) * 100,  # signals per 100 bars
+                'trend_consistency': max(0, 100 - (price_direction_changes / len(df) * 100))
+            },
+            'indicators': {
+                'current_rsi': float(df_copy['rsi'].iloc[-1]) if not df_copy['rsi'].isna().all() else None,
+                'avg_rsi': float(df_copy['rsi'].mean()) if not df_copy['rsi'].isna().all() else None,
+                'ma_signal_accuracy_pct': recent_ma_accuracy,
+                'current_ma_signal': int(df_copy['ma_signal'].iloc[-1]) if not df_copy['ma_signal'].isna().all() else 0
+            }
+        }
+
+    def _analyze_current_strategy_performance(self):
+        """Analyze current running strategy performance"""
+        if not self.auto_trader:
+            return {}
+            
+        status = self.auto_trader.get_status()
+        
+        return {
+            'strategy_type': type(self.auto_trader).__name__,
+            'running_time_hours': (datetime.now() - self.auto_trader.strategy_start_time).total_seconds() / 3600,
+            'position': status.get('position', 0),
+            'trades_today': status.get('trade_count_today', 0),
+            'total_trades': status.get('trades_executed', 0),
+            'win_rate_pct': status.get('win_rate', 0),
+            'total_return_pct': status.get('total_return_pct', 0),
+            'unrealized_pnl': status.get('position_info', {}).get('unrealized_pnl', 0),
+            'balance_usd': status.get('balance_usd', 0),
+            'balance_btc': status.get('balance_btc', 0)
+        }
+
+    def _detect_market_regime(self, df):
+        """Detect current market regime (trending, ranging, volatile)"""
+        if len(df) < 50:
+            return {'regime': 'insufficient_data'}
+            
+        price_col = 'close' if 'close' in df.columns else 'price'
+        
+        # Get recent 50 periods for regime detection
+        recent_df = df.tail(50).copy()
+        
+        # Calculate regime indicators
+        returns = recent_df[price_col].pct_change().dropna()
+        volatility = returns.std()
+        
+        # Trend strength
+        ma_20 = recent_df[price_col].rolling(20).mean()
+        trend_strength = abs(recent_df[price_col].iloc[-1] / ma_20.iloc[-1] - 1)
+        
+        # Price range vs trend
+        price_range = (recent_df[price_col].max() - recent_df[price_col].min()) / recent_df[price_col].mean()
+        
+        # Determine regime
+        if volatility > 0.03:  # High volatility
+            regime = 'volatile'
+        elif trend_strength > 0.05:  # Strong trend
+            regime = 'trending'
+        else:
+            regime = 'ranging'
+        
+        return {
+            'regime': regime,
+            'volatility': float(volatility),
+            'trend_strength': float(trend_strength),
+            'price_range_ratio': float(price_range),
+            'confidence': 'high' if max(volatility*10, trend_strength*10, price_range*5) > 0.3 else 'medium'
+        }
+
+    def _analyze_trading_performance(self):
+        """Analyze recent trading performance from trades.json"""
+        try:
+            with open('trades.json', 'r') as f:
+                trades = json.load(f)
+            
+            if not trades:
+                return {'message': 'no_trades_found'}
+            
+            # Recent trades analysis
+            recent_trades = trades[-20:] if len(trades) > 20 else trades
+            
+            total_trades = len(recent_trades)
+            buy_trades = sum(1 for t in recent_trades if t['type'] == 'buy')
+            sell_trades = sum(1 for t in recent_trades if t['type'] == 'sell')
+            
+            # Calculate rough P&L (simplified)
+            pnl_estimate = 0
+            position = 0
+            cost_basis = 0
+            
+            for trade in recent_trades:
+                if trade['type'] == 'buy':
+                    cost_basis += trade['amount'] * trade['price']
+                    position += trade['amount']
+                elif trade['type'] == 'sell':
+                    if position > 0:
+                        avg_cost = cost_basis / position if position > 0 else trade['price']
+                        pnl_estimate += (trade['price'] - avg_cost) * trade['amount']
+                        position -= trade['amount']
+                        if position <= 0:
+                            cost_basis = 0
+                            position = 0
+            
+            # Trade frequency
+            if len(recent_trades) >= 2:
+                first_trade_time = datetime.fromisoformat(recent_trades[0]['timestamp'])
+                last_trade_time = datetime.fromisoformat(recent_trades[-1]['timestamp'])
+                time_span_hours = (last_trade_time - first_trade_time).total_seconds() / 3600
+                trades_per_day = (total_trades / time_span_hours * 24) if time_span_hours > 0 else 0
+            else:
+                trades_per_day = 0
+            
+            return {
+                'recent_trades_count': total_trades,
+                'buy_trades': buy_trades,
+                'sell_trades': sell_trades,
+                'estimated_pnl': pnl_estimate,
+                'trades_per_day': trades_per_day,
+                'latest_trade_timestamp': recent_trades[-1]['timestamp'] if recent_trades else None
+            }
+            
+        except Exception as e:
+            return {'error': str(e)}
+
+    def _print_conditions_summary(self, results):
+        """Print a summary of the analysis results"""
+        print("\n" + "="*60)
+        print("RECENT MARKET CONDITIONS SUMMARY")
+        print("="*60)
+        
+        # Current price
+        current_price = results['data_summary']['current_price']
+        print(f"Current Price: ${current_price:.2f}")
+        
+        # Market regime
+        regime = results.get('market_regime', {})
+        print(f"Market Regime: {regime.get('regime', 'unknown').upper()}")
+        print(f"Volatility: {regime.get('volatility', 0)*100:.1f}%")
+        
+        # Period analysis
+        print(f"\nPERIOD ANALYSIS:")
+        for period, data in results.get('periods', {}).items():
+            print(f"\n{period.upper()}:")
+            print(f"  Return: {data.get('price_metrics', {}).get('total_return_pct', 0):.1f}%")
+            print(f"  Whipsaw Ratio: {data.get('market_behavior', {}).get('whipsaw_ratio', 0):.1f} signals/100 bars")
+            print(f"  MA Signal Accuracy: {data.get('indicators', {}).get('ma_signal_accuracy_pct', 0):.1f}%")
+        
+        # Strategy performance
+        if 'current_strategy' in results:
+            strat = results['current_strategy']
+            print(f"\nCURRENT STRATEGY:")
+            print(f"  Type: {strat.get('strategy_type', 'unknown')}")
+            print(f"  Win Rate: {strat.get('win_rate_pct', 0):.1f}%")
+            print(f"  Total Return: {strat.get('total_return_pct', 0):.1f}%")
+            print(f"  Trades Today: {strat.get('trades_today', 0)}")
+        
+        print(f"\n" + "="*60)
+        print("Recommendation: Review the JSON file for detailed analysis.")
+        print("="*60)
 
     def emptyline(self):
         pass
