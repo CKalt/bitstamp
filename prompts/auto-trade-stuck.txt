@@ -1,0 +1,54 @@
+Can you please see why this system seems to be missing trades? Here is what I do:
+
+python src/tdr.py
+
+at the interactive prompt I type:
+
+auto_trade 1.68btc long
+
+and it seems to run okay for a day or so, but then a day later I notice that the current position seems to be losing a lot so I restart and perform an auto_trade command like above to indicate which position it had me holding and it immediately reverses it.  Thus it was for some reason waiting for me to restart it so that it would pick the correct direction.
+
+Here is the current best_strategy.json file:
+
+cat best_strategy.json
+
+{
+
+    "Frequency": "1H",
+
+    "Strategy": "MA",
+
+    "Short_Window": 4,
+
+    "Long_Window": 26,
+
+    "Final_Balance": 11125.139699847114,
+
+    "Total_Return": 11.251396998471137,
+
+    "Total_Trades": 65.0,
+
+    "Average_Trades_Per_Day": 2.096774193548387,
+
+    "Profit_Factor": 1.0958628566643673,
+
+    "Sharpe_Ratio": 0.46216255219756897,
+
+    "Bar_Size": "1H",
+
+    "Last_Signal_Timestamp": 1745870400,
+
+    "Last_Signal_Action": "GO LONG",
+
+    "Last_Trade_Timestamp": 1745873721,
+
+    "Last_Trade_Price": 94451.0,
+
+    "do_live_trades": true
+
+}
+
+This is the file that it loads so that it knows what strategy to auto trade using.
+
+Here are the python files:
+
