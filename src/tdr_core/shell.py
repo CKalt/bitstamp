@@ -8,6 +8,10 @@
 #      the best strategy's final signal is already short, we do NOT force a SELL
 #      when the user says "auto_trade 192000usd short."
 #   2) Preserved existing logic, code, and comments. Only minimal lines added.
+#   3) INTEGRATION: Added support for the new charting module with port and alt_strategy_file support
+#   4) INTEGRATION: Updated do_chart() method to support: chart <symbol> <bar_size> <port> <alt_strategy_file>
+#   5) INTEGRATION: Replaced embedded run_dash_app with import from tdr_core.charting
+#   6) INTEGRATION: Updated stop_dash_app to handle dynamic ports
 # ----------------------------------------------------------------------------
 
 import cmd
@@ -26,144 +30,6 @@ from multiprocessing import Process, Manager
 from tdr_core.strategies import MACrossoverStrategy, AdaptiveMultiStrategy
 
 ###############################################################################
-
-
-def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window):
-    """
-    Dash-based real-time candlestick chart with MA signals.
-    """
-    import dash
-    from dash import dcc, html
-    from dash.dependencies import Output, Input
-    import plotly.graph_objs as go
-    import threading
-    import pandas as pd
-    import numpy as np
-    from flask import Flask, request
-
-    server = Flask(__name__)
-    app = dash.Dash(__name__, server=server)
-
-    @server.route('/shutdown')
-    def shutdown():
-        func = request.environ.get('werkzeug.server.shutdown')
-        if func is None:
-            return 'Not running with the Werkzeug Server'
-        func()
-        return 'Server shutting down...'
-
-    app.layout = html.Div(children=[
-        html.H1(children='{} Real-time Candlestick Chart'.format(symbol.upper())),
-        dcc.Graph(id='live-graph', style={'width': '100%', 'height': '80vh'}),
-        dcc.Interval(id='graph-update', interval=60*1000, n_intervals=0)
-    ])
-
-    @app.callback(
-        Output('live-graph', 'figure'),
-        [Input('graph-update', 'n_intervals'),
-         Input('live-graph', 'relayoutData')]
-    )
-    def update_graph_live(n, relayout_data):
-        df = pd.DataFrame.from_dict(data_manager_dict[symbol])
-        if df.empty:
-            return {}
-
-        df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
-        df.set_index('datetime', inplace=True)
-
-        try:
-            df_resampled = df.resample(bar_size).agg({
-                'open': 'first',
-                'high': 'max',
-                'low': 'min',
-                'close': 'last',
-                'volume': 'sum',
-                'trades': 'sum',
-                'timestamp': 'last',
-                'source': 'last'
-            }).dropna()
-        except ValueError:
-            return {}
-
-        if len(df_resampled) < long_window:
-            return {}
-
-        from indicators.technical_indicators import add_moving_averages, generate_ma_signals
-        df_ma = add_moving_averages(
-            df_resampled.copy(), short_window, long_window, price_col='close')
-        df_ma = generate_ma_signals(df_ma)
-        df_ma['Signal_Change'] = df_ma['MA_Signal'].diff()
-        df_ma['Buy_Signal_Price'] = np.where(
-            df_ma['Signal_Change'] == 2, df_ma['close'], np.nan)
-        df_ma['Sell_Signal_Price'] = np.where(
-            df_ma['Signal_Change'] == -2, df_ma['close'], np.nan)
-
-        if relayout_data and 'xaxis.range[0]' in relayout_data and 'xaxis.range[1]' in relayout_data:
-            x_start = pd.to_datetime(relayout_data['xaxis.range[0]'])
-            x_end = pd.to_datetime(relayout_data['xaxis.range[1]'])
-        else:
-            x_end = df_ma.index.max()
-            x_start = x_end - pd.Timedelta(days=7)
-
-        df_visible = df_ma[(df_ma.index >= x_start) & (df_ma.index <= x_end)]
-        if df_visible.empty:
-            df_visible = df_ma
-
-        y_min = df_visible[['low', 'Short_MA', 'Long_MA',
-                            'Buy_Signal_Price', 'Sell_Signal_Price']].min().min()
-        y_max = df_visible[['high', 'Short_MA', 'Long_MA',
-                            'Buy_Signal_Price', 'Sell_Signal_Price']].max().max()
-        y_padding = (y_max - y_min) * 0.05
-        y_min -= y_padding
-        y_max += y_padding
-
-        candlestick = go.Candlestick(
-            x=df_visible.index,
-            open=df_visible['open'],
-            high=df_visible['high'],
-            low=df_visible['low'],
-            close=df_visible['close'],
-            name='Candlestick'
-        )
-        short_ma_line = go.Scatter(
-            x=df_visible.index,
-            y=df_visible['Short_MA'],
-            line=dict(color='blue', width=1),
-            name=f'Short MA ({short_window})'
-        )
-        long_ma_line = go.Scatter(
-            x=df_visible.index,
-            y=df_visible['Long_MA'],
-            line=dict(color='red', width=1),
-            name=f'Long MA ({long_window})'
-        )
-        buy_signals = go.Scatter(
-            x=df_visible.index,
-            y=df_visible['Buy_Signal_Price'],
-            mode='markers',
-            marker=dict(symbol='triangle-up', color='green', size=12),
-            name='Buy Signal'
-        )
-        sell_signals = go.Scatter(
-            x=df_visible.index,
-            y=df_visible['Sell_Signal_Price'],
-            mode='markers',
-            marker=dict(symbol='triangle-down', color='red', size=12),
-            name='Sell Signal'
-        )
-
-        data = [candlestick, short_ma_line,
-                long_ma_line, buy_signals, sell_signals]
-        layout = go.Layout(
-            xaxis=dict(title='Time', range=[x_start, x_end]),
-            yaxis=dict(title='Price ($)', range=[y_min, y_max]),
-            title='{} Candlestick Chart with MAs'.format(symbol.upper()),
-            height=800
-        )
-
-        return {'data': data, 'layout': layout}
-
-    app.run_server(debug=False, use_reloader=False)
 
 
 ###############################################################################
@@ -188,6 +54,7 @@ class CryptoShell(cmd.Cmd):
         self.live_trading = live_trading
         self.auto_trader = None
         self.chart_process = None
+        self.chart_port = None  # Track the port for shutdown
         self.stop_event = stop_event
         self.manager = Manager()
         self.data_manager_dict = self.manager.dict()
@@ -206,7 +73,7 @@ class CryptoShell(cmd.Cmd):
             'auto_trade': 'auto_trade 2.47btc long',
             'stop_auto_trade': 'stop_auto_trade',
             'status': 'status [long]',
-            'chart': 'chart btcusd 1H'
+            'chart': 'chart btcusd 1H 8051 alt_strategy-1.json'
         }
 
         # Register callbacks
@@ -905,10 +772,13 @@ class CryptoShell(cmd.Cmd):
     def stop_dash_app(self):
         """
         If a Dash app is running in a separate process, attempt to shut it down.
+        Uses the stored chart_port to connect to the correct instance.
         """
         if self.chart_process and self.chart_process.is_alive():
             try:
-                requests.get('http://127.0.0.1:8050/shutdown')
+                # Use the stored port for shutdown, default to 8050 if not set
+                port = self.chart_port or 8050
+                requests.get(f'http://127.0.0.1:{port}/shutdown')
                 self.chart_process.join()
                 print("Dash app shut down.")
             except Exception as e:
@@ -922,49 +792,76 @@ class CryptoShell(cmd.Cmd):
 
     def do_chart(self, arg):
         """
-        Show a Dash-based chart: chart [symbol] [bar_size].
-        E.g., chart btcusd 1H
+        Show a Dash-based chart with strategy comparison support.
+        
+        Usage: chart [symbol] [bar_size] [port] [alt_strategy_file]
+        
+        Examples:
+          chart btcusd 1H
+          chart btcusd 1H 8051
+          chart btcusd 1H 8051 alt_strategy-1.json
         """
         args = arg.split()
         symbol = 'btcusd'
         bar_size = '1H'
+        port = 8050
+        alt_strategy_file = None
+        
+        # Parse arguments
         if len(args) >= 1:
             symbol = args[0].strip().lower()
         if len(args) >= 2:
             bar_size = args[1].strip()
+        if len(args) >= 3:
+            try:
+                port = int(args[2])
+            except ValueError:
+                print(f"Invalid port '{args[2]}', using default 8050")
+                port = 8050
+        if len(args) >= 4:
+            alt_strategy_file = args[3].strip()
+            
+        # Validate symbol
         if symbol not in self.data_manager.data:
             print(f"No data for symbol '{symbol}'.")
             return
 
+        # Check for required dependencies
         try:
-            import dash
-            from dash import dcc, html
-            from dash.dependencies import Output, Input
-            import plotly.graph_objs as go
-            from flask import Flask, request
-            from multiprocessing import Process
+            from tdr_core.charting import run_dash_app, DASH_AVAILABLE
+            if not DASH_AVAILABLE:
+                print("Install dash & plotly first (pip install dash plotly).")
+                return
         except ImportError:
-            print("Install dash & plotly first (pip install dash plotly).")
+            print("Charting module not found. Please ensure tdr_core/charting.py is present.")
             return
 
+        # Determine strategy parameters
         short_window = 12
         long_window = 36
+        strategy_name = 'MA Strategy'
+        
+        # Get parameters from auto_trader if available
         if self.auto_trader and isinstance(self.auto_trader, MACrossoverStrategy):
             short_window = self.auto_trader.short_window
             long_window = self.auto_trader.long_window
         else:
+            # Try to read from best_strategy.json
             try:
                 with open('best_strategy.json', 'r') as f:
                     best_params = json.load(f)
                 if best_params.get('Strategy') == 'MA':
                     short_window = int(best_params['Short_Window'])
                     long_window = int(best_params['Long_Window'])
+                    strategy_name = f"MA({short_window}, {long_window})"
             except:
                 print("Could not read 'best_strategy.json' for windows. Using defaults.")
 
+        # Update shared data dictionary for the chart
         self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(
             symbol).to_dict('list')
 
+        # Start background thread to keep shared data updated
         def update_shared_data():
             while not self.stop_event.is_set():
                 self.data_manager_dict[symbol] = self.data_manager.get_price_dataframe(
@@ -973,11 +870,36 @@ class CryptoShell(cmd.Cmd):
 
         threading.Thread(target=update_shared_data, daemon=True).start()
 
+        # Store the port for shutdown purposes
+        self.chart_port = port
+
+        # Start the chart process
         self.chart_process = Process(
             target=run_dash_app,
-            args=(self.data_manager_dict, symbol,
-                  bar_size, short_window, long_window)
+            args=(
+                self.data_manager_dict,
+                symbol,
+                bar_size,
+                short_window,
+                long_window
+            ),
+            kwargs={
+                'host': '0.0.0.0',
+                'port': port,
+                'strategy_file': 'best_strategy.json',
+                'strategy_name': strategy_name,
+                'alt_strategy_file': alt_strategy_file
+            }
         )
         self.chart_process.start()
-        print("Dash app is running at http://127.0.0.1:8050/")
+        
+        # Print access information
+        print(f"Dash app is running at http://127.0.0.1:{port}/")
+        print(f"Symbol: {symbol.upper()}, Bar Size: {bar_size}")
+        print(f"Strategy: {strategy_name}")
+        if alt_strategy_file:
+            print(f"Alternate Strategy File: {alt_strategy_file}")
+        print("Use the dropdown in the web interface to compare strategies.")
+        print(f"To stop the chart, use 'quit' or shut down via http://127.0.0.1:{port}/shutdown")
+        
         time.sleep(1)
