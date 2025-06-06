@@ -688,7 +688,7 @@ class MACrossoverStrategy:
             mark_value = self.position_size * cp
             position_info['unrealized_pnl'] = mark_value - cost_basis
 
-        elif self.position == -1 and self.position_size < -1e-8:
+        elif self.position == -1 and abs(self.position_size) > 1e-8:  # Check absolute value
             # For a short, position_size is negative
             avg_entry_price = 0.0
             if abs(self.position_size) > 1e-8:

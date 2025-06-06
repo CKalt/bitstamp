@@ -469,8 +469,9 @@ class CryptoShell(cmd.Cmd):
         if desired_position == -1 and hist_position == -1 and current_market_price > 0:
             short_btc = amount_num / current_market_price
             if self.auto_trader.position_size > -1e-8 and short_btc > 0:
-                self.auto_trader.position_size = - short_btc
-                self.auto_trader.position_cost_basis = short_btc * current_market_price
+                self.auto_trader.position_size = -short_btc  # Should be -1.67
+                # Should be 174540 (the USD amount)
+                self.auto_trader.position_cost_basis = amount_num
                 self.logger.info(
                     f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
                     f"for an initial SHORT of {short_btc:.6f} BTC (=-{short_btc:.6f}) at ${current_market_price:.2f}."
@@ -793,9 +794,9 @@ class CryptoShell(cmd.Cmd):
     def do_chart(self, arg):
         """
         Show a Dash-based chart with strategy comparison support.
-        
+
         Usage: chart [symbol] [bar_size] [port] [alt_strategy_file]
-        
+
         Examples:
           chart btcusd 1H
           chart btcusd 1H 8051
@@ -806,7 +807,7 @@ class CryptoShell(cmd.Cmd):
         bar_size = '1H'
         port = 8050
         alt_strategy_file = None
-        
+
         # Parse arguments
         if len(args) >= 1:
             symbol = args[0].strip().lower()
@@ -820,7 +821,7 @@ class CryptoShell(cmd.Cmd):
                 port = 8050
         if len(args) >= 4:
             alt_strategy_file = args[3].strip()
-            
+
         # Validate symbol
         if symbol not in self.data_manager.data:
             print(f"No data for symbol '{symbol}'.")
@@ -833,14 +834,15 @@ class CryptoShell(cmd.Cmd):
                 print("Install dash & plotly first (pip install dash plotly).")
                 return
         except ImportError:
-            print("Charting module not found. Please ensure tdr_core/charting.py is present.")
+            print(
+                "Charting module not found. Please ensure tdr_core/charting.py is present.")
             return
 
         # Determine strategy parameters
         short_window = 12
         long_window = 36
         strategy_name = 'MA Strategy'
-        
+
         # Get parameters from auto_trader if available
         if self.auto_trader and isinstance(self.auto_trader, MACrossoverStrategy):
             short_window = self.auto_trader.short_window
@@ -892,7 +894,7 @@ class CryptoShell(cmd.Cmd):
             }
         )
         self.chart_process.start()
-        
+
         # Print access information
         print(f"Dash app is running at http://127.0.0.1:{port}/")
         print(f"Symbol: {symbol.upper()}, Bar Size: {bar_size}")
@@ -900,6 +902,7 @@ class CryptoShell(cmd.Cmd):
         if alt_strategy_file:
             print(f"Alternate Strategy File: {alt_strategy_file}")
         print("Use the dropdown in the web interface to compare strategies.")
-        print(f"To stop the chart, use 'quit' or shut down via http://127.0.0.1:{port}/shutdown")
-        
+        print(
+            f"To stop the chart, use 'quit' or shut down via http://127.0.0.1:{port}/shutdown")
+
         time.sleep(1)
