@@ -483,33 +483,24 @@ class CryptoShell(cmd.Cmd):
                     'theoretical': True
                 }
 
-        # If user request != hist_position => do immediate real trade
-        if desired_position == 1 and hist_position != 1 and current_market_price > 0:
-            buy_btc = amount_num / current_market_price
-            trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            self.logger.info(
-                f"(auto_trade) Forcing immediate BUY for {buy_btc:.6f} BTC at ${current_market_price:.2f}.")
-            self.auto_trader.execute_trade(
-                "buy",
-                current_market_price,
-                trade_ts,
-                datetime.now(),
-                buy_btc
-            )
-
-        elif desired_position == -1 and hist_position != -1 and current_market_price > 0:
-            sell_btc = amount_num / current_market_price
-            trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            self.logger.info(
-                f"(auto_trade) Forcing immediate SELL for {sell_btc:.6f} BTC at ${current_market_price:.2f}.")
-            self.auto_trader.execute_trade(
-                "sell",
-                current_market_price,
-                trade_ts,
-                datetime.now(),
-                sell_btc
-            )
-
+        # FIXED LOGIC: Trade to align current position with system recommendation
+        if desired_position != hist_position and current_market_price > 0:
+            if hist_position == 1:  # System says go LONG
+                # User is not long, so BUY to go long
+                buy_btc = amount_num / current_market_price
+                trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                self.logger.info(
+                    f"(auto_trade) System recommends LONG, executing BUY for {buy_btc:.6f} BTC")
+                self.auto_trader.execute_trade(
+                    "buy", current_market_price, trade_ts, datetime.now(), buy_btc)
+            elif hist_position == -1:  # System says go SHORT
+                # User is not short, so SELL to go short
+                sell_btc = amount_num / current_market_price
+                trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                self.logger.info(
+                    f"(auto_trade) System recommends SHORT, executing SELL for {sell_btc:.6f} BTC")
+                self.auto_trader.execute_trade(
+                    "sell", current_market_price, trade_ts, datetime.now(), sell_btc)
         self.auto_trader.start()
         print(f"Auto-trading started with {balance_str}, position={pos_str}, "
               f"MA strategy (Short={short_window}, Long={long_window}), do_live_trades={do_live}")
