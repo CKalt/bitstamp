@@ -44,6 +44,7 @@ class MACrossoverStrategy:
     Implements a basic Moving Average Crossover strategy with position tracking
     and optional daily trade limits.
     """
+
     def __init__(
         self,
         data_manager,
@@ -106,13 +107,14 @@ class MACrossoverStrategy:
         self.max_trades_per_day = max_trades_per_day
         self.trade_count_today = 0
         self.current_day = datetime.utcnow().date()
-        self.logger.debug(f"Trade limit set to {self.max_trades_per_day} trades/day.")
+        self.logger.debug(
+            f"Trade limit set to {self.max_trades_per_day} trades/day.")
 
         self.trades_this_hour = []
 
         # Cost basis logic
         self.position_cost_basis = 0.0
-        self.position_size       = 0.0
+        self.position_size = 0.0
 
         # For storing an initial theoretical trade if hist_position matches user request
         self.theoretical_trade = None
@@ -131,14 +133,16 @@ class MACrossoverStrategy:
 
     def _clean_up_hourly_trades(self):
         one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-        self.trades_this_hour = [t for t in self.trades_this_hour if t > one_hour_ago]
+        self.trades_this_hour = [
+            t for t in self.trades_this_hour if t > one_hour_ago]
 
     def start(self):
         """
         Start the strategy loop in a background thread.
         """
         self.running = True
-        self.strategy_thread = threading.Thread(target=self.run_strategy_loop, daemon=True)
+        self.strategy_thread = threading.Thread(
+            target=self.run_strategy_loop, daemon=True)
         self.strategy_thread.start()
         self.logger.info("Strategy loop started.")
 
@@ -154,8 +158,10 @@ class MACrossoverStrategy:
             try:
                 file_path = os.path.abspath(self.trade_log_file)
                 with open(file_path, 'w') as f:
-                    json.dump([t.to_dict() for t in self.trade_log], f, indent=2)
-                self.logger.info(f"Trades logged to '{file_path}' (dry-run mode).")
+                    json.dump([t.to_dict()
+                              for t in self.trade_log], f, indent=2)
+                self.logger.info(
+                    f"Trades logged to '{file_path}' (dry-run mode).")
             except Exception as e:
                 self.logger.error(f"Failed to write trades: {e}")
 
@@ -184,7 +190,8 @@ class MACrossoverStrategy:
                     }).dropna()
 
                     if len(df_resampled) >= self.long_window:
-                        df_ma = add_moving_averages(df_resampled.copy(), self.short_window, self.long_window, price_col='close')
+                        df_ma = add_moving_averages(
+                            df_resampled.copy(), self.short_window, self.long_window, price_col='close')
                         df_ma = generate_ma_signals(df_ma)
 
                         latest_signal = df_ma.iloc[-1]['MA_Signal']
@@ -197,11 +204,13 @@ class MACrossoverStrategy:
                         self.df_ma = df_ma
 
                         # Check signals (MA crossover)
-                        self.check_for_signals(latest_signal, current_price, signal_time)
+                        self.check_for_signals(
+                            latest_signal, current_price, signal_time)
                     else:
                         self.logger.debug("Not enough data to compute MAs.")
                 except Exception as e:
-                    self.logger.error(f"Error in strategy loop for {self.symbol}: {e}")
+                    self.logger.error(
+                        f"Error in strategy loop for {self.symbol}: {e}")
             else:
                 self.logger.debug(f"No data loaded for {self.symbol} yet.")
             time.sleep(60)
@@ -261,7 +270,7 @@ class MACrossoverStrategy:
 
         df_ma = df_live.copy()
         df_ma['Short_MA'] = df_ma['close'].rolling(self.short_window).mean()
-        df_ma['Long_MA']  = df_ma['close'].rolling(self.long_window).mean()
+        df_ma['Long_MA'] = df_ma['close'].rolling(self.long_window).mean()
         df_ma.dropna(inplace=True)
         if df_ma.empty:
             return
@@ -298,7 +307,8 @@ class MACrossoverStrategy:
         # If we see a BUY signal
         if latest_signal == 1 and self.position <= 0:
             if self.trade_count_today >= self.max_trades_per_day:
-                self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping trade.")
+                self.logger.info(
+                    f"Reached daily trade limit {self.max_trades_per_day}, skipping trade.")
                 return
 
             self.logger.info(f"Buy signal triggered at {current_price}")
@@ -313,7 +323,8 @@ class MACrossoverStrategy:
         # If we see a SELL signal
         elif latest_signal == -1 and self.position >= 0:
             if self.trade_count_today >= self.max_trades_per_day:
-                self.logger.info(f"Reached daily trade limit {self.max_trades_per_day}, skipping trade.")
+                self.logger.info(
+                    f"Reached daily trade limit {self.max_trades_per_day}, skipping trade.")
                 return
 
             self.logger.info(f"Sell signal triggered at {current_price}")
@@ -355,16 +366,18 @@ class MACrossoverStrategy:
         (NEW) If live_trading=True, append to trades.json immediately.
         """
         if trade_btc < 1e-8:
-            self.logger.debug(f"Skipping trade because fill_btc is too small: {trade_btc}")
+            self.logger.debug(
+                f"Skipping trade because fill_btc is too small: {trade_btc}")
             return
 
         self._clean_up_hourly_trades()
         max_trades_per_hour = 3
         if len(self.trades_this_hour) >= max_trades_per_hour:
-            self.logger.info(f"Reached hourly trade limit {max_trades_per_hour}, skipping trade.")
+            self.logger.info(
+                f"Reached hourly trade limit {max_trades_per_hour}, skipping trade.")
             return
 
-        from tdr_core.trade import Trade  
+        from tdr_core.trade import Trade
         trade_info = Trade(
             trade_type,
             self.symbol,
@@ -382,7 +395,8 @@ class MACrossoverStrategy:
 
         # Place order with the exchange if live.
         if self.live_trading:
-            result = self.order_placer.place_order(f"market-{trade_type}", self.symbol, trade_btc)
+            result = self.order_placer.place_order(
+                f"market-{trade_type}", self.symbol, trade_btc)
             self.logger.info(f"Executed LIVE {trade_type} order: {result}")
             trade_info.order_result = result
             if result.get("status") == "error":
@@ -406,13 +420,15 @@ class MACrossoverStrategy:
                 existing_trades.append(trade_info.to_dict())
                 with open(file_path, 'w') as f:
                     json.dump(existing_trades, f, indent=2)
-                self.logger.debug(f"Appended live trade to {self.trade_log_file}")
+                self.logger.debug(
+                    f"Appended live trade to {self.trade_log_file}")
             except Exception as e:
                 self.logger.error(f"Failed to write live trade: {e}")
 
         else:
             # Dry-run => no actual exchange order, just local simulation
-            self.logger.info(f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
+            self.logger.info(
+                f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
             self.trade_log.append(trade_info)
             self.update_balance(trade_type, price, trade_btc)
 
@@ -421,7 +437,8 @@ class MACrossoverStrategy:
 
         # If a theoretical trade existed, clear it
         if self.theoretical_trade is not None:
-            self.logger.debug("Clearing theoretical trade because an actual trade occurred.")
+            self.logger.debug(
+                "Clearing theoretical trade because an actual trade occurred.")
             self.theoretical_trade = None
 
     def update_balance(self, trade_type, fill_price, fill_btc):
@@ -441,10 +458,12 @@ class MACrossoverStrategy:
             total_cost_usd = cost_usd + fee
             if total_cost_usd > self.balance_usd:
                 # partial fill correction
-                possible_btc = self.balance_usd / (fill_price * (1 + self.fee_percentage))
+                possible_btc = self.balance_usd / \
+                    (fill_price * (1 + self.fee_percentage))
                 possible_btc = round(possible_btc, 8)
                 if possible_btc < 1e-8:
-                    self.logger.debug(f"Cannot buy anything with leftover USD. Skipping.")
+                    self.logger.debug(
+                        f"Cannot buy anything with leftover USD. Skipping.")
                     return
                 fill_btc = possible_btc
                 cost_usd = fill_btc * fill_price
@@ -562,7 +581,8 @@ class MACrossoverStrategy:
         """
         current_price = self.data_manager.get_current_price(self.symbol) or 0.0
         total_usd_value = self.balance_usd + (self.balance_btc * current_price)
-        total_btc_value = self.balance_btc + (self.balance_usd / current_price if current_price else 0.0)
+        total_btc_value = self.balance_btc + \
+            (self.balance_usd / current_price if current_price else 0.0)
         return total_usd_value, total_btc_value
 
     def get_status(self):
@@ -603,13 +623,17 @@ class MACrossoverStrategy:
             status['last_trade'] = self.last_trade_reason
             status['last_trade_data_source'] = self.last_trade_data_source
             if self.last_trade_signal_timestamp:
-                status['last_trade_signal_timestamp'] = self.last_trade_signal_timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                status['last_trade_signal_timestamp'] = self.last_trade_signal_timestamp.strftime(
+                    '%Y-%m-%d %H:%M:%S')
 
         if hasattr(self, 'df_ma') and not self.df_ma.empty:
-            status['ma_difference'] = self.df_ma.iloc[-1]['Short_MA'] - self.df_ma.iloc[-1]['Long_MA']
+            status['ma_difference'] = self.df_ma.iloc[-1]['Short_MA'] - \
+                self.df_ma.iloc[-1]['Long_MA']
             if len(self.df_ma) >= 2:
-                short_ma_slope = self.df_ma.iloc[-1]['Short_MA'] - self.df_ma.iloc[-2]['Short_MA']
-                long_ma_slope = self.df_ma.iloc[-1]['Long_MA'] - self.df_ma.iloc[-2]['Long_MA']
+                short_ma_slope = self.df_ma.iloc[-1]['Short_MA'] - \
+                    self.df_ma.iloc[-2]['Short_MA']
+                long_ma_slope = self.df_ma.iloc[-1]['Long_MA'] - \
+                    self.df_ma.iloc[-2]['Long_MA']
                 status['ma_slope_difference'] = short_ma_slope - long_ma_slope
                 status['short_ma_momentum'] = 'Increasing' if short_ma_slope > 0 else 'Decreasing'
                 status['long_ma_momentum'] = 'Increasing' if long_ma_slope > 0 else 'Decreasing'
@@ -620,9 +644,11 @@ class MACrossoverStrategy:
                 )
 
         if self.trades_executed > 0:
-            status['average_fee_per_trade'] = self.total_fees_paid / self.trades_executed
+            status['average_fee_per_trade'] = self.total_fees_paid / \
+                self.trades_executed
             status['risk_reward_ratio'] = (
-                abs(self.total_profit_loss / self.total_fees_paid) if self.total_fees_paid > 0 else 0
+                abs(self.total_profit_loss /
+                    self.total_fees_paid) if self.total_fees_paid > 0 else 0
             )
 
         # Mark-to-market updates
@@ -653,7 +679,8 @@ class MACrossoverStrategy:
 
         cp = position_info['current_price']
         if self.position == 1 and self.position_size > 1e-8:
-            avg_entry_price = (self.position_cost_basis / self.position_size) if self.position_size else 0.0
+            avg_entry_price = (self.position_cost_basis /
+                               self.position_size) if self.position_size else 0.0
             position_info['entry_price'] = avg_entry_price
             position_info['position_size_btc'] = self.position_size
             position_info['position_size_usd'] = self.position_size * cp
@@ -665,7 +692,8 @@ class MACrossoverStrategy:
             # For a short, position_size is negative
             avg_entry_price = 0.0
             if abs(self.position_size) > 1e-8:
-                avg_entry_price = self.position_cost_basis / abs(self.position_size)
+                avg_entry_price = self.position_cost_basis / \
+                    abs(self.position_size)
             position_info['entry_price'] = avg_entry_price
             position_info['position_size_btc'] = self.position_size
             position_info['position_size_usd'] = self.position_cost_basis
@@ -680,9 +708,11 @@ class MACrossoverStrategy:
         if status['ma_difference'] is not None:
             short_val = self.df_ma.iloc[-1]['Short_MA']
             long_val = self.df_ma.iloc[-1]['Long_MA']
-            avg_ma = (short_val + long_val) / 2.0 if (short_val + long_val) != 0 else 0.0
+            avg_ma = (short_val + long_val) / \
+                2.0 if (short_val + long_val) != 0 else 0.0
             if avg_ma != 0.0:
-                status['ma_signal_proximity'] = abs(short_val - long_val) / abs(avg_ma)
+                status['ma_signal_proximity'] = abs(
+                    short_val - long_val) / abs(avg_ma)
             else:
                 status['ma_signal_proximity'] = None
         else:
@@ -692,7 +722,8 @@ class MACrossoverStrategy:
         return status
 
     def _log_successful_trade(self, trade_info):
-        self.logger.info(f"Trade executed successfully: {trade_info.to_dict()}")
+        self.logger.info(
+            f"Trade executed successfully: {trade_info.to_dict()}")
 
     def _log_failed_trade(self, trade_info):
         self.logger.info(f"Trade failed/canceled: {trade_info.to_dict()}")
@@ -702,29 +733,31 @@ class MACrossoverStrategy:
 class AdaptiveMultiStrategy(MACrossoverStrategy):
     """
     Adaptive strategy that switches between different trading approaches:
-    
+
     TRENDING MARKETS: Uses MA crossovers (trend following)
     RANGING MARKETS: Uses mean reversion (RSI + Bollinger Bands)  
     VOLATILE MARKETS: Uses breakout strategies (MACD + volume)
-    
+
     This way we're ALWAYS trading optimally instead of sitting out!
     """
-    
+
     def __init__(self, *args, **kwargs):
         # Extract adaptive parameters
         self.regime_lookback = kwargs.pop('regime_lookback', 50)
-        self.regime_switch_threshold = kwargs.pop('regime_switch_threshold', 0.7)
+        self.regime_switch_threshold = kwargs.pop(
+            'regime_switch_threshold', 0.7)
         self.min_trade_gap_minutes = kwargs.pop('min_trade_gap_minutes', 30)
         self.rsi_oversold = kwargs.pop('rsi_oversold', 30)
         self.rsi_overbought = kwargs.pop('rsi_overbought', 70)
         self.bb_std_dev = kwargs.pop('bb_std_dev', 2.0)
         self.volume_threshold = kwargs.pop('volume_threshold', 1.5)
         self.macd_threshold = kwargs.pop('macd_threshold', 0.001)
-        self.signal_confirmation_bars = kwargs.pop('signal_confirmation_bars', 2)
-        
+        self.signal_confirmation_bars = kwargs.pop(
+            'signal_confirmation_bars', 2)
+
         # Initialize parent class
         super().__init__(*args, **kwargs)
-        
+
         # Adaptive state
         self.current_regime = "unknown"
         self.regime_confidence = 0.0
@@ -732,53 +765,61 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         self.strategy_switches_today = 0
         self.signal_history = []
         self.last_confirmed_signal = 0
-        
+
+        # Ensure critical attributes exist (fix AttributeError)
+        if not hasattr(self, 'last_trade_time'):
+            self.last_trade_time = None
+
         # Performance tracking by strategy
         self.strategy_performance = {
             "trending": {"trades": 0, "profit": 0.0},
-            "ranging": {"trades": 0, "profit": 0.0}, 
+            "ranging": {"trades": 0, "profit": 0.0},
             "volatile": {"trades": 0, "profit": 0.0}
         }
 
         self.logger.info(f"🎯 ADAPTIVE MULTI-STRATEGY INITIALIZED")
-        self.logger.info(f"   Will switch between TRENDING → RANGING → VOLATILE strategies")
-        self.logger.info(f"   Regime lookback: {self.regime_lookback}, Gap: {self.min_trade_gap_minutes}min")
+        self.logger.info(
+            f"   Will switch between TRENDING → RANGING → VOLATILE strategies")
+        self.logger.info(
+            f"   Regime lookback: {self.regime_lookback}, Gap: {self.min_trade_gap_minutes}min")
 
     def detect_market_regime(self, df):
         """Detect if market is trending, ranging, or volatile."""
         if len(df) < self.regime_lookback:
             return "unknown", 0.0, {}
-        
+
         recent_df = df.tail(self.regime_lookback).copy()
-        
+
         # Calculate market metrics
         price_start = recent_df['close'].iloc[0]
         price_end = recent_df['close'].iloc[-1]
         price_high = recent_df['close'].max()
         price_low = recent_df['close'].min()
-        
+
         total_return = abs(price_end - price_start) / price_start
         price_range = (price_high - price_low) / ((price_high + price_low) / 2)
         trend_strength = total_return / price_range if price_range > 0 else 0
-        
+
         # Volatility
         returns = recent_df['close'].pct_change().dropna()
         volatility = returns.std() if len(returns) > 1 else 0
-        
+
         # Whipsaw detection
-        df_temp = add_moving_averages(recent_df.copy(), self.short_window, self.long_window, price_col='close')
+        df_temp = add_moving_averages(
+            recent_df.copy(), self.short_window, self.long_window, price_col='close')
         df_temp = generate_ma_signals(df_temp)
         signal_changes = (df_temp['MA_Signal'].diff() != 0).sum()
         whipsaw_ratio = (signal_changes / len(df_temp)) * 100
-        
+
         # Range-bound detection
         ma_20 = recent_df['close'].rolling(20).mean()
         price_vs_ma = (recent_df['close'] - ma_20) / ma_20
-        range_bound_score = 1.0 - abs(price_vs_ma.mean()) if not price_vs_ma.empty else 0
-        
+        range_bound_score = 1.0 - \
+            abs(price_vs_ma.mean()) if not price_vs_ma.empty else 0
+
         # Regime scoring
         regime_scores = {'trending': 0.0, 'ranging': 0.0, 'volatile': 0.0}
-        
+
         # TRENDING indicators
         if trend_strength > 0.3:
             regime_scores['trending'] += 2.0
@@ -786,7 +827,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             regime_scores['trending'] += 1.5
         if volatility < 0.02:
             regime_scores['trending'] += 1.0
-        
+
         # RANGING indicators (YOUR CURRENT SITUATION!)
         if range_bound_score > 0.8:
             regime_scores['ranging'] += 2.0
@@ -794,43 +835,46 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             regime_scores['ranging'] += 2.0
         if trend_strength < 0.2:
             regime_scores['ranging'] += 1.0
-        
+
         # VOLATILE indicators
         if volatility > 0.035:
             regime_scores['volatile'] += 2.0
         if price_range > 0.08:
             regime_scores['volatile'] += 1.0
-        
+
         # Determine regime
         best_regime = max(regime_scores.items(), key=lambda x: x[1])
         regime = best_regime[0]
         max_score = best_regime[1]
-        confidence = min(0.95, max_score / 6.0)  # Normalize to max possible score
-        
-        self.logger.debug(f"Regime: TRENDING={regime_scores['trending']:.1f}, RANGING={regime_scores['ranging']:.1f}, VOLATILE={regime_scores['volatile']:.1f}")
+        # Normalize to max possible score
+        confidence = min(0.95, max_score / 6.0)
+
+        self.logger.debug(
+            f"Regime: TRENDING={regime_scores['trending']:.1f}, RANGING={regime_scores['ranging']:.1f}, VOLATILE={regime_scores['volatile']:.1f}")
         self.logger.debug(f"→ {regime.upper()} (confidence: {confidence:.1%})")
-        
+
         return regime, confidence, {'whipsaw_ratio': whipsaw_ratio, 'trend_strength': trend_strength}
 
     def generate_ranging_signal(self, df):
         """Generate mean reversion signals for ranging markets."""
         if len(df) < 20:
             return 0, "Insufficient data for ranging strategy"
-        
+
         # Calculate RSI
         df_rsi = calculate_rsi(df.copy(), window=14, price_col='close')
         current_rsi = df_rsi.iloc[-1]['RSI']
-        
+
         # Calculate Bollinger Bands
-        df_bb = calculate_bollinger_bands(df.copy(), window=20, num_std=self.bb_std_dev, price_col='close')
+        df_bb = calculate_bollinger_bands(
+            df.copy(), window=20, num_std=self.bb_std_dev, price_col='close')
         current_price = df_bb.iloc[-1]['close']
-        bb_upper = df_bb.iloc[-1]['BB_Upper'] 
+        bb_upper = df_bb.iloc[-1]['BB_Upper']
         bb_lower = df_bb.iloc[-1]['BB_Lower']
         bb_middle = df_bb.iloc[-1]['BB_MA']
-        
+
         signal = 0
         reason = "No mean reversion signal"
-        
+
         # Mean reversion logic - BUY OVERSOLD, SELL OVERBOUGHT
         if current_rsi < self.rsi_oversold and current_price < bb_lower:
             signal = 1  # Oversold = BUY
@@ -846,36 +890,38 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             elif self.position == -1 and current_price < bb_middle:
                 signal = 1
                 reason = f"Mean Reversion EXIT SHORT: Price returned to BB middle"
-        
+
         return signal, reason
 
     def generate_trending_signal(self, df):
         """Generate MA crossover signals for trending markets."""
         if len(df) < self.long_window:
             return 0, "Insufficient data for MA"
-        
-        df_ma = add_moving_averages(df.copy(), self.short_window, self.long_window, price_col='close')
+
+        df_ma = add_moving_averages(
+            df.copy(), self.short_window, self.long_window, price_col='close')
         df_ma = generate_ma_signals(df_ma)
-        
+
         signal = df_ma.iloc[-1]['MA_Signal']
         reason = f"MA Crossover: {'LONG' if signal == 1 else 'SHORT' if signal == -1 else 'NEUTRAL'}"
-        
+
         return signal, reason
 
     def generate_volatile_signal(self, df):
         """Generate breakout signals for volatile markets."""
         if len(df) < 26:
             return 0, "Insufficient data for volatile strategy"
-        
-        df_macd = calculate_macd(df.copy(), fast=12, slow=26, signal=9, price_col='close')
+
+        df_macd = calculate_macd(
+            df.copy(), fast=12, slow=26, signal=9, price_col='close')
         df_macd = generate_macd_signals(df_macd)
-        
+
         macd_signal = df_macd.iloc[-1]['MACD_Signal']
         current_macd = df_macd.iloc[-1]['MACD']
-        
+
         signal = 0
         reason = "No breakout signal"
-        
+
         # Breakout logic with MACD
         if macd_signal == 1 and abs(current_macd) > self.macd_threshold:
             signal = 1
@@ -883,26 +929,26 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         elif macd_signal == -1 and abs(current_macd) > self.macd_threshold:
             signal = -1
             reason = f"Breakout SHORT: MACD bearish crossover"
-        
+
         return signal, reason
 
     def confirm_signal(self, current_signal):
         """Require multiple consecutive bars of the same signal."""
         self.signal_history.append(current_signal)
-        
+
         if len(self.signal_history) > 10:
             self.signal_history = self.signal_history[-10:]
-        
+
         if len(self.signal_history) < self.signal_confirmation_bars:
             return False
-        
+
         recent_signals = self.signal_history[-self.signal_confirmation_bars:]
         if not all(s == recent_signals[0] for s in recent_signals):
             return False
-        
+
         if recent_signals[0] == self.last_confirmed_signal:
             return False
-        
+
         self.last_confirmed_signal = recent_signals[0]
         return True
 
@@ -910,8 +956,9 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         """Check if enough time passed since last trade."""
         if self.last_trade_time is None:
             return True
-        
-        minutes_since = (datetime.now() - self.last_trade_time).total_seconds() / 60
+
+        minutes_since = (datetime.now() -
+                         self.last_trade_time).total_seconds() / 60
         return minutes_since >= self.min_trade_gap_minutes
 
     def run_strategy_loop(self):
@@ -928,42 +975,49 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
 
                     if len(df_resampled) >= self.long_window:
                         # 1. Detect market regime
-                        regime, confidence, metrics = self.detect_market_regime(df_resampled)
-                        
+                        regime, confidence, metrics = self.detect_market_regime(
+                            df_resampled)
+
                         # 2. Select strategy for regime
                         if confidence >= self.regime_switch_threshold:
                             new_strategy = regime
                         else:
                             new_strategy = self.active_strategy  # Keep current if low confidence
-                        
+
                         # 3. Check for strategy switch
                         if new_strategy != self.active_strategy:
-                            self.logger.info(f"🔄 STRATEGY SWITCH: {self.active_strategy} → {new_strategy}")
+                            self.logger.info(
+                                f"🔄 STRATEGY SWITCH: {self.active_strategy} → {new_strategy}")
                             self.active_strategy = new_strategy
                             self.strategy_switches_today += 1
-                        
+
                         # 4. Generate signal using active strategy
                         if self.active_strategy == "trending":
-                            signal, signal_reason = self.generate_trending_signal(df_resampled)
+                            signal, signal_reason = self.generate_trending_signal(
+                                df_resampled)
                         elif self.active_strategy == "ranging":
-                            signal, signal_reason = self.generate_ranging_signal(df_resampled)
+                            signal, signal_reason = self.generate_ranging_signal(
+                                df_resampled)
                         elif self.active_strategy == "volatile":
-                            signal, signal_reason = self.generate_volatile_signal(df_resampled)
+                            signal, signal_reason = self.generate_volatile_signal(
+                                df_resampled)
                         else:
                             signal, signal_reason = 0, "Unknown strategy"
-                        
+
                         # 5. Execute if signal confirmed
                         if signal != 0 and self.confirm_signal(signal):
                             current_price = df_resampled.iloc[-1]['close']
                             signal_time = df_resampled.index[-1]
-                            
-                            self.logger.info(f"📊 {self.active_strategy.upper()}: {signal_reason}")
-                            self.check_for_signals(signal, current_price, signal_time)
-                        
+
+                            self.logger.info(
+                                f"📊 {self.active_strategy.upper()}: {signal_reason}")
+                            self.check_for_signals(
+                                signal, current_price, signal_time)
+
                         # Store regime info
                         self.current_regime = regime
                         self.regime_confidence = confidence
-                        
+
                 except Exception as e:
                     self.logger.error(f"Error in adaptive strategy loop: {e}")
             time.sleep(60)
@@ -981,32 +1035,39 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
 
         # Check constraints
         if not self.check_trade_gap():
-            mins = (datetime.now() - self.last_trade_time).total_seconds() / 60 if self.last_trade_time else 0
-            self.logger.info(f"⏱️  Trade gap: {mins:.1f}min < {self.min_trade_gap_minutes}min required")
+            mins = (datetime.now() - self.last_trade_time).total_seconds() / \
+                60 if self.last_trade_time else 0
+            self.logger.info(
+                f"⏱️  Trade gap: {mins:.1f}min < {self.min_trade_gap_minutes}min required")
             return
-        
+
         if self.trade_count_today >= self.max_trades_per_day:
-            self.logger.info(f"📈 Daily limit: {self.trade_count_today}/{self.max_trades_per_day}")
+            self.logger.info(
+                f"📈 Daily limit: {self.trade_count_today}/{self.max_trades_per_day}")
             return
 
         # Execute trade
         if latest_signal == 1 and self.position <= 0:
-            self.logger.info(f"🟢 {self.active_strategy.upper()} LONG at ${current_price}")
+            self.logger.info(
+                f"🟢 {self.active_strategy.upper()} LONG at ${current_price}")
             self.position = 1
             self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed long"
             self.last_trade_time = datetime.now()
-            self.buy_in_three_parts(current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time)
+            self.buy_in_three_parts(current_price, datetime.now().strftime(
+                '%Y-%m-%d %H:%M:%S'), signal_time)
             self.trade_count_today += 1
             self.last_signal_time = signal_time
             self.strategy_performance[self.active_strategy]["trades"] += 1
 
         elif latest_signal == -1 and self.position >= 0:
-            self.logger.info(f"🔴 {self.active_strategy.upper()} SHORT at ${current_price}")
+            self.logger.info(
+                f"🔴 {self.active_strategy.upper()} SHORT at ${current_price}")
             self.position = -1
             self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed short"
             self.last_trade_time = datetime.now()
             trade_btc = round(self.balance_btc, 8)
-            self.execute_trade("sell", current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time, trade_btc)
+            self.execute_trade("sell", current_price, datetime.now().strftime(
+                '%Y-%m-%d %H:%M:%S'), signal_time, trade_btc)
             self.trade_count_today += 1
             self.last_signal_time = signal_time
             self.strategy_performance[self.active_strategy]["trades"] += 1
@@ -1014,7 +1075,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
     def get_status(self):
         """Enhanced status with adaptive metrics."""
         status = super().get_status()
-        
+
         # Add adaptive strategy metrics
         status.update({
             'adaptive_strategy': {
@@ -1032,11 +1093,11 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             'trade_timing': {
                 'min_gap_minutes': self.min_trade_gap_minutes,
                 'time_since_last_trade_minutes': (
-                    (datetime.now() - self.last_trade_time).total_seconds() / 60 
+                    (datetime.now() - self.last_trade_time).total_seconds() / 60
                     if self.last_trade_time else None
                 ),
                 'can_trade_now': self.check_trade_gap()
             }
         })
-        
+
         return status
