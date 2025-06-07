@@ -1022,12 +1022,16 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             df_resampled)
 
                         # 2. Select strategy for regime
-                        if confidence >= self.regime_switch_threshold:
+                        if confidence >= 0.4:
                             new_strategy = regime
                         else:
                             new_strategy = self.active_strategy  # Keep current if low confidence
 
-                        # 3. Check for strategy switch
+                        # 3. Force strategy switch for ranging markets
+                        if regime == "ranging" and confidence >= 0.5:
+                            new_strategy = "ranging"
+                            
+                        # Check for strategy switch
                         if new_strategy != self.active_strategy:
                             self.logger.info(
                                 f"🔄 STRATEGY SWITCH: {self.active_strategy} → {new_strategy}")

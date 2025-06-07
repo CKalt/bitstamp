@@ -384,34 +384,37 @@ class CryptoShell(cmd.Cmd):
         if 'close' not in df.columns and 'price' in df.columns:
             df.rename(columns={'price': 'close'}, inplace=True)
 
-        # -------------------------------------------------------------------
-        # NEW CODE: Derive the final strategy signal if strategy == "MA"
-        # -------------------------------------------------------------------
-        from tdr import determine_initial_position  # minimal local import
-        if strategy_name == 'MA':
-            from indicators.technical_indicators import ensure_datetime_index, add_moving_averages, generate_ma_signals
-            if not df.empty:
-                df = ensure_datetime_index(df)
-                df = add_moving_averages(
-                    df, short_window, long_window, price_col='close')
-                df = generate_ma_signals(df)
-                if not df.empty:
-                    # The final row's MA_Signal will be 1 or -1 (or 0 if they cross exactly)
-                    hist_position = int(df.iloc[-1]['MA_Signal'])
-                    self.logger.info(
-                        f"Derived final MA signal = {hist_position} "
-                        f"({'LONG' if hist_position==1 else 'SHORT' if hist_position==-1 else 'NEUTRAL'}) "
-                        f"based on last crossover in data."
-                    )
-                else:
-                    hist_position = 0
-            else:
-                hist_position = 0
+        # Get the adaptive strategy's current recommendation
+        if not df.empty:
+            # Create a temporary adaptive strategy to get current recommendation
+            temp_adaptive = AdaptiveMultiStrategy(
+                self.data_manager, short_window, long_window, amount_num, 'btcusd', self.logger,
+                live_trading=False, initial_position=0,
+                regime_lookback=50, signal_confirmation_bars=2, min_trade_gap_minutes=30
+            )
+
+            # Get current regime and recommendation
+            df_for_analysis = ensure_datetime_index(df)
+            df_resampled = df_for_analysis.resample('1H').agg({
+                'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last',
+                'volume': 'sum', 'trades': 'sum', 'timestamp': 'last', 'source': 'last'
+            }).dropna()
+
+            regime, confidence, metrics = temp_adaptive.detect_market_regime(df_resampled)
+
+            # Get signal based on current regime
+            if regime == "ranging":
+                hist_position, reason = temp_adaptive.generate_ranging_signal(df_resampled)
+            elif regime == "volatile":
+                hist_position, reason = temp_adaptive.generate_volatile_signal(df_resampled)
+            else:  # trending or unknown
+                hist_position, reason = temp_adaptive.generate_trending_signal(df_resampled)
+
+            self.logger.info(f"Adaptive strategy recommendation: {regime.upper()} regime ({confidence:.1%})")
+            self.logger.info(f"Signal: {hist_position} ({'LONG' if hist_position==1 else 'SHORT' if hist_position==-1 else 'NEUTRAL'}) - {reason}")
         else:
-            # If not "MA", we default to old approach
-            hist_position = determine_initial_position(
-                df, short_window, long_window)
-        # -------------------------------------------------------------------
+            hist_position = 0
+            self.logger.info("No data available for adaptive strategy analysis")
 
         initial_balance_btc = 0.0
         initial_balance_usd = 0.0
@@ -548,7 +551,6 @@ class CryptoShell(cmd.Cmd):
                 self.logger.info(f"Case 4: User SHORT but system says LONG. Executing 3-part buy from ${amount_num:.2f}")
                 trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.auto_trader.buy_in_three_parts(current_market_price, trade_ts, datetime.now())
-
 
         self.auto_trader.start()
         print(f"Auto-trading started with {balance_str}, position={pos_str}, "
