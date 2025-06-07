@@ -485,47 +485,70 @@ class CryptoShell(cmd.Cmd):
 
         # Handle all four initialization scenarios
         if desired_position == hist_position:
-            # Cases 1 & 3: User position matches system recommendation - just initialize tracking
-            if desired_position == 1:  # Both long
+            # Cases 1 & 3: Positions match - initialize tracking with THEORETICAL trade
+            if desired_position == 1:  # Case 1: Both long
                 self.auto_trader.position = 1
                 self.auto_trader.position_size = amount_num
                 self.auto_trader.position_cost_basis = amount_num * current_market_price
                 self.auto_trader.balance_btc = amount_num
                 self.auto_trader.balance_usd = 0.0
-                self.logger.info(f"Case 1: LONG position matches system. Initialized: {amount_num:.8f} BTC")
-
-            elif desired_position == -1:  # Both short
+                
+                # Set theoretical trade for entry price tracking
+                self.auto_trader.theoretical_trade = {
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'direction': 'long',
+                    'amount': amount_num,
+                    'entry_price': current_market_price,
+                    'theoretical': True
+                }
+                self.logger.info(f"Case 1: LONG matches system. Theoretical entry: {amount_num:.8f} BTC @ ${current_market_price:.2f}")
+                
+            elif desired_position == -1:  # Case 3: Both short
                 short_btc = amount_num / current_market_price
                 self.auto_trader.position = -1
-                self.auto_trader.position_size = -short_btc
+                self.auto_trader.position_size = 0.0  # Holding USD, not negative BTC
                 self.auto_trader.position_cost_basis = amount_num
-                self.auto_trader.balance_btc = -short_btc
+                self.auto_trader.balance_btc = 0.0
                 self.auto_trader.balance_usd = amount_num
-                self.logger.info(f"Case 3: SHORT position matches system. Initialized: {short_btc:.8f} BTC short")
-
+                
+                # Set theoretical trade for entry price tracking
+                self.auto_trader.theoretical_trade = {
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'direction': 'short',
+                    'amount': amount_num,
+                    'entry_price': current_market_price,
+                    'theoretical': True
+                }
+                self.logger.info(f"Case 3: SHORT matches system. Theoretical entry: ${amount_num:.2f} @ ${current_market_price:.2f}")
+                
         else:
-            # Cases 2 & 4: User position differs from system - need alignment trades
+            # Cases 2 & 4: Positions differ - execute real alignment trades
             if desired_position == 1 and hist_position == -1:
-                # Case 2: User is long, system says short - sell all BTC
+                # Case 2: User long, system says short - sell all BTC
                 self.auto_trader.position = -1
                 self.auto_trader.balance_btc = amount_num
                 self.auto_trader.balance_usd = 0.0
+                self.auto_trader.position_size = 0.0  # Will be set by trade execution
+                self.auto_trader.position_cost_basis = 0.0  # Will be set by trade execution
+                
                 self.logger.info(f"Case 2: User LONG but system says SHORT. Selling {amount_num:.8f} BTC")
                 trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.auto_trader.execute_trade(
                     "sell", current_market_price, trade_ts, datetime.now(), amount_num)
-
+                    
             elif desired_position == -1 and hist_position == 1:
-                # Case 4: User is short, system says long - execute 3-part buy
+                # Case 4: User short, system says long - execute 3-part buy
                 short_btc = amount_num / current_market_price
                 self.auto_trader.position = 1
-                self.auto_trader.balance_btc = -short_btc  # Starting with short position
+                self.auto_trader.balance_btc = 0.0  # Starting short (USD only)
                 self.auto_trader.balance_usd = amount_num
-                self.auto_trader.position_size = -short_btc
-                self.auto_trader.position_cost_basis = amount_num
+                self.auto_trader.position_size = 0.0  # Will be set by trade execution
+                self.auto_trader.position_cost_basis = 0.0  # Will be set by trade execution
+                
                 self.logger.info(f"Case 4: User SHORT but system says LONG. Executing 3-part buy from ${amount_num:.2f}")
                 trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.auto_trader.buy_in_three_parts(current_market_price, trade_ts, datetime.now())
+
 
         self.auto_trader.start()
         print(f"Auto-trading started with {balance_str}, position={pos_str}, "

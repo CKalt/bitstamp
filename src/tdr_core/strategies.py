@@ -532,9 +532,10 @@ class MACrossoverStrategy:
                     self.position_size -= fill_btc
 
             else:
-                # We were neutral or already short => add to short
-                self.position_size -= fill_btc
-                self.position_cost_basis += (fill_btc * fill_price)
+                # Going short: track the BTC amount sold for P&L calculation
+                self.position_size = 0.0  # We don't hold BTC when short
+                self.position_cost_basis = fill_btc  # Store BTC amount sold for P&L
+                self.logger.info(f"Short position: sold {fill_btc:.8f} BTC @ ${fill_price:.2f}")
 
             if self.last_trade_price is not None and self.position == 1:
                 profit = fill_btc * (fill_price - self.last_trade_price) - fee
@@ -560,17 +561,6 @@ class MACrossoverStrategy:
         
         # Log position state for debugging
         self.logger.debug(f"Position update: size={self.position_size:.8f}, cost_basis={self.position_cost_basis:.2f}, direction={self.position}")
-
-        # Sync position tracking with actual balances if they diverge
-        if abs(self.balance_btc - self.position_size) > 1e-6:
-            self.logger.warning(f"Position size mismatch: balance_btc={self.balance_btc:.8f}, position_size={self.position_size:.8f}")
-            self.logger.info(f"Syncing position_size to match balance_btc")
-            self.position_size = self.balance_btc
-            if self.position_size > 0 and self.position_cost_basis <= 0:
-                # Estimate cost basis if missing
-                current_price = self.data_manager.get_current_price(self.symbol) or fill_price
-                self.position_cost_basis = self.position_size * current_price
-                self.logger.info(f"Estimated cost basis: ${self.position_cost_basis:.2f}")
 
         # Update max/min USD & BTC
         if self.balance_usd > self.max_balance_usd:
@@ -699,41 +689,59 @@ class MACrossoverStrategy:
         }
 
         cp = position_info['current_price']
-        
-        # Use actual position_size regardless of position flag for more accurate reporting
-        if self.position_size > 1e-8:  # Long position
-            avg_entry_price = (self.position_cost_basis / self.position_size) if self.position_size else 0.0
-            position_info['entry_price'] = avg_entry_price
-            position_info['position_size_btc'] = self.position_size
-            position_info['position_size_usd'] = self.position_size * cp
-            cost_basis = self.position_cost_basis
-            mark_value = self.position_size * cp
-            position_info['unrealized_pnl'] = mark_value - cost_basis
-            
-            # Update position flag if inconsistent
-            if self.position != 1:
-                self.logger.warning(f"Position flag mismatch: have {self.position_size:.8f} BTC but flag is {self.position}. Correcting to Long.")
-                self.position = 1
 
-        elif self.position_size < -1e-8:  # Short position
-            avg_entry_price = 0.0
-            if abs(self.position_size) > 1e-8:
-                avg_entry_price = self.position_cost_basis / abs(self.position_size)
-            position_info['entry_price'] = avg_entry_price
-            position_info['position_size_btc'] = self.position_size
-            position_info['position_size_usd'] = self.position_cost_basis
-            mark_value = abs(self.position_size) * cp
-            position_info['unrealized_pnl'] = self.position_cost_basis - mark_value
-            
-            # Update position flag if inconsistent
-            if self.position != -1:
-                self.logger.warning(f"Position flag mismatch: have {self.position_size:.8f} BTC but flag is {self.position}. Correcting to Short.")
-                self.position = -1
-
-        else:  # Neutral position
-            if self.position != 0:
-                self.logger.warning(f"Position flag mismatch: have {self.position_size:.8f} BTC but flag is {self.position}. Correcting to Neutral.")
-                self.position = 0
+        # Handle theoretical vs real trades properly
+        if self.trades_executed == 0 and self.theoretical_trade:
+            # THEORETICAL TRADE: Show what position should be worth
+            entry_price = self.theoretical_trade.get('entry_price', 0.0)
+            if self.theoretical_trade['direction'] == 'long':
+                position_info['entry_price'] = entry_price
+                position_info['position_size_btc'] = self.theoretical_trade['amount']
+                position_info['position_size_usd'] = self.theoretical_trade['amount'] * cp
+                position_info['unrealized_pnl'] = (cp - entry_price) * self.theoretical_trade['amount']
+            else:  # short
+                position_info['entry_price'] = entry_price  
+                position_info['position_size_btc'] = 0.0
+                position_info['position_size_usd'] = self.theoretical_trade['amount']
+                btc_equivalent = self.theoretical_trade['amount'] / entry_price
+                position_info['unrealized_pnl'] = (entry_price - cp) * btc_equivalent
+                
+        else:
+            # REAL TRADES: Use actual balances and tracking
+            if self.position == 1:
+                # Long position - holding BTC
+                if self.position_size > 1e-8:
+                    avg_entry_price = self.position_cost_basis / self.position_size
+                    position_info['entry_price'] = avg_entry_price
+                    position_info['position_size_btc'] = self.position_size
+                    position_info['position_size_usd'] = self.position_size * cp
+                    position_info['unrealized_pnl'] = (self.position_size * cp) - self.position_cost_basis
+                else:
+                    # Long but using balance_btc if position_size is wrong
+                    position_info['entry_price'] = 0.0
+                    position_info['position_size_btc'] = self.balance_btc
+                    position_info['position_size_usd'] = self.balance_btc * cp
+                    position_info['unrealized_pnl'] = 0.0
+                    
+            elif self.position == -1:
+                # Short position - use actual USD balance and last trade price
+                position_info['entry_price'] = self.last_trade_price or 0.0
+                position_info['position_size_btc'] = 0.0  # We sold all BTC
+                position_info['position_size_usd'] = self.balance_usd  # Actual USD held
+                
+                # Calculate P&L for short: (entry_price - current_price) * btc_amount_sold
+                if self.last_trade_price and self.position_cost_basis > 0:
+                    btc_sold = self.position_cost_basis  # This should be the BTC amount sold
+                    position_info['unrealized_pnl'] = (self.last_trade_price - cp) * btc_sold
+                else:
+                    position_info['unrealized_pnl'] = 0.0
+                    
+            else:
+                # Neutral position
+                position_info['entry_price'] = 0.0
+                position_info['position_size_btc'] = 0.0
+                position_info['position_size_usd'] = 0.0
+                position_info['unrealized_pnl'] = 0.0
 
         status['position_info'] = position_info
 
