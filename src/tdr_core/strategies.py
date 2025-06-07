@@ -863,13 +863,23 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         # Regime scoring
         regime_scores = {'trending': 0.0, 'ranging': 0.0, 'volatile': 0.0}
 
-        # TRENDING indicators
-        if trend_strength > 0.3:
+        # TRENDING indicators (more conservative)
+        if trend_strength > 0.4:  # Higher threshold
             regime_scores['trending'] += 2.0
-        if whipsaw_ratio < 3.0:
+        if whipsaw_ratio < 2.0:  # Lower whipsaw tolerance
+            regime_scores['trending'] += 2.0
+        if volatility < 0.015:  # Lower volatility required
             regime_scores['trending'] += 1.5
-        if volatility < 0.02:
-            regime_scores['trending'] += 1.0
+        # Require sustained directional movement
+        if len(recent_df) >= 10:
+            recent_closes = recent_df['close'].tail(10)
+            directional_moves = 0
+            for i in range(1, len(recent_closes)):
+                if (recent_closes.iloc[i] > recent_closes.iloc[i-1] and price_end > price_start) or \
+                   (recent_closes.iloc[i] < recent_closes.iloc[i-1] and price_end < price_start):
+                    directional_moves += 1
+            if directional_moves >= 7:  # 70% directional consistency
+                regime_scores['trending'] += 1.0
 
         # RANGING indicators (YOUR CURRENT SITUATION!)
         if range_bound_score > 0.8:
@@ -982,10 +992,16 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         if len(self.signal_history) > 10:
             self.signal_history = self.signal_history[-10:]
 
-        if len(self.signal_history) < self.signal_confirmation_bars:
+        # Require more confirmation when holding positions
+        current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
+        has_position = current_position_value > 10000
+        
+        required_bars = self.signal_confirmation_bars + (2 if has_position else 0)
+        
+        if len(self.signal_history) < required_bars:
             return False
 
-        recent_signals = self.signal_history[-self.signal_confirmation_bars:]
+        recent_signals = self.signal_history[-required_bars:]
         if not all(s == recent_signals[0] for s in recent_signals):
             return False
 
@@ -1021,22 +1037,41 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         regime, confidence, metrics = self.detect_market_regime(
                             df_resampled)
 
-                        # 2. Select strategy for regime
-                        if confidence >= 0.4:
+                        # 2. Conservative strategy selection with position awareness
+                        current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
+                        has_significant_position = current_position_value > 50000  # $50k+ position
+                        
+                        # Higher confidence required when holding significant positions
+                        confidence_threshold = 0.75 if has_significant_position else 0.65
+                        
+                        # Specific thresholds by regime
+                        if regime == "trending":
+                            required_confidence = 0.80  # Very high bar for trending
+                        elif regime == "ranging":
+                            required_confidence = 0.60  # Moderate bar for ranging
+                        else:  # volatile
+                            required_confidence = 0.70
+                            
+                        # Only switch if confidence exceeds threshold
+                        if confidence >= required_confidence:
                             new_strategy = regime
                         else:
-                            new_strategy = self.active_strategy  # Keep current if low confidence
-
-                        # 3. Force strategy switch for ranging markets
-                        if regime == "ranging" and confidence >= 0.5:
-                            new_strategy = "ranging"
-                            
-                        # Check for strategy switch
+                            new_strategy = self.active_strategy  # Stay with current strategy
+                            self.logger.debug(f"Staying with {self.active_strategy} strategy - {regime} confidence {confidence:.1%} < {required_confidence:.1%} required")
+                        
+                        # Extra conservative check: don't switch away from ranging easily
+                        if self.active_strategy == "ranging" and new_strategy != "ranging":
+                            if confidence < 0.85:  # Very high bar to leave ranging
+                                new_strategy = "ranging"
+                                self.logger.debug(f"Staying in ranging strategy - confidence {confidence:.1%} insufficient to switch")
+                        
+                        # 3. Check for strategy switch
                         if new_strategy != self.active_strategy:
-                            self.logger.info(
-                                f"🔄 STRATEGY SWITCH: {self.active_strategy} → {new_strategy}")
+                            self.logger.info(f"🔄 STRATEGY SWITCH: {self.active_strategy} → {new_strategy} (confidence: {confidence:.1%})")
                             self.active_strategy = new_strategy
                             self.strategy_switches_today += 1
+                        else:
+                            self.logger.debug(f"Keeping {self.active_strategy} strategy (regime: {regime}, confidence: {confidence:.1%})")
 
                         # 4. Generate signal using active strategy
                         if self.active_strategy == "trending":
