@@ -479,19 +479,18 @@ class MACrossoverStrategy:
                 self.position_size += fill_btc
 
             else:
-                # If we were short (position_size<0), partial close logic
-                short_cover_size = min(abs(self.position_size), fill_btc)
-                ratio = short_cover_size / abs(self.position_size)
-                cost_removed = ratio * self.position_cost_basis
-                self.position_cost_basis -= cost_removed
-                self.position_size += short_cover_size
-
-                # (NEW) If the buy exceeded what's needed to close the short, leftover becomes a new long
-                leftover_btc_for_long = fill_btc - short_cover_size
-                if leftover_btc_for_long > 1e-8:
-                    # Now we add that leftover portion as a new positive position
-                    self.position_size += leftover_btc_for_long
-                    self.position_cost_basis += leftover_btc_for_long * fill_price
+                # Short→Long transition: Reset position tracking to match actual BTC balance
+                if self.position_size < 0:
+                    self.logger.info(f"Closing short position of {self.position_size:.8f} BTC")
+                    # Reset position tracking completely for clean transition
+                    self.position_size = 0.0
+                    self.position_cost_basis = 0.0
+                
+                # Add this buy to the position (now treating as fresh long position)
+                self.position_size += fill_btc
+                self.position_cost_basis += (fill_btc * fill_price)
+                
+                self.logger.info(f"Long position updated: {self.position_size:.8f} BTC, cost basis: ${self.position_cost_basis:.2f}")
 
             if self.last_trade_price is not None and self.position == -1:
                 # old code for short -> buy
@@ -550,6 +549,28 @@ class MACrossoverStrategy:
         # Recompute 'current_amount' for old P&L logic
         ratio = self.current_balance / self.initial_balance if self.initial_balance else 1
         self.current_amount = self.initial_amount * ratio
+
+        # Validate position consistency
+        if abs(self.position_size) < 1e-8:
+            self.position_size = 0.0
+            self.position_cost_basis = 0.0
+            if self.position != 0:
+                self.logger.warning(f"Position size near zero but position flag is {self.position}. Resetting to neutral.")
+                self.position = 0
+        
+        # Log position state for debugging
+        self.logger.debug(f"Position update: size={self.position_size:.8f}, cost_basis={self.position_cost_basis:.2f}, direction={self.position}")
+
+        # Sync position tracking with actual balances if they diverge
+        if abs(self.balance_btc - self.position_size) > 1e-6:
+            self.logger.warning(f"Position size mismatch: balance_btc={self.balance_btc:.8f}, position_size={self.position_size:.8f}")
+            self.logger.info(f"Syncing position_size to match balance_btc")
+            self.position_size = self.balance_btc
+            if self.position_size > 0 and self.position_cost_basis <= 0:
+                # Estimate cost basis if missing
+                current_price = self.data_manager.get_current_price(self.symbol) or fill_price
+                self.position_cost_basis = self.position_size * current_price
+                self.logger.info(f"Estimated cost basis: ${self.position_cost_basis:.2f}")
 
         # Update max/min USD & BTC
         if self.balance_usd > self.max_balance_usd:
@@ -678,27 +699,41 @@ class MACrossoverStrategy:
         }
 
         cp = position_info['current_price']
-        if self.position == 1 and self.position_size > 1e-8:
-            avg_entry_price = (self.position_cost_basis /
-                               self.position_size) if self.position_size else 0.0
+        
+        # Use actual position_size regardless of position flag for more accurate reporting
+        if self.position_size > 1e-8:  # Long position
+            avg_entry_price = (self.position_cost_basis / self.position_size) if self.position_size else 0.0
             position_info['entry_price'] = avg_entry_price
             position_info['position_size_btc'] = self.position_size
             position_info['position_size_usd'] = self.position_size * cp
             cost_basis = self.position_cost_basis
             mark_value = self.position_size * cp
             position_info['unrealized_pnl'] = mark_value - cost_basis
+            
+            # Update position flag if inconsistent
+            if self.position != 1:
+                self.logger.warning(f"Position flag mismatch: have {self.position_size:.8f} BTC but flag is {self.position}. Correcting to Long.")
+                self.position = 1
 
-        elif self.position == -1 and abs(self.position_size) > 1e-8:  # Check absolute value
-            # For a short, position_size is negative
+        elif self.position_size < -1e-8:  # Short position
             avg_entry_price = 0.0
             if abs(self.position_size) > 1e-8:
-                avg_entry_price = self.position_cost_basis / \
-                    abs(self.position_size)
+                avg_entry_price = self.position_cost_basis / abs(self.position_size)
             position_info['entry_price'] = avg_entry_price
             position_info['position_size_btc'] = self.position_size
             position_info['position_size_usd'] = self.position_cost_basis
             mark_value = abs(self.position_size) * cp
             position_info['unrealized_pnl'] = self.position_cost_basis - mark_value
+            
+            # Update position flag if inconsistent
+            if self.position != -1:
+                self.logger.warning(f"Position flag mismatch: have {self.position_size:.8f} BTC but flag is {self.position}. Correcting to Short.")
+                self.position = -1
+
+        else:  # Neutral position
+            if self.position != 0:
+                self.logger.warning(f"Position flag mismatch: have {self.position_size:.8f} BTC but flag is {self.position}. Correcting to Neutral.")
+                self.position = 0
 
         status['position_info'] = position_info
 
