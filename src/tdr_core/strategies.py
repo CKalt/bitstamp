@@ -905,12 +905,15 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         # Normalize to max possible score
         confidence = min(0.95, max_score / 6.0)
 
+        # Create metrics dict first
+        metrics = {'whipsaw_ratio': whipsaw_ratio, 'trend_strength': trend_strength}
+        
         self.logger.info(
             f"📊 Regime Scores: TRENDING={regime_scores['trending']:.1f}, RANGING={regime_scores['ranging']:.1f}, VOLATILE={regime_scores['volatile']:.1f}")
         self.logger.info(f"📈 Market Metrics: whipsaw={metrics.get('whipsaw_ratio', 0):.1f}%, trend_strength={metrics.get('trend_strength', 0):.3f}, volatility={volatility:.4f}")
         self.logger.info(f"🎯 Final: {regime.upper()} (confidence: {confidence:.1%})")
 
-        return regime, confidence, {'whipsaw_ratio': whipsaw_ratio, 'trend_strength': trend_strength}
+        return regime, confidence, metrics
 
     def generate_ranging_signal(self, df):
         """Generate mean reversion signals for ranging markets."""
