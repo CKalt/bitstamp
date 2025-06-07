@@ -28,6 +28,7 @@ from multiprocessing import Process, Manager
 
 # We'll need references to modules from our codebase:
 from tdr_core.strategies import MACrossoverStrategy, AdaptiveMultiStrategy
+from indicators.technical_indicators import ensure_datetime_index
 
 ###############################################################################
 
