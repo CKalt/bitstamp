@@ -483,24 +483,50 @@ class CryptoShell(cmd.Cmd):
                     'theoretical': True
                 }
 
-        # FIXED LOGIC: Trade to align current position with system recommendation
-        if desired_position != hist_position and current_market_price > 0:
-            if hist_position == 1:  # System says go LONG
-                # User is not long, so BUY to go long
-                buy_btc = amount_num / current_market_price
+        # Handle all four initialization scenarios
+        if desired_position == hist_position:
+            # Cases 1 & 3: User position matches system recommendation - just initialize tracking
+            if desired_position == 1:  # Both long
+                self.auto_trader.position = 1
+                self.auto_trader.position_size = amount_num
+                self.auto_trader.position_cost_basis = amount_num * current_market_price
+                self.auto_trader.balance_btc = amount_num
+                self.auto_trader.balance_usd = 0.0
+                self.logger.info(f"Case 1: LONG position matches system. Initialized: {amount_num:.8f} BTC")
+
+            elif desired_position == -1:  # Both short
+                short_btc = amount_num / current_market_price
+                self.auto_trader.position = -1
+                self.auto_trader.position_size = -short_btc
+                self.auto_trader.position_cost_basis = amount_num
+                self.auto_trader.balance_btc = -short_btc
+                self.auto_trader.balance_usd = amount_num
+                self.logger.info(f"Case 3: SHORT position matches system. Initialized: {short_btc:.8f} BTC short")
+
+        else:
+            # Cases 2 & 4: User position differs from system - need alignment trades
+            if desired_position == 1 and hist_position == -1:
+                # Case 2: User is long, system says short - sell all BTC
+                self.auto_trader.position = -1
+                self.auto_trader.balance_btc = amount_num
+                self.auto_trader.balance_usd = 0.0
+                self.logger.info(f"Case 2: User LONG but system says SHORT. Selling {amount_num:.8f} BTC")
                 trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                self.logger.info(
-                    f"(auto_trade) System recommends LONG, executing BUY for {buy_btc:.6f} BTC")
                 self.auto_trader.execute_trade(
-                    "buy", current_market_price, trade_ts, datetime.now(), buy_btc)
-            elif hist_position == -1:  # System says go SHORT
-                # User is not short, so SELL to go short
-                sell_btc = amount_num / current_market_price
+                    "sell", current_market_price, trade_ts, datetime.now(), amount_num)
+
+            elif desired_position == -1 and hist_position == 1:
+                # Case 4: User is short, system says long - execute 3-part buy
+                short_btc = amount_num / current_market_price
+                self.auto_trader.position = 1
+                self.auto_trader.balance_btc = -short_btc  # Starting with short position
+                self.auto_trader.balance_usd = amount_num
+                self.auto_trader.position_size = -short_btc
+                self.auto_trader.position_cost_basis = amount_num
+                self.logger.info(f"Case 4: User SHORT but system says LONG. Executing 3-part buy from ${amount_num:.2f}")
                 trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                self.logger.info(
-                    f"(auto_trade) System recommends SHORT, executing SELL for {sell_btc:.6f} BTC")
-                self.auto_trader.execute_trade(
-                    "sell", current_market_price, trade_ts, datetime.now(), sell_btc)
+                self.auto_trader.buy_in_three_parts(current_market_price, trade_ts, datetime.now())
+
         self.auto_trader.start()
         print(f"Auto-trading started with {balance_str}, position={pos_str}, "
               f"MA strategy (Short={short_window}, Long={long_window}), do_live_trades={do_live}")
