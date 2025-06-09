@@ -532,10 +532,10 @@ class MACrossoverStrategy:
                     self.position_size -= fill_btc
 
             else:
-                # Going short: track the BTC amount sold for P&L calculation
-                self.position_size = 0.0  # We don't hold BTC when short
-                self.position_cost_basis = fill_btc  # Store BTC amount sold for P&L
-                self.logger.info(f"Short position: sold {fill_btc:.8f} BTC @ ${fill_price:.2f}")
+                # Going short: track USD held and BTC amount sold
+                self.position_size = 0.0  # No BTC held when short
+                self.position_cost_basis = fill_btc  # BTC amount sold for P&L calc
+                self.logger.info(f"Short position: sold {fill_btc:.8f} BTC @ ${fill_price:.2f}, holding ${self.balance_usd:.2f} USD")
 
             if self.last_trade_price is not None and self.position == 1:
                 profit = fill_btc * (fill_price - self.last_trade_price) - fee
@@ -705,7 +705,7 @@ class MACrossoverStrategy:
                 position_info['position_size_usd'] = self.theoretical_trade['amount']
                 btc_equivalent = self.theoretical_trade['amount'] / entry_price
                 position_info['unrealized_pnl'] = (entry_price - cp) * btc_equivalent
-                
+
         else:
             # REAL TRADES: Use actual balances and tracking
             if self.position == 1:
@@ -717,31 +717,45 @@ class MACrossoverStrategy:
                     position_info['position_size_usd'] = self.position_size * cp
                     position_info['unrealized_pnl'] = (self.position_size * cp) - self.position_cost_basis
                 else:
-                    # Long but using balance_btc if position_size is wrong
+                    # Long but check actual balance
                     position_info['entry_price'] = 0.0
                     position_info['position_size_btc'] = self.balance_btc
                     position_info['position_size_usd'] = self.balance_btc * cp
                     position_info['unrealized_pnl'] = 0.0
                     
             elif self.position == -1:
-                # Short position - use actual USD balance and last trade price
+                # Short position - holding USD from selling BTC
                 position_info['entry_price'] = self.last_trade_price or 0.0
-                position_info['position_size_btc'] = 0.0  # We sold all BTC
-                position_info['position_size_usd'] = self.balance_usd  # Actual USD held
+                position_info['position_size_btc'] = 0.0  # No BTC held
+                position_info['position_size_usd'] = self.balance_usd  # USD from sale
                 
-                # Calculate P&L for short: (entry_price - current_price) * btc_amount_sold
+                # P&L for short: (sell_price - current_price) * btc_amount_sold
                 if self.last_trade_price and self.position_cost_basis > 0:
-                    btc_sold = self.position_cost_basis  # This should be the BTC amount sold
+                    btc_sold = self.position_cost_basis
                     position_info['unrealized_pnl'] = (self.last_trade_price - cp) * btc_sold
                 else:
                     position_info['unrealized_pnl'] = 0.0
                     
             else:
-                # Neutral position
-                position_info['entry_price'] = 0.0
-                position_info['position_size_btc'] = 0.0
-                position_info['position_size_usd'] = 0.0
-                position_info['unrealized_pnl'] = 0.0
+                # Check if we should be short based on balances
+                if self.balance_usd > 10000 and abs(self.balance_btc) < 1e-6:
+                    # We have USD but no BTC - we're short
+                    self.position = -1  # Correct the position flag
+                    position_info['entry_price'] = self.last_trade_price or 0.0
+                    position_info['position_size_btc'] = 0.0
+                    position_info['position_size_usd'] = self.balance_usd
+                    if self.last_trade_price and self.position_cost_basis > 0:
+                        btc_sold = self.position_cost_basis
+                        position_info['unrealized_pnl'] = (self.last_trade_price - cp) * btc_sold
+                    else:
+                        position_info['unrealized_pnl'] = 0.0
+                    self.logger.info(f"Corrected position flag to SHORT based on USD balance: ${self.balance_usd:.2f}")
+                else:
+                    # Truly neutral
+                    position_info['entry_price'] = 0.0
+                    position_info['position_size_btc'] = 0.0
+                    position_info['position_size_usd'] = 0.0
+                    position_info['unrealized_pnl'] = 0.0
 
         status['position_info'] = position_info
 
