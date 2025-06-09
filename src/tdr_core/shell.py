@@ -28,7 +28,7 @@ from multiprocessing import Process, Manager
 
 # We'll need references to modules from our codebase:
 from tdr_core.strategies import MACrossoverStrategy, AdaptiveMultiStrategy
-from indicators.technical_indicators import ensure_datetime_index
+from indicators.technical_indicators import ensure_datetime_index, add_moving_averages, generate_ma_signals
 
 ###############################################################################
 
@@ -385,37 +385,42 @@ class CryptoShell(cmd.Cmd):
         if 'close' not in df.columns and 'price' in df.columns:
             df.rename(columns={'price': 'close'}, inplace=True)
 
-        # Get the adaptive strategy's current recommendation
+        # Use conservative signal determination - wait for actual strategy to decide
+        # Instead of creating temporary strategy, use simple MA analysis as baseline
         if not df.empty:
-            # Create a temporary adaptive strategy to get current recommendation
-            temp_adaptive = AdaptiveMultiStrategy(
-                self.data_manager, short_window, long_window, amount_num, 'btcusd', self.logger,
-                live_trading=False, initial_position=0,
-                regime_lookback=50, signal_confirmation_bars=2, min_trade_gap_minutes=30
-            )
-
-            # Get current regime and recommendation
             df_for_analysis = ensure_datetime_index(df)
             df_resampled = df_for_analysis.resample('1H').agg({
                 'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last',
                 'volume': 'sum', 'trades': 'sum', 'timestamp': 'last', 'source': 'last'
             }).dropna()
-
-            regime, confidence, metrics = temp_adaptive.detect_market_regime(df_resampled)
-
-            # Get signal based on current regime
-            if regime == "ranging":
-                hist_position, reason = temp_adaptive.generate_ranging_signal(df_resampled)
-            elif regime == "volatile":
-                hist_position, reason = temp_adaptive.generate_volatile_signal(df_resampled)
-            else:  # trending or unknown
-                hist_position, reason = temp_adaptive.generate_trending_signal(df_resampled)
-
-            self.logger.info(f"Adaptive strategy recommendation: {regime.upper()} regime ({confidence:.1%})")
-            self.logger.info(f"Signal: {hist_position} ({'LONG' if hist_position==1 else 'SHORT' if hist_position==-1 else 'NEUTRAL'}) - {reason}")
+            
+            if len(df_resampled) >= long_window:
+                # Use simple MA crossover for initialization - let running strategy handle complexity
+                df_ma = add_moving_averages(df_resampled.copy(), short_window, long_window, price_col='close')
+                df_ma = generate_ma_signals(df_ma)
+                
+                if not df_ma.empty:
+                    hist_position = int(df_ma.iloc[-1]['MA_Signal'])
+                    ma_short = df_ma.iloc[-1]['Short_MA']
+                    ma_long = df_ma.iloc[-1]['Long_MA']
+                    
+                    # Conservative initialization: require significant MA separation
+                    ma_separation = abs(ma_short - ma_long) / ma_long if ma_long > 0 else 0
+                    if ma_separation < 0.002:  # Less than 0.2% separation = too close to call
+                        hist_position = 0  # Stay neutral if MAs are too close
+                        self.logger.info(f"MAs too close ({ma_separation:.3%} separation) - staying neutral for initialization")
+                    
+                    direction_name = 'LONG' if hist_position == 1 else 'SHORT' if hist_position == -1 else 'NEUTRAL'
+                    self.logger.info(f"Simple MA analysis for initialization: {direction_name} (MA separation: {ma_separation:.3%})")
+                    self.logger.info(f"Note: Running strategy will use full adaptive logic with conservative thresholds")
+                else:
+                    hist_position = 0
+            else:
+                hist_position = 0
+                self.logger.info("Insufficient data for MA analysis")
         else:
             hist_position = 0
-            self.logger.info("No data available for adaptive strategy analysis")
+            self.logger.info("No data available for analysis")
 
         initial_balance_btc = 0.0
         initial_balance_usd = 0.0
