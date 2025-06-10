@@ -393,26 +393,31 @@ class CryptoShell(cmd.Cmd):
                 'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last',
                 'volume': 'sum', 'trades': 'sum', 'timestamp': 'last', 'source': 'last'
             }).dropna()
-            
+
             if len(df_resampled) >= long_window:
                 # Use simple MA crossover for initialization - let running strategy handle complexity
-                df_ma = add_moving_averages(df_resampled.copy(), short_window, long_window, price_col='close')
+                df_ma = add_moving_averages(
+                    df_resampled.copy(), short_window, long_window, price_col='close')
                 df_ma = generate_ma_signals(df_ma)
-                
+
                 if not df_ma.empty:
                     hist_position = int(df_ma.iloc[-1]['MA_Signal'])
                     ma_short = df_ma.iloc[-1]['Short_MA']
                     ma_long = df_ma.iloc[-1]['Long_MA']
-                    
+
                     # Conservative initialization: require significant MA separation
-                    ma_separation = abs(ma_short - ma_long) / ma_long if ma_long > 0 else 0
+                    ma_separation = abs(ma_short - ma_long) / \
+                        ma_long if ma_long > 0 else 0
                     if ma_separation < 0.002:  # Less than 0.2% separation = too close to call
                         hist_position = 0  # Stay neutral if MAs are too close
-                        self.logger.info(f"MAs too close ({ma_separation:.3%} separation) - staying neutral for initialization")
-                    
+                        self.logger.info(
+                            f"MAs too close ({ma_separation:.3%} separation) - staying neutral for initialization")
+
                     direction_name = 'LONG' if hist_position == 1 else 'SHORT' if hist_position == -1 else 'NEUTRAL'
-                    self.logger.info(f"Simple MA analysis for initialization: {direction_name} (MA separation: {ma_separation:.3%})")
-                    self.logger.info(f"Note: Running strategy will use full adaptive logic with conservative thresholds")
+                    self.logger.info(
+                        f"Simple MA analysis for initialization: {direction_name} (MA separation: {ma_separation:.3%})")
+                    self.logger.info(
+                        f"Note: Running strategy will use full adaptive logic with conservative thresholds")
                 else:
                     hist_position = 0
             else:
@@ -501,7 +506,7 @@ class CryptoShell(cmd.Cmd):
                 self.auto_trader.position_cost_basis = amount_num * current_market_price
                 self.auto_trader.balance_btc = amount_num
                 self.auto_trader.balance_usd = 0.0
-                
+
                 # Set theoretical trade for entry price tracking
                 self.auto_trader.theoretical_trade = {
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -510,8 +515,9 @@ class CryptoShell(cmd.Cmd):
                     'entry_price': current_market_price,
                     'theoretical': True
                 }
-                self.logger.info(f"Case 1: LONG matches system. Theoretical entry: {amount_num:.8f} BTC @ ${current_market_price:.2f}")
-                
+                self.logger.info(
+                    f"Case 1: LONG matches system. Theoretical entry: {amount_num:.8f} BTC @ ${current_market_price:.2f}")
+
             elif desired_position == -1:  # Case 3: Both short
                 short_btc = amount_num / current_market_price
                 self.auto_trader.position = -1
@@ -519,7 +525,7 @@ class CryptoShell(cmd.Cmd):
                 self.auto_trader.position_cost_basis = amount_num
                 self.auto_trader.balance_btc = 0.0
                 self.auto_trader.balance_usd = amount_num
-                
+
                 # Set theoretical trade for entry price tracking
                 self.auto_trader.theoretical_trade = {
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -528,8 +534,9 @@ class CryptoShell(cmd.Cmd):
                     'entry_price': current_market_price,
                     'theoretical': True
                 }
-                self.logger.info(f"Case 3: SHORT matches system. Theoretical entry: ${amount_num:.2f} @ ${current_market_price:.2f}")
-                
+                self.logger.info(
+                    f"Case 3: SHORT matches system. Theoretical entry: ${amount_num:.2f} @ ${current_market_price:.2f}")
+
         else:
             # Cases 2 & 4: Positions differ - execute real alignment trades
             if desired_position == 1 and hist_position == -1:
@@ -539,12 +546,13 @@ class CryptoShell(cmd.Cmd):
                 self.auto_trader.balance_usd = 0.0
                 self.auto_trader.position_size = 0.0  # Will be set by trade execution
                 self.auto_trader.position_cost_basis = 0.0  # Will be set by trade execution
-                
-                self.logger.info(f"Case 2: User LONG but system says SHORT. Selling {amount_num:.8f} BTC")
+
+                self.logger.info(
+                    f"Case 2: User LONG but system says SHORT. Selling {amount_num:.8f} BTC")
                 trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.auto_trader.execute_trade(
                     "sell", current_market_price, trade_ts, datetime.now(), amount_num)
-                    
+
             elif desired_position == -1 and hist_position == 1:
                 # Case 4: User short, system says long - execute 3-part buy
                 short_btc = amount_num / current_market_price
@@ -553,10 +561,12 @@ class CryptoShell(cmd.Cmd):
                 self.auto_trader.balance_usd = amount_num
                 self.auto_trader.position_size = 0.0  # Will be set by trade execution
                 self.auto_trader.position_cost_basis = 0.0  # Will be set by trade execution
-                
-                self.logger.info(f"Case 4: User SHORT but system says LONG. Executing 3-part buy from ${amount_num:.2f}")
+
+                self.logger.info(
+                    f"Case 4: User SHORT but system says LONG. Executing 3-part buy from ${amount_num:.2f}")
                 trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                self.auto_trader.buy_in_three_parts(current_market_price, trade_ts, datetime.now())
+                self.auto_trader.buy_in_three_parts(
+                    current_market_price, trade_ts, datetime.now())
 
         self.auto_trader.start()
         print(f"Auto-trading started with {balance_str}, position={pos_str}, "
@@ -954,3 +964,311 @@ class CryptoShell(cmd.Cmd):
             f"To stop the chart, use 'quit' or shut down via http://127.0.0.1:{port}/shutdown")
 
         time.sleep(1)
+
+    def do_strategy_diagnostics(self, arg):
+        """
+        Show detailed diagnostics of the current adaptive strategy state.
+        Usage: strategy_diagnostics [detailed]
+
+        This exposes what your adaptive strategy is currently thinking and why
+        it hasn't triggered a position change yet.
+        """
+        if not self.auto_trader or not isinstance(self.auto_trader, AdaptiveMultiStrategy):
+            print("No adaptive auto trader running.")
+            return
+
+        detailed = arg.strip().lower() == 'detailed'
+
+        try:
+            # Get current data
+            df = self.data_manager.get_price_dataframe('btcusd')
+            if df.empty:
+                print("No data available")
+                return
+
+            df = ensure_datetime_index(df)
+            df_resampled = df.resample('1H').agg({
+                'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last',
+                'volume': 'sum', 'trades': 'sum', 'timestamp': 'last', 'source': 'last'
+            }).dropna()
+
+            current_price = df_resampled.iloc[-1]['close']
+
+            # Get regime analysis (using the strategy's own logic)
+            regime, confidence, metrics = self.auto_trader.detect_market_regime(
+                df_resampled)
+
+            # Get signals from each strategy type
+            trending_signal, trending_reason = self.auto_trader.generate_trending_signal(
+                df_resampled)
+            ranging_signal, ranging_reason = self.auto_trader.generate_ranging_signal(
+                df_resampled)
+            volatile_signal, volatile_reason = self.auto_trader.generate_volatile_signal(
+                df_resampled)
+
+            # Calculate position metrics
+            status = self.auto_trader.get_status()
+            position_info = status.get('position_info', {})
+            current_position_value = abs(
+                self.auto_trader.balance_btc * current_price) + self.auto_trader.balance_usd
+
+            # Check various thresholds and constraints
+            has_significant_position = current_position_value > 50000
+            confidence_threshold = 0.75 if has_significant_position else 0.65
+
+            if regime == "trending":
+                required_confidence = 0.80
+            elif regime == "ranging":
+                required_confidence = 0.60
+            else:  # volatile
+                required_confidence = 0.70
+
+            can_switch = confidence >= required_confidence
+            can_trade_gap = self.auto_trader.check_trade_gap()
+            signal_confirmed = len(
+                self.auto_trader.signal_history) >= self.auto_trader.signal_confirmation_bars
+
+            diagnostics = {
+                "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "current_price": current_price,
+                "position_analysis": {
+                    "current_position": "SHORT" if status['position'] == -1 else "LONG" if status['position'] == 1 else "NEUTRAL",
+                    "entry_price": position_info.get('entry_price', 0),
+                    "unrealized_pnl": position_info.get('unrealized_pnl', 0),
+                    "position_value": current_position_value,
+                    "has_significant_position": has_significant_position
+                },
+                "regime_detection": {
+                    "detected_regime": regime,
+                    "confidence": confidence,
+                    "active_strategy": self.auto_trader.active_strategy,
+                    "whipsaw_ratio": metrics.get('whipsaw_ratio', 0),
+                    "trend_strength": metrics.get('trend_strength', 0),
+                    "required_confidence": required_confidence,
+                    "can_switch_strategy": can_switch,
+                    "confidence_gap": confidence - required_confidence
+                },
+                "strategy_signals": {
+                    "trending": {
+                        "signal": trending_signal,
+                        "reason": trending_reason,
+                        "active": self.auto_trader.active_strategy == "trending"
+                    },
+                    "ranging": {
+                        "signal": ranging_signal,
+                        "reason": ranging_reason,
+                        "active": self.auto_trader.active_strategy == "ranging"
+                    },
+                    "volatile": {
+                        "signal": volatile_signal,
+                        "reason": volatile_reason,
+                        "active": self.auto_trader.active_strategy == "volatile"
+                    }
+                },
+                "trading_constraints": {
+                    "can_trade_gap": can_trade_gap,
+                    "signal_confirmed": signal_confirmed,
+                    "signal_history_length": len(self.auto_trader.signal_history),
+                    "required_confirmation_bars": self.auto_trader.signal_confirmation_bars,
+                    "daily_trades_used": self.auto_trader.trade_count_today,
+                    "daily_trades_remaining": max(0, self.auto_trader.max_trades_per_day - self.auto_trader.trade_count_today)
+                },
+                "why_no_trade": []
+            }
+
+            # Analyze why no trade has been triggered
+            active_signal = None
+            if self.auto_trader.active_strategy == "trending":
+                active_signal = trending_signal
+            elif self.auto_trader.active_strategy == "ranging":
+                active_signal = ranging_signal
+            elif self.auto_trader.active_strategy == "volatile":
+                active_signal = volatile_signal
+
+            # Check each constraint
+            if active_signal == 0:
+                diagnostics["why_no_trade"].append(
+                    f"No signal from active {self.auto_trader.active_strategy} strategy")
+            elif active_signal == status['position']:
+                diagnostics["why_no_trade"].append(
+                    f"Signal ({active_signal}) matches current position ({status['position']})")
+
+            if not signal_confirmed:
+                diagnostics["why_no_trade"].append(
+                    f"Signal not confirmed: {len(self.auto_trader.signal_history)}/{self.auto_trader.signal_confirmation_bars} bars")
+
+            if not can_trade_gap:
+                mins_since = (datetime.now() - self.auto_trader.last_trade_time).total_seconds(
+                ) / 60 if self.auto_trader.last_trade_time else 999
+                diagnostics["why_no_trade"].append(
+                    f"Trade gap: {mins_since:.1f}min < {self.auto_trader.min_trade_gap_minutes}min required")
+
+            if diagnostics["trading_constraints"]["daily_trades_remaining"] <= 0:
+                diagnostics["why_no_trade"].append("Daily trade limit reached")
+
+            # Output results
+            print("\n" + "="*80)
+            print("ADAPTIVE STRATEGY DIAGNOSTICS")
+            print("="*80)
+
+            if detailed:
+                print(json.dumps(diagnostics, indent=2))
+            else:
+                self._print_diagnostics_summary(diagnostics)
+
+            print("="*80)
+
+        except Exception as e:
+            self.logger.error(f"Error in strategy diagnostics: {e}")
+            print(f"Diagnostics failed: {e}")
+
+    def do_tune_strategy(self, arg):
+        """
+        Adjust adaptive strategy parameters in real-time.
+        Usage: tune_strategy <parameter> <value>
+
+        Available parameters:
+        - regime_threshold <0.1-0.9>  : Confidence required to switch regimes
+        - confirmation_bars <1-5>     : Bars required to confirm signal  
+        - trade_gap_minutes <5-60>    : Minutes between trades
+        - rsi_oversold <20-35>        : RSI oversold threshold
+        - rsi_overbought <65-80>      : RSI overbought threshold
+        """
+        if not self.auto_trader or not isinstance(self.auto_trader, AdaptiveMultiStrategy):
+            print("No adaptive auto trader running.")
+            return
+
+        args = arg.split()
+        if len(args) != 2:
+            print("Usage: tune_strategy <parameter> <value>")
+            print("Example: tune_strategy regime_threshold 0.5")
+            return
+
+        param, value_str = args
+
+        try:
+            value = float(value_str)
+
+            if param == "regime_threshold":
+                if 0.1 <= value <= 0.9:
+                    self.auto_trader.regime_switch_threshold = value
+                    print(f"✅ Updated regime switch threshold to {value:.1%}")
+                else:
+                    print("❌ Regime threshold must be between 0.1 and 0.9")
+
+            elif param == "confirmation_bars":
+                value = int(value)
+                if 1 <= value <= 5:
+                    self.auto_trader.signal_confirmation_bars = value
+                    print(f"✅ Updated signal confirmation bars to {value}")
+                else:
+                    print("❌ Confirmation bars must be between 1 and 5")
+
+            elif param == "trade_gap_minutes":
+                value = int(value)
+                if 5 <= value <= 60:
+                    self.auto_trader.min_trade_gap_minutes = value
+                    print(f"✅ Updated minimum trade gap to {value} minutes")
+                else:
+                    print("❌ Trade gap must be between 5 and 60 minutes")
+
+            elif param == "rsi_oversold":
+                if 20 <= value <= 35:
+                    self.auto_trader.rsi_oversold = value
+                    print(f"✅ Updated RSI oversold threshold to {value}")
+                else:
+                    print("❌ RSI oversold must be between 20 and 35")
+
+            elif param == "rsi_overbought":
+                if 65 <= value <= 80:
+                    self.auto_trader.rsi_overbought = value
+                    print(f"✅ Updated RSI overbought threshold to {value}")
+                else:
+                    print("❌ RSI overbought must be between 65 and 80")
+
+            else:
+                print(f"❌ Unknown parameter: {param}")
+                print(
+                    "Available: regime_threshold, confirmation_bars, trade_gap_minutes, rsi_oversold, rsi_overbought")
+
+        except ValueError:
+            print(f"❌ Invalid value: {value_str}")
+
+    def do_force_regime(self, arg):
+        """
+        Temporarily override regime detection for testing.
+        Usage: force_regime <trending|ranging|volatile|auto>
+
+        'auto' returns to automatic regime detection.
+        """
+        if not self.auto_trader or not isinstance(self.auto_trader, AdaptiveMultiStrategy):
+            print("No adaptive auto trader running.")
+            return
+
+        regime = arg.strip().lower()
+
+        if regime in ['trending', 'ranging', 'volatile']:
+            # Add override mechanism to the strategy
+            if not hasattr(self.auto_trader, 'regime_override'):
+                self.auto_trader.regime_override = None
+
+            self.auto_trader.regime_override = regime
+            self.auto_trader.active_strategy = regime
+            print(f"🔧 FORCING regime to {regime.upper()}")
+            print(
+                f"⚠️  Strategy will use {regime} logic until you run 'force_regime auto'")
+
+        elif regime == 'auto':
+            if hasattr(self.auto_trader, 'regime_override'):
+                self.auto_trader.regime_override = None
+            print("🔄 Returned to automatic regime detection")
+
+        else:
+            print("Usage: force_regime <trending|ranging|volatile|auto>")
+
+    def _print_diagnostics_summary(self, diagnostics):
+        """Print a concise summary of strategy diagnostics."""
+        pos = diagnostics["position_analysis"]
+        regime = diagnostics["regime_detection"]
+        signals = diagnostics["strategy_signals"]
+        constraints = diagnostics["trading_constraints"]
+
+        print(f"\n🎯 CURRENT POSITION:")
+        print(f"   Direction: {pos['current_position']}")
+        print(
+            f"   Entry: ${pos['entry_price']:.2f} → Current: ${diagnostics['current_price']:.2f}")
+        print(f"   P&L: ${pos['unrealized_pnl']:.2f}")
+
+        print(f"\n📊 REGIME DETECTION:")
+        print(f"   Detected: {regime['detected_regime'].upper()}")
+        print(
+            f"   Confidence: {regime['confidence']:.1%} (need {regime['required_confidence']:.1%})")
+        print(f"   Active Strategy: {regime['active_strategy'].upper()}")
+        print(
+            f"   Can Switch: {'✅ YES' if regime['can_switch_strategy'] else '❌ NO'}")
+        if not regime['can_switch_strategy']:
+            print(
+                f"   Gap: {regime['confidence_gap']:.1%} short of required confidence")
+
+        print(f"\n🎪 STRATEGY SIGNALS:")
+        for strategy_name, signal_info in signals.items():
+            status_icon = "🔵" if signal_info['active'] else "⚪"
+            signal_text = "LONG" if signal_info['signal'] == 1 else "SHORT" if signal_info['signal'] == -1 else "NEUTRAL"
+            print(f"   {status_icon} {strategy_name.upper()}: {signal_text}")
+            if signal_info['active']:
+                print(f"      → {signal_info['reason']}")
+
+        print(f"\n⚙️  TRADING CONSTRAINTS:")
+        print(
+            f"   Signal Confirmed: {'✅' if constraints['signal_confirmed'] else '❌'} ({constraints['signal_history_length']}/{constraints['required_confirmation_bars']} bars)")
+        print(
+            f"   Trade Gap OK: {'✅' if constraints['can_trade_gap'] else '❌'}")
+        print(
+            f"   Daily Trades: {constraints['daily_trades_used']}/{constraints['daily_trades_used'] + constraints['daily_trades_remaining']}")
+
+        if diagnostics["why_no_trade"]:
+            print(f"\n🚫 WHY NO TRADE YET:")
+            for reason in diagnostics["why_no_trade"]:
+                print(f"   • {reason}")
+        else:
+            print(f"\n✅ All constraints satisfied - trade should trigger on next signal!")
