@@ -688,6 +688,14 @@ class MACrossoverStrategy:
             'unrealized_pnl': 0.0,
         }
 
+        # Fix position flag early if it's wrong
+        if abs(self.balance_btc) < 1e-6 and self.balance_usd > 10000 and self.position == 0:
+            self.position = -1  # We're short, holding USD
+            self.logger.info(f"Corrected position flag to SHORT: holding ${self.balance_usd:.2f} USD, 0 BTC")
+        elif self.balance_btc > 1e-6 and abs(self.balance_usd) < 1000 and self.position == 0:
+            self.position = 1   # We're long, holding BTC
+            self.logger.info(f"Corrected position flag to LONG: holding {self.balance_btc:.8f} BTC")
+
         cp = position_info['current_price']
 
         # Handle theoretical vs real trades properly
@@ -735,27 +743,12 @@ class MACrossoverStrategy:
                     position_info['unrealized_pnl'] = (self.last_trade_price - cp) * btc_sold
                 else:
                     position_info['unrealized_pnl'] = 0.0
-                    
             else:
-                # Check if we should be short based on balances
-                if self.balance_usd > 10000 and abs(self.balance_btc) < 1e-6:
-                    # We have USD but no BTC - we're short
-                    self.position = -1  # Correct the position flag
-                    position_info['entry_price'] = self.last_trade_price or 0.0
-                    position_info['position_size_btc'] = 0.0
-                    position_info['position_size_usd'] = self.balance_usd
-                    if self.last_trade_price and self.position_cost_basis > 0:
-                        btc_sold = self.position_cost_basis
-                        position_info['unrealized_pnl'] = (self.last_trade_price - cp) * btc_sold
-                    else:
-                        position_info['unrealized_pnl'] = 0.0
-                    self.logger.info(f"Corrected position flag to SHORT based on USD balance: ${self.balance_usd:.2f}")
-                else:
-                    # Truly neutral
-                    position_info['entry_price'] = 0.0
-                    position_info['position_size_btc'] = 0.0
-                    position_info['position_size_usd'] = 0.0
-                    position_info['unrealized_pnl'] = 0.0
+                # Truly neutral position
+                position_info['entry_price'] = 0.0
+                position_info['position_size_btc'] = 0.0
+                position_info['position_size_usd'] = 0.0
+                position_info['unrealized_pnl'] = 0.0
 
         status['position_info'] = position_info
 
