@@ -170,105 +170,49 @@ class MACrossoverStrategy:
         return trade_value * self.fee_percentage
 
     def run_strategy_loop(self):
-        """Main adaptive strategy loop."""
+        """
+        Strategy loop that checks for signals every minute.
+        """
         while self.running:
             df = self.data_manager.get_price_dataframe(self.symbol)
             if not df.empty:
                 try:
                     df = ensure_datetime_index(df)
                     df_resampled = df.resample('1H').agg({
-                        'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last',
-                        'volume': 'sum', 'trades': 'sum', 'timestamp': 'last', 'source': 'last'
+                        'open': 'first',
+                        'high': 'max',
+                        'low': 'min',
+                        'close': 'last',
+                        'volume': 'sum',
+                        'trades': 'sum',
+                        'timestamp': 'last',
+                        'source': 'last'
                     }).dropna()
 
                     if len(df_resampled) >= self.long_window:
-                        # 1. Detect market regime
-                        regime, confidence, metrics = self.detect_market_regime(
-                            df_resampled)
+                        df_ma = add_moving_averages(
+                            df_resampled.copy(), self.short_window, self.long_window, price_col='close')
+                        df_ma = generate_ma_signals(df_ma)
 
-                        # 2. Calculate position metrics
-                        current_position_value = abs(
-                            self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
-                        has_significant_position = current_position_value > 50000
+                        latest_signal = df_ma.iloc[-1]['MA_Signal']
+                        signal_time = df_ma.index[-1]
+                        current_price = df_ma.iloc[-1]['close']
+                        signal_source = df_ma.iloc[-1]['source']
 
-                        # 3. Determine required confidence thresholds
-                        base_confidence_by_regime = {
-                            "trending": 0.80,    # Very high bar for trending
-                            "ranging": 0.60,     # Moderate bar for ranging
-                            "volatile": 0.70     # High bar for volatile
-                        }
+                        self.next_trigger = self.determine_next_trigger(df_ma)
+                        self.current_trends = self.get_current_trends(df_ma)
+                        self.df_ma = df_ma
 
-                        # Position-aware adjustment: add 10% for large positions, but respect regime minimums
-                        position_adjustment = 0.10 if has_significant_position else 0.0
-                        required_confidence = min(0.85, base_confidence_by_regime.get(
-                            regime, 0.65) + position_adjustment)
-
-                        # 4. Determine if strategy should switch
-                        can_switch_to_new_regime = confidence >= required_confidence
-
-                        if can_switch_to_new_regime:
-                            new_strategy = regime
-                        else:
-                            new_strategy = self.active_strategy  # Stay with current strategy
-
-                        # 5. Apply conservative override rules (only when switching AWAY from current)
-                        if self.active_strategy == "ranging" and new_strategy != "ranging":
-                            # Very high bar to leave ranging once we're in it
-                            if confidence < 0.85:
-                                new_strategy = "ranging"
-                                can_switch_to_new_regime = False
-
-                        elif self.active_strategy == "trending" and new_strategy != "trending" and has_significant_position:
-                            # High bar to leave trending when holding significant position
-                            if confidence < 0.75:
-                                new_strategy = "trending"
-                                can_switch_to_new_regime = False
-
-                        # 6. Log the decision (AFTER all logic is complete)
-                        if can_switch_to_new_regime and new_strategy != self.active_strategy:
-                            self.logger.info(
-                                f"🔄 SWITCHING: {self.active_strategy} → {new_strategy} (confidence: {confidence:.1%} >= {required_confidence:.1%} required)")
-                        elif not can_switch_to_new_regime:
-                            self.logger.info(
-                                f"⏸️  STAYING: {self.active_strategy} - {regime} confidence {confidence:.1%} < {required_confidence:.1%} required (position: ${current_position_value:,.0f})")
-                        else:
-                            self.logger.debug(
-                                f"✅ CONFIRMED: {self.active_strategy} strategy (regime: {regime}, confidence: {confidence:.1%})")
-
-                        # 7. Apply the strategy change
-                        if new_strategy != self.active_strategy:
-                            self.active_strategy = new_strategy
-                            self.strategy_switches_today += 1
-
-                        # 8. Generate signal using active strategy
-                        if self.active_strategy == "trending":
-                            signal, signal_reason = self.generate_trending_signal(
-                                df_resampled)
-                        elif self.active_strategy == "ranging":
-                            signal, signal_reason = self.generate_ranging_signal(
-                                df_resampled)
-                        elif self.active_strategy == "volatile":
-                            signal, signal_reason = self.generate_volatile_signal(
-                                df_resampled)
-                        else:
-                            signal, signal_reason = 0, "Unknown strategy"
-
-                        # 9. Execute if signal confirmed
-                        if signal != 0 and self.confirm_signal(signal):
-                            current_price = df_resampled.iloc[-1]['close']
-                            signal_time = df_resampled.index[-1]
-
-                            self.logger.info(
-                                f"📊 {self.active_strategy.upper()}: {signal_reason}")
-                            self.check_for_signals(
-                                signal, current_price, signal_time)
-
-                        # Store regime info
-                        self.current_regime = regime
-                        self.regime_confidence = confidence
-
+                        # Check signals (MA crossover)
+                        self.check_for_signals(
+                            latest_signal, current_price, signal_time)
+                    else:
+                        self.logger.debug("Not enough data to compute MAs.")
                 except Exception as e:
-                    self.logger.error(f"Error in adaptive strategy loop: {e}")
+                    self.logger.error(
+                        f"Error in strategy loop for {self.symbol}: {e}")
+            else:
+                self.logger.debug(f"No data loaded for {self.symbol} yet.")
             time.sleep(60)
 
     def determine_next_trigger(self, df_ma):
@@ -537,18 +481,16 @@ class MACrossoverStrategy:
             else:
                 # Short→Long transition: Reset position tracking to match actual BTC balance
                 if self.position_size < 0:
-                    self.logger.info(
-                        f"Closing short position of {self.position_size:.8f} BTC")
+                    self.logger.info(f"Closing short position of {self.position_size:.8f} BTC")
                     # Reset position tracking completely for clean transition
                     self.position_size = 0.0
                     self.position_cost_basis = 0.0
-
+                
                 # Add this buy to the position (now treating as fresh long position)
                 self.position_size += fill_btc
                 self.position_cost_basis += (fill_btc * fill_price)
-
-                self.logger.info(
-                    f"Long position updated: {self.position_size:.8f} BTC, cost basis: ${self.position_cost_basis:.2f}")
+                
+                self.logger.info(f"Long position updated: {self.position_size:.8f} BTC, cost basis: ${self.position_cost_basis:.2f}")
 
             if self.last_trade_price is not None and self.position == -1:
                 # old code for short -> buy
@@ -593,8 +535,7 @@ class MACrossoverStrategy:
                 # Going short: track USD held and BTC amount sold
                 self.position_size = 0.0  # No BTC held when short
                 self.position_cost_basis = fill_btc  # BTC amount sold for P&L calc
-                self.logger.info(
-                    f"Short position: sold {fill_btc:.8f} BTC @ ${fill_price:.2f}, holding ${self.balance_usd:.2f} USD")
+                self.logger.info(f"Short position: sold {fill_btc:.8f} BTC @ ${fill_price:.2f}, holding ${self.balance_usd:.2f} USD")
 
             if self.last_trade_price is not None and self.position == 1:
                 profit = fill_btc * (fill_price - self.last_trade_price) - fee
@@ -615,13 +556,11 @@ class MACrossoverStrategy:
             self.position_size = 0.0
             self.position_cost_basis = 0.0
             if self.position != 0:
-                self.logger.warning(
-                    f"Position size near zero but position flag is {self.position}. Resetting to neutral.")
+                self.logger.warning(f"Position size near zero but position flag is {self.position}. Resetting to neutral.")
                 self.position = 0
-
+        
         # Log position state for debugging
-        self.logger.debug(
-            f"Position update: size={self.position_size:.8f}, cost_basis={self.position_cost_basis:.2f}, direction={self.position}")
+        self.logger.debug(f"Position update: size={self.position_size:.8f}, cost_basis={self.position_cost_basis:.2f}, direction={self.position}")
 
         # Update max/min USD & BTC
         if self.balance_usd > self.max_balance_usd:
@@ -752,12 +691,10 @@ class MACrossoverStrategy:
         # Fix position flag early if it's wrong
         if abs(self.balance_btc) < 1e-6 and self.balance_usd > 10000 and self.position == 0:
             self.position = -1  # We're short, holding USD
-            self.logger.info(
-                f"Corrected position flag to SHORT: holding ${self.balance_usd:.2f} USD, 0 BTC")
+            self.logger.info(f"Corrected position flag to SHORT: holding ${self.balance_usd:.2f} USD, 0 BTC")
         elif self.balance_btc > 1e-6 and abs(self.balance_usd) < 1000 and self.position == 0:
             self.position = 1   # We're long, holding BTC
-            self.logger.info(
-                f"Corrected position flag to LONG: holding {self.balance_btc:.8f} BTC")
+            self.logger.info(f"Corrected position flag to LONG: holding {self.balance_btc:.8f} BTC")
 
         cp = position_info['current_price']
 
@@ -769,15 +706,13 @@ class MACrossoverStrategy:
                 position_info['entry_price'] = entry_price
                 position_info['position_size_btc'] = self.theoretical_trade['amount']
                 position_info['position_size_usd'] = self.theoretical_trade['amount'] * cp
-                position_info['unrealized_pnl'] = (
-                    cp - entry_price) * self.theoretical_trade['amount']
+                position_info['unrealized_pnl'] = (cp - entry_price) * self.theoretical_trade['amount']
             else:  # short
-                position_info['entry_price'] = entry_price
+                position_info['entry_price'] = entry_price  
                 position_info['position_size_btc'] = 0.0
                 position_info['position_size_usd'] = self.theoretical_trade['amount']
                 btc_equivalent = self.theoretical_trade['amount'] / entry_price
-                position_info['unrealized_pnl'] = (
-                    entry_price - cp) * btc_equivalent
+                position_info['unrealized_pnl'] = (entry_price - cp) * btc_equivalent
 
         else:
             # REAL TRADES: Use actual balances and tracking
@@ -788,27 +723,24 @@ class MACrossoverStrategy:
                     position_info['entry_price'] = avg_entry_price
                     position_info['position_size_btc'] = self.position_size
                     position_info['position_size_usd'] = self.position_size * cp
-                    position_info['unrealized_pnl'] = (
-                        self.position_size * cp) - self.position_cost_basis
+                    position_info['unrealized_pnl'] = (self.position_size * cp) - self.position_cost_basis
                 else:
                     # Long but check actual balance
                     position_info['entry_price'] = 0.0
                     position_info['position_size_btc'] = self.balance_btc
                     position_info['position_size_usd'] = self.balance_btc * cp
                     position_info['unrealized_pnl'] = 0.0
-
+                    
             elif self.position == -1:
                 # Short position - holding USD from selling BTC
                 position_info['entry_price'] = self.last_trade_price or 0.0
                 position_info['position_size_btc'] = 0.0  # No BTC held
-                # USD from sale
-                position_info['position_size_usd'] = self.balance_usd
-
+                position_info['position_size_usd'] = self.balance_usd  # USD from sale
+                
                 # P&L for short: (sell_price - current_price) * btc_amount_sold
                 if self.last_trade_price and self.position_cost_basis > 0:
                     btc_sold = self.position_cost_basis
-                    position_info['unrealized_pnl'] = (
-                        self.last_trade_price - cp) * btc_sold
+                    position_info['unrealized_pnl'] = (self.last_trade_price - cp) * btc_sold
                 else:
                     position_info['unrealized_pnl'] = 0.0
             else:
@@ -901,10 +833,8 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         self.logger.info(
             f"   Regime lookback: {self.regime_lookback}, Gap: {self.min_trade_gap_minutes}min")
 
-        self.logger.info(
-            f"   Confidence thresholds: TRENDING=80%, RANGING=60%, VOLATILE=70%")
-        self.logger.info(
-            f"   Position-aware switching: $50k+ requires higher confidence")
+        self.logger.info(f"   Confidence thresholds: TRENDING=80%, RANGING=60%, VOLATILE=70%")
+        self.logger.info(f"   Position-aware switching: $50k+ requires higher confidence")
 
     def detect_market_regime(self, df):
         """Detect if market is trending, ranging, or volatile."""
@@ -983,15 +913,12 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         confidence = min(0.95, max_score / 6.0)
 
         # Create metrics dict first
-        metrics = {'whipsaw_ratio': whipsaw_ratio,
-                   'trend_strength': trend_strength}
-
+        metrics = {'whipsaw_ratio': whipsaw_ratio, 'trend_strength': trend_strength}
+        
         self.logger.info(
             f"📊 Regime Scores: TRENDING={regime_scores['trending']:.1f}, RANGING={regime_scores['ranging']:.1f}, VOLATILE={regime_scores['volatile']:.1f}")
-        self.logger.info(
-            f"📈 Market Metrics: whipsaw={metrics.get('whipsaw_ratio', 0):.1f}%, trend_strength={metrics.get('trend_strength', 0):.3f}, volatility={volatility:.4f}")
-        self.logger.info(
-            f"🎯 Final: {regime.upper()} (confidence: {confidence:.1%})")
+        self.logger.info(f"📈 Market Metrics: whipsaw={metrics.get('whipsaw_ratio', 0):.1f}%, trend_strength={metrics.get('trend_strength', 0):.3f}, volatility={volatility:.4f}")
+        self.logger.info(f"🎯 Final: {regime.upper()} (confidence: {confidence:.1%})")
 
         return regime, confidence, metrics
 
@@ -1080,13 +1007,11 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             self.signal_history = self.signal_history[-10:]
 
         # Require more confirmation when holding positions
-        current_position_value = abs(
-            self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
+        current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
         has_position = current_position_value > 10000
-
-        required_bars = self.signal_confirmation_bars + \
-            (2 if has_position else 0)
-
+        
+        required_bars = self.signal_confirmation_bars + (2 if has_position else 0)
+        
         if len(self.signal_history) < required_bars:
             return False
 
@@ -1127,13 +1052,12 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             df_resampled)
 
                         # 2. Conservative strategy selection with position awareness
-                        current_position_value = abs(
-                            self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
+                        current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
                         has_significant_position = current_position_value > 50000  # $50k+ position
-
+                        
                         # Higher confidence required when holding significant positions
                         confidence_threshold = 0.75 if has_significant_position else 0.65
-
+                        
                         # Specific thresholds by regime
                         if regime == "trending":
                             required_confidence = 0.80  # Very high bar for trending
@@ -1145,36 +1069,30 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         # Only switch if confidence exceeds threshold
                         if confidence >= required_confidence:
                             new_strategy = regime
-                            self.logger.info(
-                                f"✅ Switching to {regime} strategy - confidence {confidence:.1%} >= {required_confidence:.1%} required")
+                            self.logger.info(f"✅ Switching to {regime} strategy - confidence {confidence:.1%} >= {required_confidence:.1%} required")
                         else:
                             new_strategy = self.active_strategy  # Stay with current strategy
-                            self.logger.info(
-                                f"⏸️  Staying with {self.active_strategy} strategy - {regime} confidence {confidence:.1%} < {required_confidence:.1%} required (position: ${current_position_value:,.0f})")
+                            self.logger.info(f"⏸️  Staying with {self.active_strategy} strategy - {regime} confidence {confidence:.1%} < {required_confidence:.1%} required (position: ${current_position_value:,.0f})")
 
                         # Extra conservative check: don't switch away from ranging easily
                         if self.active_strategy == "ranging" and new_strategy != "ranging":
                             if confidence < 0.85:  # Very high bar to leave ranging
                                 new_strategy = "ranging"
-                                self.logger.debug(
-                                    f"Staying in ranging strategy - confidence {confidence:.1%} insufficient to switch")
+                                self.logger.debug(f"Staying in ranging strategy - confidence {confidence:.1%} insufficient to switch")
 
                         # Extra conservative check: don't switch away from trending easily when holding position
                         if self.active_strategy == "trending" and new_strategy != "trending" and has_significant_position:
                             if confidence < 0.75:  # High bar to leave trending when holding position
                                 new_strategy = "trending"
-                                self.logger.info(
-                                    f"🔒 Staying in trending strategy - confidence {confidence:.1%} insufficient to switch (holding ${current_position_value:,.0f})")
+                                self.logger.info(f"🔒 Staying in trending strategy - confidence {confidence:.1%} insufficient to switch (holding ${current_position_value:,.0f})")
 
                         # 3. Check for strategy switch
                         if new_strategy != self.active_strategy:
-                            self.logger.info(
-                                f"🔄 STRATEGY SWITCH: {self.active_strategy} → {new_strategy} (confidence: {confidence:.1%})")
+                            self.logger.info(f"🔄 STRATEGY SWITCH: {self.active_strategy} → {new_strategy} (confidence: {confidence:.1%})")
                             self.active_strategy = new_strategy
                             self.strategy_switches_today += 1
                         else:
-                            self.logger.debug(
-                                f"Keeping {self.active_strategy} strategy (regime: {regime}, confidence: {confidence:.1%})")
+                            self.logger.debug(f"Keeping {self.active_strategy} strategy (regime: {regime}, confidence: {confidence:.1%})")
 
                         # 4. Generate signal using active strategy
                         if self.active_strategy == "trending":
