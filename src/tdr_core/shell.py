@@ -1100,48 +1100,48 @@ class CryptoShell(cmd.Cmd):
 
             diagnostics = {
                 "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                "current_price": current_price,
+                "current_price": float(current_price),
                 "position_analysis": {
                     "current_position": "SHORT" if status['position'] == -1 else "LONG" if status['position'] == 1 else "NEUTRAL",
-                    "entry_price": position_info.get('entry_price', 0),
-                    "unrealized_pnl": position_info.get('unrealized_pnl', 0),
-                    "position_value": current_position_value,
-                    "has_significant_position": has_significant_position
+                    "entry_price": float(position_info.get('entry_price', 0)),
+                    "unrealized_pnl": float(position_info.get('unrealized_pnl', 0)),
+                    "position_value": float(current_position_value),
+                    "has_significant_position": bool(has_significant_position)
                 },
                 "regime_detection": {
                     "detected_regime": regime,
-                    "confidence": confidence,
+                    "confidence": float(confidence),
                     "active_strategy": self.auto_trader.active_strategy,
-                    "whipsaw_ratio": metrics.get('whipsaw_ratio', 0),
-                    "trend_strength": metrics.get('trend_strength', 0),
-                    "required_confidence": required_confidence,
-                    "can_switch_strategy": can_switch,
-                    "confidence_gap": confidence - required_confidence
+                    "whipsaw_ratio": float(metrics.get('whipsaw_ratio', 0)),
+                    "trend_strength": float(metrics.get('trend_strength', 0)),
+                    "required_confidence": float(required_confidence),
+                    "can_switch_strategy": bool(can_switch),
+                    "confidence_gap": float(confidence - required_confidence)
                 },
                 "strategy_signals": {
                     "trending": {
-                        "signal": trending_signal,
-                        "reason": trending_reason,
-                        "active": self.auto_trader.active_strategy == "trending"
+                        "signal": int(trending_signal),
+                        "reason": str(trending_reason),
+                        "active": bool(self.auto_trader.active_strategy == "trending")
                     },
                     "ranging": {
-                        "signal": ranging_signal,
-                        "reason": ranging_reason,
-                        "active": self.auto_trader.active_strategy == "ranging"
+                        "signal": int(ranging_signal),
+                        "reason": str(ranging_reason),
+                        "active": bool(self.auto_trader.active_strategy == "ranging")
                     },
                     "volatile": {
-                        "signal": volatile_signal,
-                        "reason": volatile_reason,
-                        "active": self.auto_trader.active_strategy == "volatile"
+                        "signal": int(volatile_signal),
+                        "reason": str(volatile_reason),
+                        "active": bool(self.auto_trader.active_strategy == "volatile")
                     }
                 },
                 "trading_constraints": {
-                    "can_trade_gap": can_trade_gap,
-                    "signal_confirmed": signal_confirmed,
-                    "signal_history_length": len(self.auto_trader.signal_history),
-                    "required_confirmation_bars": self.auto_trader.signal_confirmation_bars,
-                    "daily_trades_used": self.auto_trader.trade_count_today,
-                    "daily_trades_remaining": max(0, self.auto_trader.max_trades_per_day - self.auto_trader.trade_count_today)
+                    "can_trade_gap": bool(can_trade_gap),
+                    "signal_confirmed": bool(signal_confirmed),
+                    "signal_history_length": int(len(self.auto_trader.signal_history)),
+                    "required_confirmation_bars": int(self.auto_trader.signal_confirmation_bars),
+                    "daily_trades_used": int(self.auto_trader.trade_count_today),
+                    "daily_trades_remaining": int(max(0, self.auto_trader.max_trades_per_day - self.auto_trader.trade_count_today))
                 },
                 "why_no_trade": []
             }
