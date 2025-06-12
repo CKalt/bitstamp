@@ -380,6 +380,24 @@ class CryptoShell(cmd.Cmd):
         do_live = best_strategy_params.get('do_live_trades', False)
         max_trades_day = best_strategy_params.get('max_trades_per_day', 5)
 
+
+
+# ------------------------------------------------------------------------
+# NEW: Optional backwards‑compatibility switch.
+# If you put  "auto_align_position": true  in best_strategy.json,
+# the old “instant realignment” behaviour is retained.  Otherwise
+# the programme will honour your requested starting posture and
+# *not* reverse the position at start‑up.  The strategy will make
+# the next move when its rules say so.
+# ------------------------------------------------------------------------
+        auto_align = best_strategy_params.get('auto_align_position', False)
+
+
+
+
+
+
+
         # Get price DataFrame for the chosen symbol
         df = self.data_manager.get_price_dataframe('btcusd').copy()
         if 'close' not in df.columns and 'price' in df.columns:
@@ -538,8 +556,61 @@ class CryptoShell(cmd.Cmd):
                     f"Case 3: SHORT matches system. Theoretical entry: ${amount_num:.2f} @ ${current_market_price:.2f}")
 
         else:
-            # Cases 2 & 4: Positions differ - execute real alignment trades
-            if desired_position == 1 and hist_position == -1:
+# ------------------------------------------------------------------------
+# Positions differ between what you asked for (desired_position) and what
+# the last MA snapshot suggested (hist_position).
+#
+# • If auto_align_position == False (the new default) we *do not* fire an
+#   immediate reversing trade.  Instead we book your holdings as a
+#   theoretical entry and let the adaptive strategy decide when (or if)
+#   to flip.
+#
+# • If auto_align_position == True the old behaviour is preserved.
+# ------------------------------------------------------------------------
+            if not auto_align:
+                self.logger.info(
+                    "Initial desired position differs from MA suggestion, "
+                    "but 'auto_align_position' is False.  Starting in "
+                    "theoretical mode without an immediate hedge; the "
+                    "running strategy will realign organically."
+                )
+
+                # Treat the mismatch as if positions already match
+                hist_position = desired_position
+
+                # --- Theoretical LONG initialisation (mirrors Case 1) ---
+                if desired_position == 1:
+                    self.auto_trader.position = 1
+                    self.auto_trader.position_size = amount_num
+                    self.auto_trader.position_cost_basis = amount_num * current_market_price
+                    self.auto_trader.balance_btc = amount_num
+                    self.auto_trader.balance_usd = 0.0
+                    self.auto_trader.theoretical_trade = {
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'direction': 'long',
+                        'amount': amount_num,
+                        'entry_price': current_market_price,
+                        'theoretical': True
+                    }
+
+                # --- Theoretical SHORT initialisation (mirrors Case 3) ---
+                elif desired_position == -1:
+                    short_btc = amount_num / current_market_price
+                    self.auto_trader.position = -1
+                    self.auto_trader.position_size = 0.0
+                    self.auto_trader.position_cost_basis = amount_num
+                    self.auto_trader.balance_btc = 0.0
+                    self.auto_trader.balance_usd = amount_num
+                    self.auto_trader.theoretical_trade = {
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'direction': 'short',
+                        'amount': amount_num,
+                        'entry_price': current_market_price,
+                        'theoretical': True
+                    }
+
+            # --- Original realignment logic (unchanged) -------------
+            elif desired_position == 1 and hist_position == -1:
                 # Case 2: User long, system says short - sell all BTC
                 self.auto_trader.position = -1
                 self.auto_trader.balance_btc = amount_num
@@ -552,7 +623,6 @@ class CryptoShell(cmd.Cmd):
                 trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.auto_trader.execute_trade(
                     "sell", current_market_price, trade_ts, datetime.now(), amount_num)
-
             elif desired_position == -1 and hist_position == 1:
                 # Case 4: User short, system says long - execute 3-part buy
                 short_btc = amount_num / current_market_price
