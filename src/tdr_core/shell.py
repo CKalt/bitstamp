@@ -380,7 +380,11 @@ class CryptoShell(cmd.Cmd):
         do_live = best_strategy_params.get('do_live_trades', False)
         max_trades_day = best_strategy_params.get('max_trades_per_day', 5)
 
-
+        # Read adaptive strategy parameters from config
+        regime_threshold = float(best_strategy_params.get('regime_switch_threshold', 0.7))
+        confirmation_bars = int(best_strategy_params.get('signal_confirmation_bars', 2))
+        min_trade_gap = int(best_strategy_params.get('min_trade_gap_minutes', 30))
+        regime_lookback = int(best_strategy_params.get('regime_lookback', 50))
 
 # ------------------------------------------------------------------------
 # NEW: Optional backwards‑compatibility switch.
@@ -391,12 +395,6 @@ class CryptoShell(cmd.Cmd):
 # the next move when its rules say so.
 # ------------------------------------------------------------------------
         auto_align = best_strategy_params.get('auto_align_position', False)
-
-
-
-
-
-
 
         # Get price DataFrame for the chosen symbol
         df = self.data_manager.get_price_dataframe('btcusd').copy()
@@ -465,10 +463,10 @@ class CryptoShell(cmd.Cmd):
             initial_balance_btc=initial_balance_btc,
             initial_balance_usd=initial_balance_usd,
             # Adaptive strategy parameters
-            regime_lookback=50,              # Analyze last 50 bars
-            signal_confirmation_bars=2,      # Require 2 confirmed signals
-            min_trade_gap_minutes=30,        # 30min between trades
-            regime_switch_threshold=0.7,     # 70% confidence to switch
+            regime_lookback=regime_lookback,  # From config or default 50
+            signal_confirmation_bars=confirmation_bars,  # From config or default 2
+            min_trade_gap_minutes=min_trade_gap,  # From config or default 30
+            regime_switch_threshold=regime_threshold,  # From config or default 0.7
             # Mean reversion for your whipsaw situation
             rsi_oversold=35,                 # Your RSI is 35.66!
             rsi_overbought=65,
