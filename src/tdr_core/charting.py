@@ -634,10 +634,10 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
     # Add shutdown route
     @app.server.route('/shutdown')
     def shutdown():
-        func = request.environ.get('werkzeug.server.shutdown')
-        if func is None:
-            return 'Not running with the Werkzeug Server'
-        func()
+        import os
+        import signal
+        # More reliable shutdown method
+        os.kill(os.getpid(), signal.SIGTERM)
         return 'Server shutting down...'
 
     print(f"Starting Dash app on http://{host}:{port}")
@@ -650,9 +650,14 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
         print("Use the dropdown in the web interface to compare strategies.")
 
     try:
-        app.run_server(host=host, port=port, debug=False)
+        # Run with threaded=False to avoid issues with process termination
+        app.run_server(host=host, port=port, debug=False, threaded=False)
     except Exception as e:
         print(f"Error running Dash app: {e}")
+    except KeyboardInterrupt:
+        print("\nDash app interrupted")
+    finally:
+        print("Dash app shutting down")
 
 
 def create_sample_data_manager_dict(symbol='btcusd'):

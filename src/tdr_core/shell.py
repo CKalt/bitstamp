@@ -890,12 +890,23 @@ class CryptoShell(cmd.Cmd):
         Quit the program, shutting down threads and processes gracefully.
         """
         print("Quitting...")
+
+        # Stop auto trader first
         if self.auto_trader and self.auto_trader.running:
+            print("Stopping auto trader...")
             self.auto_trader.stop()
+            
+        # Stop chart process
         if self.chart_process and self.chart_process.is_alive():
+            print("Stopping chart processp...")
             self.stop_dash_app()
+            
+        # Set stop event for websocket threads
         if self.stop_event:
+            print("Signaling websocket threads to stop...")
             self.stop_event.set()
+            
+        print("Shutdown complete.")
         return True
 
     def stop_dash_app(self):
@@ -907,11 +918,28 @@ class CryptoShell(cmd.Cmd):
             try:
                 # Use the stored port for shutdown, default to 8050 if not set
                 port = self.chart_port or 8050
-                requests.get(f'http://127.0.0.1:{port}/shutdown')
-                self.chart_process.join()
+                print(f"Attempting to shut down Dash app on port {port}...")
+                try:
+                    response = requests.get(f'http://127.0.0.1:{port}/shutdown', timeout=2)
+                    print(f"Shutdown request sent, response: {response.status_code}")
+                except requests.exceptions.RequestException as e:
+                    print(f"Shutdown request failed: {e}")
+                
+                # Give it a moment to shut down gracefully
+                self.chart_process.join(timeout=3)
+                
+                # If still alive, terminate it
+                if self.chart_process.is_alive():
+                    print("Dash app didn't shut down gracefully, terminating...")
+                    self.chart_process.terminate()
+                    self.chart_process.join(timeout=2)
+
                 print("Dash app shut down.")
             except Exception as e:
                 print("Failed to shut down Dash app:", e)
+                # Force terminate if all else fails
+                if self.chart_process.is_alive():
+                    self.chart_process.terminate()
 
     def do_exit(self, arg):
         """

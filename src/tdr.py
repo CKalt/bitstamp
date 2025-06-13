@@ -200,14 +200,27 @@ def main():
         print("\nInterrupted. Exiting gracefully.")
         shell.do_quit(None)
     finally:
-        stop_event.set()
-        if websocket_thread.is_alive():
-            websocket_thread.join()
+        print("Cleaning up...")
+        
+        # Stop auto trader if not already stopped
         if shell.auto_trader and shell.auto_trader.running:
             shell.auto_trader.stop()
+            
+        # Stop chart process if not already stopped
         if shell.chart_process and shell.chart_process.is_alive():
             shell.stop_dash_app()
+            
+        # Signal all threads to stop
+        stop_event.set()
 
+        # Wait for websocket thread with timeout
+        if websocket_thread.is_alive():
+            print("Waiting for websocket thread to stop...")
+            websocket_thread.join(timeout=5)
+            if websocket_thread.is_alive():
+                print("Warning: websocket thread did not stop cleanly")
+                
+        print("Shutdown complete.")
 
 if __name__ == '__main__':
     set_start_method('spawn')
