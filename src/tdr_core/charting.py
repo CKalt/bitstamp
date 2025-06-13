@@ -47,6 +47,26 @@ except ImportError:
     print("Warning: Dash and Plotly not available. Install with: pip install dash plotly")
 
 
+# Helper functions moved outside of the callback to fix scoping issues
+def calculate_rsi_for_chart(df, window=14):
+    """Calculate RSI for charting - returns just the RSI series."""
+    delta = df['close'].diff()
+    gain = (delta.clip(lower=0)).rolling(window=window).mean()
+    loss = (-delta.clip(upper=0)).rolling(window=window).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+
+def calculate_bollinger_bands_for_chart(df, window=20, num_std=2):
+    """Calculate Bollinger Bands for charting."""
+    bb_ma = df['close'].rolling(window=window).mean()
+    bb_std = df['close'].rolling(window=window).std()
+    bb_upper = bb_ma + (bb_std * num_std)
+    bb_lower = bb_ma - (bb_std * num_std)
+    return bb_ma, bb_upper, bb_lower
+
+
 def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                  host='0.0.0.0', port=8050, strategy_file='best_strategy.json',
                  strategy_name='MA Strategy', alt_strategy_file=None):
@@ -183,40 +203,6 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
          Input('strategy-dropdown', 'value'),
          Input('hours-to-show', 'value')]
     )
-    def calculate_rsi_simple(df, window=14):
-        """Calculate RSI manually for charting."""
-        delta = df['close'].diff()
-        gain = (delta.clip(lower=0)).rolling(window=window).mean()
-        loss = (-delta.clip(upper=0)).rolling(window=window).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        return rsi
-
-    def calculate_bollinger_bands_simple(df, window=20, num_std=2):
-        """Calculate Bollinger Bands manually for charting."""
-        bb_ma = df['close'].rolling(window=window).mean()
-        bb_std = df['close'].rolling(window=window).std()
-        bb_upper = bb_ma + (bb_std * num_std)
-        bb_lower = bb_ma - (bb_std * num_std)
-        return bb_ma, bb_upper, bb_lower
-
-    def calculate_rsi_for_chart(df, window=14):
-        """Calculate RSI for charting - returns just the RSI series."""
-        delta = df['close'].diff()
-        gain = (delta.clip(lower=0)).rolling(window=window).mean()
-        loss = (-delta.clip(upper=0)).rolling(window=window).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        return rsi
-
-    def calculate_bollinger_bands_for_chart(df, window=20, num_std=2):
-        """Calculate Bollinger Bands for charting."""
-        bb_ma = df['close'].rolling(window=window).mean()
-        bb_std = df['close'].rolling(window=window).std()
-        bb_upper = bb_ma + (bb_std * num_std)
-        bb_lower = bb_ma - (bb_std * num_std)
-        return bb_ma, bb_upper, bb_lower
-
     def update_graph(n, selected_strategy, hours_to_show):
         try:
             # Load strategy configuration
@@ -225,6 +211,11 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
             current_long_window = long_window
             current_strategy_name = strategy_name
             current_strategy_type = 'MA'  # default
+
+            # Initialize RSI parameters with defaults
+            rsi_window = 14
+            rsi_overbought = 70
+            rsi_oversold = 30
 
             try:
                 with open(current_strategy_file, 'r') as f:
@@ -372,7 +363,7 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                 decreasing_line_color='red'
             ), row=1, col=1)
 
-# Calculate and add Bollinger Bands
+            # Calculate and add Bollinger Bands
             bb_ma, bb_upper, bb_lower = calculate_bollinger_bands_for_chart(df_ma)
             
             # Only add BB traces where we have valid data
@@ -433,58 +424,6 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                              annotation_text="Oversold (30)", row=2, col=1)
                 fig.add_hline(y=50, line_dash="dot", line_color="gray", 
                              annotation_text="Neutral (50)", row=2, col=1)
-
-            # Calculate and add Bollinger Bands
-            bb_ma, bb_upper, bb_lower = calculate_bollinger_bands_simple(df_ma)
-
-            fig.add_trace(go.Scatter(
-                x=df_ma.index,
-                y=bb_upper,
-                mode='lines',
-                name='BB Upper (70)',
-                line=dict(color='rgba(255,0,0,0.3)', width=1, dash='dash'),
-                showlegend=True
-            ), row=1, col=1)
-
-            fig.add_trace(go.Scatter(
-                x=df_ma.index,
-                y=bb_lower,
-                mode='lines',
-                name='BB Lower (30)',
-                line=dict(color='rgba(0,255,0,0.3)', width=1, dash='dash'),
-                showlegend=True,
-                fill='tonexty',
-                fillcolor='rgba(128,128,128,0.1)'
-            ), row=1, col=1)
-
-            fig.add_trace(go.Scatter(
-                x=df_ma.index,
-                y=bb_ma,
-                mode='lines',
-                name='BB Middle (20 SMA)',
-                line=dict(color='orange', width=1),
-                showlegend=True
-            ), row=1, col=1)
-
-            # Calculate and add RSI
-            rsi_values = calculate_rsi_simple(df_ma)
-
-            fig.add_trace(go.Scatter(
-                x=df_ma.index,
-                y=rsi_values,
-                mode='lines',
-                name='RSI (14)',
-                line=dict(color='purple', width=2),
-                showlegend=False
-            ), row=2, col=1)
-
-            # Add RSI overbought/oversold lines
-            fig.add_hline(y=70, line_dash="dash", line_color="red",
-                          annotation_text="Overbought (70)", row=2, col=1)
-            fig.add_hline(y=30, line_dash="dash", line_color="green",
-                          annotation_text="Oversold (30)", row=2, col=1)
-            fig.add_hline(y=50, line_dash="dot", line_color="gray",
-                          annotation_text="Neutral (50)", row=2, col=1)
 
             # Add indicators based on strategy type
             if current_strategy_type == 'MA' and len(df_ma) >= max(current_short_window, current_long_window):
