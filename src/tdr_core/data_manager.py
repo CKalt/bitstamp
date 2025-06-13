@@ -116,12 +116,20 @@ class CryptoDataManager:
     def get_price_range(self, symbol, minutes):
         """
         Return the min and max price in the last 'minutes' of data.
+        Includes both historical and live WebSocket data.
         """
         now = pd.Timestamp.now()
         start_time = now - pd.Timedelta(minutes=minutes)
-        df = self.data[symbol]
+        
+        # Get combined historical + live data
+        df = self.get_price_dataframe(symbol)
+        
+        if df.empty:
+            return None, None
+            
         mask = df['timestamp'] >= int(start_time.timestamp())
         relevant_data = df.loc[mask, 'close']
+        
         if not relevant_data.empty:
             return relevant_data.min(), relevant_data.max()
         return None, None
