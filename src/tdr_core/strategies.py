@@ -481,16 +481,17 @@ class MACrossoverStrategy:
             else:
                 # Short→Long transition: Reset position tracking to match actual BTC balance
                 if self.position_size < 0:
-                    self.logger.info(f"Closing short position of {self.position_size:.8f} BTC")
+                    self.logger.info(f"Transitioning from SHORT to LONG")
+
                     # Reset position tracking completely for clean transition
                     self.position_size = 0.0
                     self.position_cost_basis = 0.0
-                
-                # Add this buy to the position (now treating as fresh long position)
-                self.position_size += fill_btc
-                self.position_cost_basis += (fill_btc * fill_price)
-                
-                self.logger.info(f"Long position updated: {self.position_size:.8f} BTC, cost basis: ${self.position_cost_basis:.2f}")
+
+                # Set new long position (don't add to old values)
+                self.position_size = fill_btc
+                self.position_cost_basis = fill_btc * fill_price
+
+                self.logger.info(f"New LONG position: {self.position_size:.8f} BTC, cost basis: ${self.position_cost_basis:.2f}")
 
             if self.last_trade_price is not None and self.position == -1:
                 # old code for short -> buy
