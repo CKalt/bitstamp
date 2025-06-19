@@ -1677,7 +1677,10 @@ class CryptoShell(cmd.Cmd):
             for reason in diagnostics["why_no_trade"]:
                 print(f"   • {reason}")
         else:
-            print(f"\n✅ All constraints satisfied - trade should trigger on next signal!") USD Balance: ${status['balance_usd']:.2f}")
+            print(f"\n✅ All constraints satisfied - trade should trigger on next signal!")
+
+
+
         print(f"  • Current BTC Balance: {status['balance_btc']:.8f}")
         print(
             f"  • Total Return (vs initial): {status['total_return_pct']:.2f}%")
