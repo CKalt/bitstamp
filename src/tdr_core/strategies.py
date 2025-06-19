@@ -785,6 +785,16 @@ class MACrossoverStrategy:
         if len(self.trades_this_hour) >= max_trades_per_hour:
             self.logger.info(
                 f"Reached hourly trade limit {max_trades_per_hour}, skipping trade.")
+
+            # Log to diagnostics when trade is blocked
+            self.diagnostic_logger.log_event("TRADE_BLOCKED", {
+                "reason": "Hourly trade limit reached",
+                "trades_this_hour": len(self.trades_this_hour),
+                "max_per_hour": max_trades_per_hour,
+                "trade_type": trade_type,
+                "price": price,
+                "amount": trade_btc
+            })
             return
 
         from tdr_core.trade import Trade
@@ -1525,7 +1535,8 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         # Only switch if confidence exceeds threshold
                         if confidence >= required_confidence:
                             new_strategy = regime
-                            self.logger.info(f"✅ Switching to {regime} strategy - confidence {confidence:.1%} >= {required_confidence:.1%} required")
+                            if new_strategy != self.active_strategy:
+                                self.logger.info(f"✅ Switching to {regime} strategy - confidence {confidence:.1%} >= {required_confidence:.1%} required")
                         else:
                             new_strategy = self.active_strategy  # Stay with current strategy
                             self.logger.info(f"⏸️  Staying with {self.active_strategy} strategy - {regime} confidence {confidence:.1%} < {required_confidence:.1%} required (position: ${current_position_value:,.0f})")
@@ -1640,31 +1651,88 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                 f"📈 Daily limit: {self.trade_count_today}/{self.max_trades_per_day}")
             return
 
+
+
+
+
+
+
+
+
+
+
         # Execute trade
         if latest_signal == 1 and self.position <= 0:
             self.logger.info(
                 f"🟢 {self.active_strategy.upper()} LONG at ${current_price}")
+            
+            # Log position before trade
+            position_before = {
+                "btc": self.balance_btc,
+                "usd": self.balance_usd,
+                "position": self.position
+            }
+            
             self.position = 1
-            self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed long"
-            self.last_trade_time = datetime.now()
-            self.buy_in_three_parts(current_price, datetime.now().strftime(
-                '%Y-%m-%d %H:%M:%S'), signal_time)
-            self.trade_count_today += 1
-            self.last_signal_time = signal_time
-            self.strategy_performance[self.active_strategy]["trades"] += 1
-
+             self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed long"
+             self.last_trade_time = datetime.now()
+             self.buy_in_three_parts(current_price, datetime.now().strftime(
+                 '%Y-%m-%d %H:%M:%S'), signal_time)
+             self.trade_count_today += 1
+             self.last_signal_time = signal_time
+             self.strategy_performance[self.active_strategy]["trades"] += 1
+            
+            # Log trade execution
+            self.diagnostic_logger.log_trade_execution(
+                trade_type="BUY",
+                price=current_price,
+                amount=self.position_size,
+                position_before=position_before,
+                position_after={"btc": self.balance_btc, "usd": self.balance_usd, "position": self.position},
+                pnl=self.total_profit_loss
+    
         elif latest_signal == -1 and self.position >= 0:
             self.logger.info(
                 f"🔴 {self.active_strategy.upper()} SHORT at ${current_price}")
-            self.position = -1
-            self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed short"
-            self.last_trade_time = datetime.now()
-            trade_btc = round(self.balance_btc, 8)
-            self.execute_trade("sell", current_price, datetime.now().strftime(
-                '%Y-%m-%d %H:%M:%S'), signal_time, trade_btc)
-            self.trade_count_today += 1
-            self.last_signal_time = signal_time
-            self.strategy_performance[self.active_strategy]["trades"] += 1
+
+
+
+
+            
+            # Log position before trade
+            position_before = {
+                "btc": self.balance_btc,
+                "usd": self.balance_usd,
+                "position": self.position
+            }
+            
+             self.position = -1
+             self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed short"
+             self.last_trade_time = datetime.now()
+             trade_btc = round(self.balance_btc, 8)
+            
+            # Only execute if we have BTC to sell
+            if trade_btc > 1e-8:
+                self.execute_trade("sell", current_price, datetime.now().strftime(
+                    '%Y-%m-%d %H:%M:%S'), signal_time, trade_btc)
+            else:
+                self.logger.warning(f"Cannot sell - insufficient BTC balance: {trade_btc}")
+                self.position = self.position  # Reset position flag
+                return
+                
+             self.trade_count_today += 1
+             self.last_signal_time = signal_time
+             self.strategy_performance[self.active_strategy]["trades"] += 1
+            
+            # Log trade execution
+            self.diagnostic_logger.log_trade_execution(
+                trade_type="SELL",
+                price=current_price,
+                amount=trade_btc,
+                position_before=position_before,
+                position_after={"btc": self.balance_btc, "usd": self.balance_usd, "position": self.position},
+                pnl=self.total_profit_loss
+            )
 
     def get_status(self):
         """Enhanced status with adaptive metrics."""
