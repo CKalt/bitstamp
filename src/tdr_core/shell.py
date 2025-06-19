@@ -22,6 +22,7 @@ import logging
 import threading
 import requests
 import os
+import glob
 from datetime import datetime
 from flask import Flask, request
 from multiprocessing import Process, Manager
@@ -889,6 +890,20 @@ class CryptoShell(cmd.Cmd):
         """
         print("Quitting...")
 
+        # Try to save diagnostic log on exit
+        if self.auto_trader and hasattr(self.auto_trader, 'diagnostic_logger'):
+            try:
+                self.auto_trader.diagnostic_logger.close()
+                print(f"Diagnostic log saved: {self.auto_trader.diagnostic_logger.filename}")
+            except Exception as e:
+                print(f"Failed to save diagnostic log: {e}")
+                # Try crash recovery save
+                try:
+                    self.auto_trader.diagnostic_logger.crash_recovery()
+                    print("Performed crash recovery save")
+                except:
+                    pass
+ 
         # Stop auto trader first
         if self.auto_trader and self.auto_trader.running:
             print("Stopping auto trader...")
@@ -1321,6 +1336,198 @@ class CryptoShell(cmd.Cmd):
 
         else:
             print("Usage: force_regime <trending|ranging|volatile|auto>")
+
+    def do_reset_position(self, arg):
+        """
+        Reset position tracking to fix calculation errors.
+        Usage: reset_position [entry_price]
+        
+        If no entry_price provided, uses current price minus 2%.
+        """
+        if not self.auto_trader or not self.auto_trader.running:
+            print("No auto trader running.")
+            return
+        
+        current_price = self.data_manager.get_current_price('btcusd')
+        if not current_price:
+            print("Cannot get current price.")
+            return
+        
+        if arg:
+            try:
+                entry_price = float(arg)
+            except ValueError:
+                print("Invalid price. Usage: reset_position [entry_price]")
+                return
+        else:
+            entry_price = current_price * 0.98  # Default to 2% below current
+        
+        # Reset position tracking
+        if self.auto_trader.position == 1:
+            self.auto_trader.position_size = self.auto_trader.balance_btc
+            self.auto_trader.position_cost_basis = self.auto_trader.position_size * entry_price
+            print(f"Reset LONG position: {self.auto_trader.position_size:.8f} BTC @ ${entry_price:.2f}")
+            print(f"New cost basis: ${self.auto_trader.position_cost_basis:.2f}")
+        elif self.auto_trader.position == -1:
+            # For short positions
+            btc_equivalent = self.auto_trader.balance_usd / current_price
+            self.auto_trader.position_size = 0.0
+            self.auto_trader.position_cost_basis = btc_equivalent
+            print(f"Reset SHORT position: {btc_equivalent:.8f} BTC equivalent @ ${entry_price:.2f}")
+        else:
+            print("No position to reset.")
+
+
+    def do_show_diagnostics(self, arg):
+        """
+        Show recent diagnostic events from the current session.
+        Usage: show_diagnostics [event_type] [count]
+        
+        Event types: ALL, SIGNAL_EVAL, TRADE, REGIME_CHANGE, ERROR, POSITION_ANOMALY, SNAPSHOT
+        
+        Examples:
+          show_diagnostics                    # Show last 10 events
+          show_diagnostics SIGNAL_EVAL 20    # Show last 20 signal evaluations
+          show_diagnostics ERROR             # Show all errors
+        """
+        if not self.auto_trader or not hasattr(self.auto_trader, 'diagnostic_logger'):
+            print("No diagnostic logger available.")
+            return
+            
+        args = arg.split()
+        event_type = args[0].upper() if args else "ALL"
+        count = int(args[1]) if len(args) > 1 else 10
+        
+        try:
+            # Read the diagnostic file
+            with open(self.auto_trader.diagnostic_logger.filename, 'r') as f:
+                data = json.load(f)
+                
+            print(f"\nDiagnostic Log: {self.auto_trader.diagnostic_logger.filename}")
+            print(f"Session Start: {data['session_start']}")
+            print(f"Total Events: {data['total_events']}")
+            print("\nEvent Type Summary:")
+            for etype, ecount in data['event_types'].items():
+                print(f"  {etype}: {ecount}")
+                
+            print(f"\nShowing last {count} {event_type} events:")
+            print("="*80)
+            
+            events = data['events']
+            if event_type != "ALL":
+                events = [e for e in events if e['type'] == event_type]
+                
+            for event in events[-count:]:
+                print(f"\n[{event['timestamp']}] {event['type']}")
+                if event['type'] == 'SIGNAL_EVAL':
+                    d = event['data']
+                    print(f"  Signal: {d['signal_type']} = {d['signal_value']}")
+                    print(f"  Reason: {d['reason']}")
+                    print(f"  Will Trade: {'YES' if d['will_trade'] else 'NO'}")
+                    if d.get('why_not'):
+                        print(f"  Why Not: {', '.join(d['why_not'])}")
+                elif event['type'] == 'TRADE':
+                    d = event['data']
+                    print(f"  Type: {d['trade_type']} @ ${d['price']:.2f}")
+                    print(f"  Amount: {d['amount']:.8f} BTC")
+                    print(f"  P&L: ${d['pnl']:.2f}")
+                elif event['type'] == 'REGIME_CHANGE':
+                    d = event['data']
+                    print(f"  Change: {d['old_regime']} → {d['new_regime']}")
+                    print(f"  Confidence: {d['confidence']:.1%}")
+                elif event['type'] == 'ERROR':
+                    print(f"  Error: {event['data']['error']}")
+                elif event['type'] == 'POSITION_ANOMALY':
+                    d = event['data']
+                    print(f"  Anomaly: {d['description']}")
+                    print(f"  Details: {json.dumps(d['details'], indent=4)}")
+                elif event['type'] == 'SNAPSHOT':
+                    d = event['data']
+                    print(f"  Price: ${d['market']['current_price']:.2f}")
+                    print(f"  Position: {d['position']['direction']}")
+                    print(f"  MTM: ${d['position']['mtm_usd']:.2f}")
+                    print(f"  Unrealized P&L: ${d['position']['unrealized_pnl']:.2f}")
+                    
+        except FileNotFoundError:
+            print(f"Diagnostic file not found: {self.auto_trader.diagnostic_logger.filename}")
+        except Exception as e:
+            print(f"Error reading diagnostics: {e}")
+            
+    def do_diagnostics_file(self, arg):
+        """
+        Show the path to the current diagnostics file for sharing.
+        """
+        if self.auto_trader and hasattr(self.auto_trader, 'diagnostic_logger'):
+            print(f"Current diagnostics file: {os.path.abspath(self.auto_trader.diagnostic_logger.filename)}")
+            print("You can share this file to show what's been happening.")
+        else:
+            print("No diagnostic logger available.")
+
+
+    def do_list_diagnostics(self, arg):
+        """
+        List all diagnostic files in the current directory.
+        Usage: list_diagnostics [days]
+        
+        Examples:
+          list_diagnostics      # Show all diagnostic files
+          list_diagnostics 7    # Show files from last 7 days
+        """
+        days = int(arg) if arg else None
+        
+        # Find all diagnostic files
+        files = glob.glob("diagnostics_*.json")
+        
+        if not files:
+            print("No diagnostic files found.")
+            return
+            
+        # Get file info
+        file_info = []
+        for f in files:
+            try:
+                stat = os.stat(f)
+                mtime = datetime.fromtimestamp(stat.st_mtime)
+                
+                # Filter by days if specified
+                if days:
+                    age = (datetime.now() - mtime).days
+                    if age > days:
+                        continue
+                        
+                # Try to read summary info
+                try:
+                    with open(f, 'r') as file:
+                        data = json.load(file)
+                        events = data.get('total_events', '?')
+                        session_start = data.get('session_start', '?')
+                except:
+                    events = '?'
+                    session_start = '?'
+                    
+                file_info.append({
+                    'name': f,
+                    'size_kb': stat.st_size / 1024,
+                    'modified': mtime,
+                    'events': events,
+                    'session': session_start
+                })
+            except:
+                continue
+                
+        # Sort by modified time, newest first
+        file_info.sort(key=lambda x: x['modified'], reverse=True)
+        
+        print(f"\nDiagnostic Files ({len(file_info)} found):")
+        print("="*80)
+        print(f"{'Filename':<50} {'Size':<10} {'Events':<10} {'Session Start'}")
+        print("-"*80)
+        
+        for info in file_info:
+            print(f"{info['name']:<50} {info['size_kb']:<10.1f} {str(info['events']):<10} {info['session']}")
+            
+        if self.auto_trader and hasattr(self.auto_trader, 'diagnostic_logger'):
+            print(f"\n* Current session: {self.auto_trader.diagnostic_logger.filename}")
 
     def _print_diagnostics_summary(self, diagnostics):
         """Print a concise summary of strategy diagnostics."""

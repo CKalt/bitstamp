@@ -39,6 +39,122 @@ from indicators.technical_indicators import (
 
 
 ###############################################################################
+class DiagnosticLogger:
+    """
+    Creates a diagnostic log file for each trading session that captures:
+    - Periodic snapshots every 10 minutes
+    - Signal evaluations and why they were/weren't taken
+    - Position changes and P&L
+    - Market regime changes
+    - Errors and warnings
+    """
+    
+    def __init__(self, strategy_name="strategy"):
+        self.start_time = datetime.now()
+        self.filename = f"diagnostics_{strategy_name}_{self.start_time.strftime('%Y%m%d_%H%M%S')}.json"
+        self.events = []
+        self.last_snapshot_time = datetime.now()
+        self.snapshot_interval = 600  # 10 minutes
+
+        self.last_signal_eval = None  # Track last signal to avoid duplicates
+        self.signal_eval_count = 0
+        self.max_events = 2000  # Limit total events to keep file size down
+        
+        # Create initial file immediately
+        self._save()
+        
+    def log_event(self, event_type, data):
+        """Log an event with timestamp."""
+        event = {
+            "timestamp": datetime.now().isoformat(),
+            "type": event_type,
+            "data": data
+        }
+        self.events.append(event)
+        self._save()
+        
+    def log_snapshot(self, position_info, market_data, strategy_state):
+        """Log a periodic snapshot of system state."""
+        snapshot = {
+            "position": position_info,
+            "market": market_data,
+            "strategy": strategy_state
+        }
+        self.log_event("SNAPSHOT", snapshot)
+        self.last_snapshot_time = datetime.now()
+        
+    def log_signal_evaluation(self, signal_type, signal_value, reason, will_trade, why_not=None):
+        """Log when signals are evaluated."""
+        data = {
+            "signal_type": signal_type,
+            "signal_value": signal_value,
+            "reason": reason,
+            "will_trade": will_trade,
+            "why_not": why_not
+        }
+        self.log_event("SIGNAL_EVAL", data)
+        
+    def log_trade_execution(self, trade_type, price, amount, position_before, position_after, pnl):
+        """Log trade executions."""
+        data = {
+            "trade_type": trade_type,
+            "price": price,
+            "amount": amount,
+            "position_before": position_before,
+            "position_after": position_after,
+            "pnl": pnl
+        }
+        self.log_event("TRADE", data)
+        
+    def log_regime_change(self, old_regime, new_regime, confidence, metrics):
+        """Log market regime changes."""
+        data = {
+            "old_regime": old_regime,
+            "new_regime": new_regime,
+            "confidence": confidence,
+            "metrics": metrics
+        }
+        self.log_event("REGIME_CHANGE", data)
+        
+    def log_error(self, error_msg, stack_trace=None):
+        """Log errors and warnings."""
+        data = {
+            "error": error_msg,
+            "stack_trace": stack_trace or traceback.format_exc()
+        }
+        self.log_event("ERROR", data)
+        
+    def log_position_anomaly(self, description, details):
+        """Log position tracking anomalies."""
+        data = {
+            "description": description,
+            "details": details
+        }
+        self.log_event("POSITION_ANOMALY", data)
+        
+    def should_snapshot(self):
+        """Check if it's time for a periodic snapshot."""
+        return (datetime.now() - self.last_snapshot_time).total_seconds() >= self.snapshot_interval
+        
+    def _save(self):
+        """Save events to file."""
+        try:
+            summary = {
+                "session_start": self.start_time.isoformat(),
+                "last_update": datetime.now().isoformat(),
+                "total_events": len(self.events),
+                "event_types": {
+                    event_type: len([e for e in self.events if e["type"] == event_type])
+                    for event_type in set(e["type"] for e in self.events)
+                },
+                "events": self.events[-1000:]  # Keep last 1000 events to prevent huge files
+            }
+            with open(self.filename, 'w') as f:
+                json.dump(summary, f, indent=2, default=str)
+        except Exception as e:
+            print(f"Failed to save diagnostic log: {e}")
+
+###############################################################################
 class MACrossoverStrategy:
     """
     Implements a basic Moving Average Crossover strategy with position tracking
@@ -118,6 +234,9 @@ class MACrossoverStrategy:
 
         # For storing an initial theoretical trade if hist_position matches user request
         self.theoretical_trade = None
+
+        # Initialize diagnostic logger
+        self.diagnostic_logger = DiagnosticLogger(f"MA_{short_window}_{long_window}")
 
         # Register real-time callback
         data_manager.add_trade_observer(self.check_instant_signal)
@@ -204,6 +323,34 @@ class MACrossoverStrategy:
                         self.df_ma = df_ma
 
                         # Check signals (MA crossover)
+
+                        # Diagnostic: Log signal evaluation
+                        if self.diagnostic_logger.should_snapshot():
+                            self._log_diagnostic_snapshot()
+                            
+                        # Always log signal evaluations
+                        will_trade = False
+                        why_not = []
+                        
+                        if latest_signal == 1 and self.position <= 0:
+                            will_trade = self.trade_count_today < self.max_trades_per_day
+                            if not will_trade:
+                                why_not.append(f"Daily limit reached: {self.trade_count_today}/{self.max_trades_per_day}")
+                        elif latest_signal == -1 and self.position >= 0:
+                            will_trade = self.trade_count_today < self.max_trades_per_day
+                            if not will_trade:
+                                why_not.append(f"Daily limit reached: {self.trade_count_today}/{self.max_trades_per_day}")
+                        else:
+                            why_not.append(f"Signal {latest_signal} matches current position {self.position}")
+                            
+                        self.diagnostic_logger.log_signal_evaluation(
+                            signal_type="MA_CROSSOVER",
+                            signal_value=latest_signal,
+                            reason=f"Short MA: {df_ma.iloc[-1]['Short_MA']:.2f}, Long MA: {df_ma.iloc[-1]['Long_MA']:.2f}",
+                            will_trade=will_trade,
+                            why_not=why_not if why_not else None
+                        )
+
                         self.check_for_signals(
                             latest_signal, current_price, signal_time)
                     else:
@@ -214,6 +361,39 @@ class MACrossoverStrategy:
             else:
                 self.logger.debug(f"No data loaded for {self.symbol} yet.")
             time.sleep(60)
+
+    def _log_diagnostic_snapshot(self):
+        """Create a diagnostic snapshot."""
+        try:
+            current_price = self.data_manager.get_current_price(self.symbol) or 0
+            mtm_usd, mtm_btc = self.get_mark_to_market_values()
+            
+            position_info = {
+                "direction": self.position,
+                "btc_balance": self.balance_btc,
+                "usd_balance": self.balance_usd,
+                "position_size": self.position_size,
+                "cost_basis": self.position_cost_basis,
+                "mtm_usd": mtm_usd,
+                "unrealized_pnl": self._calculate_unrealized_pnl()
+            }
+            
+            market_data = {
+                "current_price": current_price,
+                "short_ma": self.df_ma.iloc[-1]['Short_MA'] if not self.df_ma.empty else None,
+                "long_ma": self.df_ma.iloc[-1]['Long_MA'] if not self.df_ma.empty else None,
+                "signal": self.df_ma.iloc[-1]['MA_Signal'] if not self.df_ma.empty else None
+            }
+            
+            strategy_state = {
+                "trades_today": self.trade_count_today,
+                "total_trades": self.trades_executed,
+                "total_pnl": self.total_profit_loss
+            }
+            
+            self.diagnostic_logger.log_snapshot(position_info, market_data, strategy_state)
+        except Exception as e:
+            self.diagnostic_logger.log_error(f"Failed to create snapshot: {e}")
 
     def determine_next_trigger(self, df_ma):
         """
@@ -345,6 +525,10 @@ class MACrossoverStrategy:
         """
         Simulate a multi-part buy so we can keep within a 90% rule but only 1 daily trade.
         """
+        # Store initial state
+        initial_position_size = self.position_size
+        initial_cost_basis = self.position_cost_basis
+
         partial_btc_1 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1)
 
@@ -353,6 +537,21 @@ class MACrossoverStrategy:
 
         partial_btc_3 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_3)
+        
+        # Validate final position
+        total_btc_bought = self.position_size - initial_position_size
+        if total_btc_bought > 0:
+            expected_cost = total_btc_bought * price * (1 + self.fee_percentage)
+            actual_cost_added = self.position_cost_basis - initial_cost_basis
+            
+            if abs(actual_cost_added - expected_cost) > 1.0:
+                self.logger.warning(f"Position tracking error detected! Expected cost: ${expected_cost:.2f}, Actual: ${actual_cost_added:.2f}")
+                # Correct the cost basis
+                self.position_cost_basis = self.position_size * price
+                self.logger.info(f"Corrected position cost basis to ${self.position_cost_basis:.2f}")
+        
+        # Log final position state
+        self.logger.info(f"Three-part buy complete: {self.position_size:.8f} BTC, cost basis: ${self.position_cost_basis:.2f}")
 
     def get_89pct_btc_of_usd(self, price):
         available_usd = self.balance_usd * 0.89
@@ -473,25 +672,36 @@ class MACrossoverStrategy:
             self.balance_usd -= total_cost_usd
             self.balance_btc += fill_btc
 
-            # If going long or adding to existing long
-            if self.position_size >= 0:
-                self.position_cost_basis += (fill_btc * fill_price)
-                self.position_size += fill_btc
-
-            else:
-                # Short→Long transition: Reset position tracking to match actual BTC balance
-                if self.position_size < 0:
-                    self.logger.info(f"Transitioning from SHORT to LONG")
-
-                    # Reset position tracking completely for clean transition
-                    self.position_size = 0.0
-                    self.position_cost_basis = 0.0
-
-                # Set new long position (don't add to old values)
+            # Critical fix: Handle position tracking correctly
+            if self.position == -1 and self.position_size <= 0:
+                # Transitioning from short to long - reset tracking
+                self.logger.info(f"Transitioning from SHORT to LONG")
                 self.position_size = fill_btc
                 self.position_cost_basis = fill_btc * fill_price
+            elif self.position_size >= 0:
+                # Adding to existing long position
+                self.position_cost_basis += (fill_btc * fill_price)
+                self.position_size += fill_btc
+            else:
+                # Covering short position
+                if abs(self.position_size) >= fill_btc:
+                    # Just reducing short
+                    self.position_size += fill_btc
+                    # Don't change cost basis when covering
+                else:
+                    # Going from short through neutral to long
+                    leftover_btc = fill_btc - abs(self.position_size)
+                    self.position_size = leftover_btc
+                    self.position_cost_basis = leftover_btc * fill_price
 
-                self.logger.info(f"New LONG position: {self.position_size:.8f} BTC, cost basis: ${self.position_cost_basis:.2f}")
+            # Validate position after update
+            if self.position_size > 0 and self.position_cost_basis > 0:
+                avg_entry = self.position_cost_basis / self.position_size
+                if avg_entry > fill_price * 1.5:
+                    self.logger.error(f"Position tracking error: avg entry ${avg_entry:.2f} > 1.5x fill price ${fill_price:.2f}")
+                    # Reset to reasonable values
+                    self.position_cost_basis = self.position_size * fill_price
+                    self.logger.info(f"Reset cost basis to ${self.position_cost_basis:.2f}")
 
             if self.last_trade_price is not None and self.position == -1:
                 # old code for short -> buy
@@ -602,6 +812,19 @@ class MACrossoverStrategy:
         Return a dictionary summarizing the current status, including 'position_info'
         that shows cost-basis-based entry price, position size, and unrealized PnL.
         """
+        # Validate position tracking before building status
+        if self.position == 1 and self.position_size > 0:
+            avg_entry = self.position_cost_basis / self.position_size if self.position_size > 0 else 0
+            current_price = self.data_manager.get_current_price(self.symbol) or 0
+            
+            # Sanity check: entry price shouldn't be more than 1.5x current price
+            if avg_entry > current_price * 1.5 and current_price > 0:
+                self.logger.error(f"Invalid entry price detected: ${avg_entry:.2f} vs current ${current_price:.2f}")
+                # Attempt to fix by recalculating based on current balance
+                # Assume entry was 5% below current price as a reasonable estimate
+                self.position_cost_basis = self.position_size * current_price * 0.95
+                self.logger.info(f"Reset position cost basis to ${self.position_cost_basis:.2f}")
+
         status = {
             'running': self.running,
             'position': self.position,
@@ -834,7 +1057,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         self.logger.info(
             f"   Regime lookback: {self.regime_lookback}, Gap: {self.min_trade_gap_minutes}min")
 
-        self.logger.info(f"   Confidence thresholds: TRENDING=80%, RANGING=60%, VOLATILE=70%")
+        self.logger.info(f"   Confidence thresholds: TRENDING=70%, RANGING=60%, VOLATILE=65%")
         self.logger.info(f"   Position-aware switching: $50k+ requires higher confidence")
 
     def detect_market_regime(self, df):
@@ -875,11 +1098,11 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         regime_scores = {'trending': 0.0, 'ranging': 0.0, 'volatile': 0.0}
 
         # TRENDING indicators (more conservative)
-        if trend_strength > 0.4:  # Higher threshold
+        if trend_strength > 0.3:  # Reduced from 0.4 - more reasonable
             regime_scores['trending'] += 2.0
         if whipsaw_ratio < 2.0:  # Lower whipsaw tolerance
             regime_scores['trending'] += 2.0
-        if volatility < 0.015:  # Lower volatility required
+        if volatility < 0.02:  # Increased from 0.015 - more reasonable
             regime_scores['trending'] += 1.5
         # Require sustained directional movement
         if len(recent_df) >= 10:
@@ -889,7 +1112,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                 if (recent_closes.iloc[i] > recent_closes.iloc[i-1] and price_end > price_start) or \
                    (recent_closes.iloc[i] < recent_closes.iloc[i-1] and price_end < price_start):
                     directional_moves += 1
-            if directional_moves >= 7:  # 70% directional consistency
+            if directional_moves >= 6:  # Reduced from 7 - 60% directional consistency
                 regime_scores['trending'] += 1.0
 
         # RANGING indicators (YOUR CURRENT SITUATION!)
@@ -950,6 +1173,9 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         elif current_rsi > self.rsi_overbought and current_price > bb_upper:
             signal = -1  # Overbought = SELL
             reason = f"Mean Reversion SELL: RSI {current_rsi:.1f} overbought + above BB"
+        elif current_rsi < 40 and current_price < bb_middle * 0.99:  # Additional entry condition
+            signal = 1
+            reason = f"Mean Reversion BUY: RSI {current_rsi:.1f} low + below BB middle"
         elif self.position != 0:
             # Exit positions when price returns to middle
             if self.position == 1 and current_price > bb_middle:
@@ -1061,11 +1287,11 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         
                         # Specific thresholds by regime
                         if regime == "trending":
-                            required_confidence = 0.80  # Very high bar for trending
+                            required_confidence = 0.70  # Reduced from 0.80 - more reasonable
                         elif regime == "ranging":
                             required_confidence = 0.60  # Moderate bar for ranging
                         else:  # volatile
-                            required_confidence = 0.70
+                            required_confidence = 0.65  # Reduced from 0.70
 
                         # Only switch if confidence exceeds threshold
                         if confidence >= required_confidence:
@@ -1077,7 +1303,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
 
                         # Extra conservative check: don't switch away from ranging easily
                         if self.active_strategy == "ranging" and new_strategy != "ranging":
-                            if confidence < 0.85:  # Very high bar to leave ranging
+                            if confidence < 0.75:  # Reduced from 0.85 - still conservative but more reasonable
                                 new_strategy = "ranging"
                                 self.logger.debug(f"Staying in ranging strategy - confidence {confidence:.1%} insufficient to switch")
 
