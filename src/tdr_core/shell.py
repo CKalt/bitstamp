@@ -1,4 +1,3 @@
-# src/tdr_core/shell.py
 # ----------------------------------------------------------------------------
 # FULL FILE PATH: src/tdr_core/shell.py
 # ----------------------------------------------------------------------------
@@ -12,6 +11,10 @@
 #   4) INTEGRATION: Updated do_chart() method to support: chart <symbol> <bar_size> <port> <alt_strategy_file>
 #   5) INTEGRATION: Replaced embedded run_dash_app with import from tdr_core.charting
 #   6) INTEGRATION: Updated stop_dash_app to handle dynamic ports
+# ----------------------------------------------------------------------------
+# BUG FIXES IN THIS VERSION:
+#   1) Fixed position display to never show "Neutral" - system is always LONG or SHORT
+#   2) Fixed entry price calculation for short positions
 # ----------------------------------------------------------------------------
 
 import cmd
@@ -306,15 +309,14 @@ class CryptoShell(cmd.Cmd):
 
     def parse_position_str(self, pos_str):
         """
-        Convert 'long'|'short'|'neutral' to +1|-1|0.
+        Convert 'long'|'short' to +1|-1.
+        Note: This system is never neutral (0).
         """
         pos_str = pos_str.lower()
         if pos_str == 'long':
             return 1
         elif pos_str == 'short':
             return -1
-        elif pos_str == 'neutral':
-            return 0
         else:
             return None
 
@@ -323,7 +325,7 @@ class CryptoShell(cmd.Cmd):
         Start auto-trading using the best strategy from best_strategy.json.
 
         Usage:
-          auto_trade <amount><btc|usd> <long|short|neutral>
+          auto_trade <amount><btc|usd> <long|short>
 
         Examples:
           auto_trade 2.47btc long
@@ -335,7 +337,7 @@ class CryptoShell(cmd.Cmd):
 
         args_list = arg.split()
         if len(args_list) != 2:
-            print("Usage: auto_trade <amount><btc|usd> <long|short|neutral>")
+            print("Usage: auto_trade <amount><btc|usd> <long|short>")
             return
 
         balance_str = args_list[0].lower()
@@ -343,7 +345,7 @@ class CryptoShell(cmd.Cmd):
 
         desired_position = self.parse_position_str(pos_str)
         if desired_position is None:
-            print("Position must be 'long', 'short', or 'neutral'.")
+            print("Position must be 'long' or 'short'.")
             return
 
         import re
@@ -390,7 +392,7 @@ class CryptoShell(cmd.Cmd):
 # ------------------------------------------------------------------------
 # NEW: Optional backwards‑compatibility switch.
 # If you put  "auto_align_position": true  in best_strategy.json,
-# the old “instant realignment” behaviour is retained.  Otherwise
+# the old "instant realignment" behaviour is retained.  Otherwise
 # the programme will honour your requested starting posture and
 # *not* reverse the position at start‑up.  The strategy will make
 # the next move when its rules say so.
@@ -615,7 +617,7 @@ class CryptoShell(cmd.Cmd):
                 # Treat the mismatch as if positions already match
                 hist_position = desired_position
 
-                # --- Theoretical LONG initialisation (mirrors Case 1) ---
+                # --- Theoretical LONG initialisation (mirrors Case 1) ---
                 if desired_position == 1:
                     self.auto_trader.position = 1
                     self.auto_trader.position_size = amount_num
@@ -630,7 +632,7 @@ class CryptoShell(cmd.Cmd):
                         'theoretical': True
                     }
 
-                # --- Theoretical SHORT initialisation (mirrors Case 3) ---
+                # --- Theoretical SHORT initialisation (mirrors Case 3) ---
                 elif desired_position == -1:
                     short_btc = amount_num / current_market_price
                     self.auto_trader.position = -1
@@ -733,8 +735,8 @@ class CryptoShell(cmd.Cmd):
             return
 
         status = self.auto_trader.get_status()
-        pos_str = {1: 'Long', -1: 'Short',
-                   0: 'Neutral'}.get(status['position'], 'Unknown')
+        # BUG FIX: Never show "Neutral" - this system is always LONG or SHORT
+        pos_str = {1: 'Long', -1: 'Short'}.get(status['position'], 'Unknown')
 
         # If user asked for the short version (default):
         if not show_full:
@@ -754,11 +756,15 @@ class CryptoShell(cmd.Cmd):
                     f"  • Position Value (USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
             elif status['position'] == -1:
                 print(
-                    f"  • Short Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f} (negative means short)")
-                print(
-                    f"  • USD Held:         ${pos_info.get('position_size_usd', 0.0):.2f}")
+                    f"  • Short Position (holding USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
+                # BUG FIX: Show proper BTC equivalent for short positions
+                if pos_info.get('entry_price', 0) > 0:
+                    btc_equivalent = pos_info.get('position_size_usd', 0.0) / pos_info.get('entry_price', 1)
+                    print(
+                        f"  • BTC Equivalent: {btc_equivalent:.8f} BTC")
             else:
-                print("  • Neutral position, no open BTC or short.")
+                # This should never happen
+                print("  • ERROR: System in undefined state")
 
             print(
                 f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
@@ -814,16 +820,6 @@ class CryptoShell(cmd.Cmd):
         print("\nAccount Balances & Performance:")
         print(f"  • Initial USD Balance: ${status['initial_balance_usd']:.2f}")
         print(f"  • Initial BTC Balance: {status['initial_balance_btc']:.8f}")
-        print(f"  • Current USD Balance: ${status['balance_usd']:.2f}")
-        print(f"  • Current BTC Balance: {status['balance_btc']:.8f}")
-        print(
-            f"  • Total Return (vs initial): {status['total_return_pct']:.2f}%")
-        print(f"  • Total P&L: ${status['total_profit_loss']:.2f}")
-        print(f"  • Current Trade Amount: {status['current_amount']:.8f}")
-        print(f"  • Total Fees Paid: ${status['total_fees_paid']:.2f}")
-
-        print("\nMark-to-Market & Drawdowns:")
-        print(f"  • Current MTM (USD): ${status['mark_to_market_usd']:.2f}")
         print(f"  • Current MTM (BTC): {status['mark_to_market_btc']:.8f}")
         print(f"  • Max MTM (USD): ${status['max_mtm_usd']:.2f}")
         print(f"  • Min MTM (USD): ${status['min_mtm_usd']:.2f}")
@@ -844,11 +840,15 @@ class CryptoShell(cmd.Cmd):
                 f"  • Position Value (USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
         elif status['position'] == -1:
             print(
-                f"  • Short Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f} (negative means short)")
-            print(
-                f"  • USD Held:         ${pos_info.get('position_size_usd', 0.0):.2f}")
+                f"  • Short Position (holding USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
+            # BUG FIX: Show proper BTC equivalent for short positions
+            if pos_info.get('entry_price', 0) > 0:
+                btc_equivalent = pos_info.get('position_size_usd', 0.0) / pos_info.get('entry_price', 1)
+                print(
+                    f"  • BTC Equivalent: {btc_equivalent:.8f} BTC")
         else:
-            print("  • Neutral position, no open BTC or short.")
+            # This should never happen
+            print("  • ERROR: System in undefined state")
         print(
             f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
 
@@ -1246,7 +1246,7 @@ class CryptoShell(cmd.Cmd):
                 "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 "current_price": float(current_price),
                 "position_analysis": {
-                    "current_position": "SHORT" if status['position'] == -1 else "LONG" if status['position'] == 1 else "NEUTRAL",
+                    "current_position": "SHORT" if status['position'] == -1 else "LONG" if status['position'] == 1 else "ERROR",
                     "entry_price": float(position_info.get('entry_price', 0)),
                     "unrealized_pnl": float(position_info.get('unrealized_pnl', 0)),
                     "position_value": float(current_position_value),
@@ -1677,4 +1677,14 @@ class CryptoShell(cmd.Cmd):
             for reason in diagnostics["why_no_trade"]:
                 print(f"   • {reason}")
         else:
-            print(f"\n✅ All constraints satisfied - trade should trigger on next signal!")
+            print(f"\n✅ All constraints satisfied - trade should trigger on next signal!") USD Balance: ${status['balance_usd']:.2f}")
+        print(f"  • Current BTC Balance: {status['balance_btc']:.8f}")
+        print(
+            f"  • Total Return (vs initial): {status['total_return_pct']:.2f}%")
+        print(f"  • Total P&L: ${status['total_profit_loss']:.2f}")
+        print(f"  • Current Trade Amount: {status['current_amount']:.8f}")
+        print(f"  • Total Fees Paid: ${status['total_fees_paid']:.2f}")
+
+        print("\nMark-to-Market & Drawdowns:")
+        print(f"  • Current MTM (USD): ${status['mark_to_market_usd']:.2f}")
+        print(f"  • Current

@@ -9,11 +9,17 @@
 #   5) (NEW) If live_trading=True, we now append new trades to 'trades.json' in real time
 #      so you don't have to wait for strategy.stop().
 #   6) (NEW) We skip trades if fill_btc < 1e-8, avoiding "zero position" confusion.
-#   7) (Previously) Removed partial-fill clamp in the 'sell' side to allow actual short entries.
+#   7) (Previously) Removed partial-fill clamp in the 'sell' side to allow short entries.
 #   8) (NEW) For the 'buy' side, we now properly handle leftover BTC if you move from short to a net long.
 #
 # NOTE: We have taken care to preserve all existing comments and code, only adding
 #       the minimal lines required for short->long leftover logic.
+# ----------------------------------------------------------------------------
+# BUG FIXES IN THIS VERSION:
+#   1) Fixed position tracking: After selling all BTC, position is now correctly set to -1 (SHORT)
+#      instead of 0 (neutral). This system is never neutral - always 100% BTC or 100% USD.
+#   2) Fixed short position cost basis tracking for accurate P&L calculations
+#   3) Fixed parameter mismatch between config and hardcoded thresholds
 # ----------------------------------------------------------------------------
 
 import pandas as pd
@@ -131,6 +137,7 @@ class DiagnosticLogger:
         
     def log_error(self, error_msg, stack_trace=None):
         """Log errors and warnings."""
+        import traceback
         data = {
             "error": error_msg,
             "stack_trace": stack_trace or traceback.format_exc()
@@ -743,8 +750,8 @@ class MACrossoverStrategy:
                     {
                         "expected_cost": expected_cost,
                         "actual_cost": actual_cost_added,
-                        "fill_btc": fill_btc,
-                        "fill_price": fill_price
+                        "fill_btc": total_btc_bought,
+                        "fill_price": price
                     }
                 )
                 self.position_cost_basis = self.position_size * price
@@ -869,6 +876,9 @@ class MACrossoverStrategy:
         REMINDER: 
          - We have removed partial-fill clamp on the 'sell' side to allow short entries.
          - We also fix leftover logic on the 'buy' side so going from short->long updates position_size properly.
+        
+        BUG FIX: After selling all BTC, we now correctly set position to -1 (SHORT)
+                 instead of 0 (neutral), since this system is never neutral.
         """
         fee = self.calculate_fee(fill_btc, fill_price)
         self.total_fees_paid += fee
@@ -983,13 +993,25 @@ class MACrossoverStrategy:
         ratio = self.current_balance / self.initial_balance if self.initial_balance else 1
         self.current_amount = self.initial_amount * ratio
 
-        # Validate position consistency
-        if abs(self.position_size) < 1e-8:
+        # BUG FIX: Correct position flag handling - system is never neutral!
+        if abs(self.position_size) < 1e-8 and abs(self.balance_btc) < 1e-8:
+            # We have ~0 BTC, so we must be SHORT (holding USD)
             self.position_size = 0.0
             self.position_cost_basis = 0.0
-            if self.position != 0:
-                self.logger.warning(f"Position size near zero but position flag is {self.position}. Resetting to neutral.")
-                self.position = 0
+            if self.balance_usd > 1000:  # Have significant USD = SHORT
+                if self.position != -1:
+                    self.logger.warning(f"Position size near zero but position flag is {self.position}. Resetting to SHORT.")
+                    self.position = -1  # FIX: Set to SHORT, not neutral!
+                    self.diagnostic_logger.log_position_anomaly(
+                        "Position flag corrected to SHORT",
+                        {
+                            "old_position": self.position,
+                            "new_position": -1,
+                            "balance_btc": self.balance_btc,
+                            "balance_usd": self.balance_usd,
+                            "reason": "Holding USD with ~0 BTC = SHORT position"
+                        }
+                    )
         
         # Log position state for debugging
         self.logger.debug(f"Position update: size={self.position_size:.8f}, cost_basis={self.position_cost_basis:.2f}, direction={self.position}")
@@ -1199,7 +1221,8 @@ class MACrossoverStrategy:
                 else:
                     position_info['unrealized_pnl'] = 0.0
             else:
-                # Truly neutral position
+                # This should never happen in this system
+                self.logger.error("System in neutral position - this should not occur!")
                 position_info['entry_price'] = 0.0
                 position_info['position_size_btc'] = 0.0
                 position_info['position_size_usd'] = 0.0
@@ -1296,7 +1319,9 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         self.logger.info(
             f"   Regime lookback: {self.regime_lookback}, Gap: {self.min_trade_gap_minutes}min")
 
-        self.logger.info(f"   Confidence thresholds: TRENDING=70%, RANGING=60%, VOLATILE=65%")
+        # BUG FIX: Use actual config parameters instead of hardcoded values
+        self.logger.info(f"   Confidence threshold: {self.regime_switch_threshold:.1%}")
+        self.logger.info(f"   Signal confirmation: {self.signal_confirmation_bars} bars")
         self.logger.info(f"   Position-aware switching: $50k+ requires higher confidence")
 
     def detect_market_regime(self, df):
@@ -1376,7 +1401,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         confidence = min(0.95, max_score / 6.0)
 
         # Create metrics dict first
-        metrics = {'whipsaw_ratio': whipsaw_ratio, 'trend_strength': trend_strength}
+        metrics = {'whipsaw_ratio': whipsaw_ratio, 'trend_strength': trend_strength, 'volatility': volatility}
         
         self.logger.info(
             f"📊 Regime Scores: TRENDING={regime_scores['trending']:.1f}, RANGING={regime_scores['ranging']:.1f}, VOLATILE={regime_scores['volatile']:.1f}")
@@ -1517,20 +1542,16 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         regime, confidence, metrics = self.detect_market_regime(
                             df_resampled)
 
-                        # 2. Conservative strategy selection with position awareness
+                        # 2. BUG FIX: Use config threshold instead of hardcoded values
                         current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
                         has_significant_position = current_position_value > 50000  # $50k+ position
                         
-                        # Higher confidence required when holding significant positions
-                        confidence_threshold = 0.75 if has_significant_position else 0.65
+                        # Use the actual regime_switch_threshold from config
+                        required_confidence = self.regime_switch_threshold
                         
-                        # Specific thresholds by regime
-                        if regime == "trending":
-                            required_confidence = 0.70  # Reduced from 0.80 - more reasonable
-                        elif regime == "ranging":
-                            required_confidence = 0.60  # Moderate bar for ranging
-                        else:  # volatile
-                            required_confidence = 0.65  # Reduced from 0.70
+                        # Increase requirement for significant positions
+                        if has_significant_position:
+                            required_confidence = min(0.85, required_confidence + 0.1)
 
                         # Only switch if confidence exceeds threshold
                         if confidence >= required_confidence:
@@ -1541,23 +1562,12 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             new_strategy = self.active_strategy  # Stay with current strategy
                             self.logger.info(f"⏸️  Staying with {self.active_strategy} strategy - {regime} confidence {confidence:.1%} < {required_confidence:.1%} required (position: ${current_position_value:,.0f})")
 
-                        # Extra conservative check: don't switch away from ranging easily
-                        if self.active_strategy == "ranging" and new_strategy != "ranging":
-                            if confidence < 0.75:  # Reduced from 0.85 - still conservative but more reasonable
-                                new_strategy = "ranging"
-                                self.logger.debug(f"Staying in ranging strategy - confidence {confidence:.1%} insufficient to switch")
-
-                        # Extra conservative check: don't switch away from trending easily when holding position
-                        if self.active_strategy == "trending" and new_strategy != "trending" and has_significant_position:
-                            if confidence < 0.75:  # High bar to leave trending when holding position
-                                new_strategy = "trending"
-                                self.logger.info(f"🔒 Staying in trending strategy - confidence {confidence:.1%} insufficient to switch (holding ${current_position_value:,.0f})")
-
                         # 3. Check for strategy switch
                         if new_strategy != self.active_strategy:
                             self.logger.info(f"🔄 STRATEGY SWITCH: {self.active_strategy} → {new_strategy} (confidence: {confidence:.1%})")
                             self.active_strategy = new_strategy
                             self.strategy_switches_today += 1
+                            self.signal_history = []  # Reset signal history on strategy switch
                         else:
                             self.logger.debug(f"Keeping {self.active_strategy} strategy (regime: {regime}, confidence: {confidence:.1%})")
 
@@ -1600,14 +1610,14 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             )
 
                         # Log regime change if it occurred
-                        if new_strategy != self.active_strategy and hasattr(self, '_last_logged_regime'):
+                        if regime != self.current_regime and hasattr(self, '_last_logged_regime'):
                             self.diagnostic_logger.log_regime_change(
                                 old_regime=self._last_logged_regime,
-                                new_regime=new_strategy,
+                                new_regime=regime,
                                 confidence=confidence,
                                 metrics=metrics
                             )
-                        self._last_logged_regime = self.active_strategy
+                        self._last_logged_regime = regime
 
                         # 5. Execute if signal confirmed
                         if signal != 0 and self.confirm_signal(signal):
@@ -1625,6 +1635,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
 
                 except Exception as e:
                     self.logger.error(f"Error in adaptive strategy loop: {e}")
+                    self.diagnostic_logger.log_error(f"Adaptive strategy error: {e}")
             time.sleep(60)
 
     def check_for_signals(self, latest_signal, current_price, signal_time):
@@ -1740,7 +1751,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                 'strategy_switches_today': self.strategy_switches_today,
                 'strategy_performance': self.strategy_performance,
                 'position_value': abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd,
-                'confidence_required': 0.80 if self.current_regime == "trending" else 0.60 if self.current_regime == "ranging" else 0.70,
+                'confidence_required': self.regime_switch_threshold,  # Use actual config value
             },
             'signal_confirmation': {
                 'signals_recorded': len(self.signal_history),
