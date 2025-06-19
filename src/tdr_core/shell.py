@@ -1690,4 +1690,132 @@ class CryptoShell(cmd.Cmd):
 
         print("\nMark-to-Market & Drawdowns:")
         print(f"  • Current MTM (USD): ${status['mark_to_market_usd']:.2f}")
-        print(f"  • Current
+        print(f"  • Current MTM (BTC): {status['mark_to_market_btc']:.8f}")
+        print(f"  • Max MTM (USD): ${status['max_mtm_usd']:.2f}")
+        print(f"  • Min MTM (USD): ${status['min_mtm_usd']:.2f}")
+        print(f"  • Max USD Balance: ${status['max_balance_usd']:.2f}")
+        print(f"  • Min USD Balance: ${status['min_balance_usd']:.2f}")
+        print(f"  • Max BTC Balance: {status['max_balance_btc']:.8f}")
+        print(f"  • Min BTC Balance: {status['min_balance_btc']:.8f}")
+
+        pos_info = status.get('position_info', {})
+        print("\nPosition Details:")
+        print(f"  • Direction:  {pos_str}")
+        print(f"  • Current Price:  ${pos_info.get('current_price', 0.0):.2f}")
+        print(f"  • Entry Price:    ${pos_info.get('entry_price', 0.0):.2f}")
+        if status['position'] == 1:
+            print(
+                f"  • Position Size (BTC): {pos_info.get('position_size_btc', 0.0):.8f}")
+            print(
+                f"  • Position Value (USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
+        elif status['position'] == -1:
+            print(
+                f"  • Short Position (holding USD): ${pos_info.get('position_size_usd', 0.0):.2f}")
+            # BUG FIX: Show proper BTC equivalent for short positions
+            if pos_info.get('entry_price', 0) > 0:
+                btc_equivalent = pos_info.get('position_size_usd', 0.0) / pos_info.get('entry_price', 1)
+                print(
+                    f"  • BTC Equivalent: {btc_equivalent:.8f} BTC")
+        else:
+            # This should never happen
+            print("  • ERROR: System in undefined state")
+        print(
+            f"  • Unrealized PnL:  ${pos_info.get('unrealized_pnl', 0.0):.2f}")
+
+        print("\nTrading Statistics:")
+        print(f"  • Total Trades: {status['trades_executed']}")
+        print(f"  • Profitable Trades: {status['profitable_trades']}")
+        print(f"  • Win Rate: {status['win_rate']:.1f}%")
+
+        if status['trades_executed'] > 0:
+            print(
+                f"  • Avg Profit/Trade: ${status['average_profit_per_trade']:.2f}")
+            print(
+                f"  • Avg Fee/Trade: ${status.get('average_fee_per_trade', 0.0):.2f}")
+            print(
+                f"  • Risk/Reward Ratio: {status.get('risk_reward_ratio', 0.0):.2f}")
+
+        if status['last_trade']:
+            print("\nLast Trade Info:")
+            print(f"  • Reason: {status['last_trade']}")
+            print(f"  • Data Source: {status['last_trade_data_source']}")
+            print(f"  • Signal Time: {status['last_trade_signal_timestamp']}")
+
+        print("\nTechnical Analysis:")
+        if status['next_trigger']:
+            print(f"  • {status['next_trigger']}")
+        if status['current_trends']:
+            print("  • Current Trends:")
+            for k, v in status['current_trends'].items():
+                print(f"    ◦ {k}: {v}")
+        if status['ma_difference'] is not None:
+            print(f"  • MA Difference: {status['ma_difference']:.4f}")
+        if status['ma_slope_difference'] is not None:
+            print(
+                f"  • MA Slope Difference: {status['ma_slope_difference']:.4f}")
+        if 'short_ma_momentum' in status:
+            print(f"  • Short MA Momentum: {status['short_ma_momentum']}")
+        if 'long_ma_momentum' in status:
+            print(f"  • Long MA Momentum: {status['long_ma_momentum']}")
+        if 'momentum_alignment' in status:
+            print(f"  • Momentum Alignment: {status['momentum_alignment']}")
+
+        prox = status.get('ma_signal_proximity')
+        if prox is not None:
+            print(f"  • MA Signal Proximity: {prox*100:.2f}%")
+            print("    (Closer to 0% => near a crossover)")
+
+        if status['trades_executed'] == 0:
+            print("\nNo trades yet, stats are limited.")
+        elif status['win_rate'] < 40:
+            print("Warning: Win rate is below 40%. Consider reviewing parameters.")
+        if status['current_balance'] < status['initial_balance']*0.9:
+            print("Warning: Balance is over 10% below initial.")
+        if status['remaining_trades_today'] <= 1:
+            print("Warning: Approaching daily trade limit!")
+
+        # Show comprehensive adaptive strategy info in long view
+        if hasattr(self.auto_trader, 'current_regime'):
+            print("\nAdaptive Strategy Details:")
+            print("━"*30)
+            print(
+                f"  • Current Market Regime: {self.auto_trader.current_regime.upper()}")
+            print(
+                f"  • Regime Confidence: {self.auto_trader.regime_confidence:.1%}")
+            print(
+                f"  • Active Trading Strategy: {self.auto_trader.active_strategy.upper()}")
+            print(
+                f"  • Strategy Switches Today: {self.auto_trader.strategy_switches_today}")
+            print(
+                f"  • Signal Confirmation: {len(getattr(self.auto_trader, 'signal_history', []))}/{getattr(self.auto_trader, 'signal_confirmation_bars', 2)} bars")
+            print(
+                f"  • Min Trade Gap: {getattr(self.auto_trader, 'min_trade_gap_minutes', 30)} minutes")
+
+            # Show performance by strategy
+            print(f"\n  Strategy Performance Breakdown:")
+            for strategy_name, perf in self.auto_trader.strategy_performance.items():
+                trades = perf.get('trades', 0)
+                profit = perf.get('profit', 0.0)
+                status_icon = "🔵" if strategy_name == self.auto_trader.active_strategy else "⚪"
+                print(
+                    f"    {status_icon} {strategy_name.upper()}: {trades} trades, ${profit:.2f} profit")
+
+            # Explain why current strategy was chosen
+            if self.auto_trader.current_regime == "ranging":
+                print(f"\n  📊 RANGING MARKET DETECTED:")
+                print(f"     • High whipsaw ratio detected (MA crossovers failing)")
+                print(f"     • Switched to MEAN REVERSION strategy")
+                print(f"     • Will buy oversold conditions, sell overbought")
+            elif self.auto_trader.current_regime == "trending":
+                print(f"\n  📈 TRENDING MARKET DETECTED:")
+                print(f"     • Clear directional movement")
+                print(f"     • Using MA CROSSOVER strategy")
+            elif self.auto_trader.current_regime == "volatile":
+                print(f"\n  ⚡ VOLATILE MARKET DETECTED:")
+                print(f"     • High volatility with volume spikes")
+                print(f"     • Using BREAKOUT strategy")
+
+        session_duration = datetime.now() - self.auto_trader.strategy_start_time
+        hours = session_duration.total_seconds() / 3600
+        print(f"\nSession Duration: {hours:.1f} hours\n")
+        print("━"*50)
