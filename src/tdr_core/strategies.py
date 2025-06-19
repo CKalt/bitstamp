@@ -84,7 +84,20 @@ class DiagnosticLogger:
         self.last_snapshot_time = datetime.now()
         
     def log_signal_evaluation(self, signal_type, signal_value, reason, will_trade, why_not=None):
-        """Log when signals are evaluated."""
+        """Log when signals are evaluated - but avoid duplicates."""
+        # Create a signature of this signal evaluation
+        signal_signature = f"{signal_type}:{signal_value}:{will_trade}"
+        
+        # Skip if this is the same as the last signal (avoid logging every minute)
+        if signal_signature == self.last_signal_eval and not will_trade:
+            self.signal_eval_count += 1
+            # Only log every 10th duplicate or if it's been 30 minutes
+            if self.signal_eval_count < 10 and (datetime.now() - self.last_snapshot_time).total_seconds() < 1800:
+                return
+                
+        self.last_signal_eval = signal_signature
+        self.signal_eval_count = 0
+
         data = {
             "signal_type": signal_type,
             "signal_value": signal_value,
@@ -139,6 +152,17 @@ class DiagnosticLogger:
     def _save(self):
         """Save events to file."""
         try:
+            # Trim events if we exceed max
+            if len(self.events) > self.max_events:
+                # Keep the first 100 events (for context) and the most recent events
+                self.events = self.events[:100] + self.events[-(self.max_events-100):]
+                # Add a marker event
+                self.events.insert(100, {
+                    "timestamp": datetime.now().isoformat(),
+                    "type": "TRIMMED",
+                    "data": {"message": f"Trimmed {len(self.events) - self.max_events} old events to save space"}
+                })
+            
             summary = {
                 "session_start": self.start_time.isoformat(),
                 "last_update": datetime.now().isoformat(),
@@ -147,12 +171,41 @@ class DiagnosticLogger:
                     event_type: len([e for e in self.events if e["type"] == event_type])
                     for event_type in set(e["type"] for e in self.events)
                 },
-                "events": self.events[-1000:]  # Keep last 1000 events to prevent huge files
+                "file_size_kb": os.path.getsize(self.filename) / 1024 if os.path.exists(self.filename) else 0,
+                "events": self.events
             }
             with open(self.filename, 'w') as f:
                 json.dump(summary, f, indent=2, default=str)
         except Exception as e:
             print(f"Failed to save diagnostic log: {e}")
+            
+    def close(self):
+        """Final save on shutdown - add a closing event."""
+        self.log_event("SESSION_END", {
+            "reason": "Normal shutdown",
+            "duration_hours": (datetime.now() - self.start_time).total_seconds() / 3600,
+            "final_event_count": len(self.events)
+        })
+        
+    def crash_recovery(self):
+        """Called on unexpected exit - tries to save current state."""
+        self.log_event("CRASH", {
+            "reason": "Unexpected termination",
+            "last_event": self.events[-1] if self.events else None
+        })
+        self._save()
+
+
+    def log_multi_part_trade(self, parts, total_btc, avg_price, reason):
+        """Log a multi-part trade execution."""
+        data = {
+            "parts": parts,
+            "total_btc": total_btc,
+            "average_price": avg_price,
+            "reason": reason,
+            "note": "Multiple trades executed as one logical trade to avoid 90% rule"
+        }
+        self.log_event("MULTI_PART_TRADE", data)
 
 ###############################################################################
 class MACrossoverStrategy:
@@ -237,6 +290,10 @@ class MACrossoverStrategy:
 
         # Initialize diagnostic logger
         self.diagnostic_logger = DiagnosticLogger(f"MA_{short_window}_{long_window}")
+        self.diagnostic_logger.log_event("SESSION_START", {
+            "strategy": "MA_CROSSOVER",
+            "parameters": {"short": short_window, "long": long_window, "live": live_trading}
+        })
 
         # Register real-time callback
         data_manager.add_trade_observer(self.check_instant_signal)
@@ -273,6 +330,13 @@ class MACrossoverStrategy:
         """
         self.running = False
         self.logger.info("Strategy loop stopped.")
+        
+        # Close diagnostic logger
+        if hasattr(self, 'diagnostic_logger'):
+            self.diagnostic_logger.close()
+            self.logger.info(f"Diagnostic log saved to: {self.diagnostic_logger.filename}")
+        
+        # Save trades (existing code)
         if not self.live_trading and self.trade_log:
             try:
                 file_path = os.path.abspath(self.trade_log_file)
@@ -331,6 +395,7 @@ class MACrossoverStrategy:
                         # Always log signal evaluations
                         will_trade = False
                         why_not = []
+                        signal_desc = f"Short MA: {df_ma.iloc[-1]['Short_MA']:.2f}, Long MA: {df_ma.iloc[-1]['Long_MA']:.2f}"
                         
                         if latest_signal == 1 and self.position <= 0:
                             will_trade = self.trade_count_today < self.max_trades_per_day
@@ -343,14 +408,16 @@ class MACrossoverStrategy:
                         else:
                             why_not.append(f"Signal {latest_signal} matches current position {self.position}")
                             
-                        self.diagnostic_logger.log_signal_evaluation(
-                            signal_type="MA_CROSSOVER",
-                            signal_value=latest_signal,
-                            reason=f"Short MA: {df_ma.iloc[-1]['Short_MA']:.2f}, Long MA: {df_ma.iloc[-1]['Long_MA']:.2f}",
-                            will_trade=will_trade,
-                            why_not=why_not if why_not else None
-                        )
-
+                        # Only log if something interesting might happen or it's been a while
+                        if will_trade or self.diagnostic_logger.should_snapshot() or latest_signal != getattr(self, '_last_logged_signal', None):
+                            self.diagnostic_logger.log_signal_evaluation(
+                                signal_type="MA_CROSSOVER",
+                                signal_value=latest_signal,
+                                reason=signal_desc,
+                                will_trade=will_trade,
+                                why_not=why_not if why_not else None
+                            )
+                            self._last_logged_signal = latest_signal
                         self.check_for_signals(
                             latest_signal, current_price, signal_time)
                     else:
@@ -358,8 +425,18 @@ class MACrossoverStrategy:
                 except Exception as e:
                     self.logger.error(
                         f"Error in strategy loop for {self.symbol}: {e}")
+                    self.diagnostic_logger.log_error(f"Strategy loop error: {e}")
             else:
                 self.logger.debug(f"No data loaded for {self.symbol} yet.")
+
+            # Hourly status report
+            if not hasattr(self, '_last_hourly_status'):
+                self._last_hourly_status = datetime.now()
+            
+            if (datetime.now() - self._last_hourly_status).total_seconds() >= 3600:
+                self._log_hourly_status()
+                self._last_hourly_status = datetime.now()
+
             time.sleep(60)
 
     def _log_diagnostic_snapshot(self):
@@ -394,6 +471,62 @@ class MACrossoverStrategy:
             self.diagnostic_logger.log_snapshot(position_info, market_data, strategy_state)
         except Exception as e:
             self.diagnostic_logger.log_error(f"Failed to create snapshot: {e}")
+
+    def _log_trade_status(self):
+        """Log full status after a trade execution."""
+        try:
+            status = self.get_status()
+            self.diagnostic_logger.log_event("POST_TRADE_STATUS", {
+                "position": status['position'],
+                "balance_btc": status['balance_btc'],
+                "balance_usd": status['balance_usd'],
+                "position_info": status.get('position_info', {}),
+                "total_pnl": status['total_profit_loss'],
+                "trades_today": status['trade_count_today'],
+                "last_trade": status.get('last_trade', 'Unknown')
+            })
+        except Exception as e:
+            self.diagnostic_logger.log_error(f"Failed to log post-trade status: {e}")
+            
+    def _log_hourly_status(self):
+        """Log comprehensive hourly status report."""
+        try:
+            status = self.get_status()
+            current_price = self.data_manager.get_current_price(self.symbol) or 0
+            
+            hourly_report = {
+                "current_price": current_price,
+                "position": {
+                    "direction": status['position'],
+                    "btc": status['balance_btc'],
+                    "usd": status['balance_usd'],
+                    "mtm_usd": status['mark_to_market_usd'],
+                    "mtm_btc": status['mark_to_market_btc']
+                },
+                "position_details": status.get('position_info', {}),
+                "performance": {
+                    "total_return_pct": status['total_return_pct'],
+                    "total_pnl": status['total_profit_loss'],
+                    "trades_executed": status['trades_executed'],
+                    "win_rate": status['win_rate'],
+                    "fees_paid": status['total_fees_paid']
+                },
+                "trading_activity": {
+                    "trades_today": status['trade_count_today'],
+                    "remaining_trades": status['remaining_trades_today'],
+                    "last_trade": status.get('last_trade', 'None')
+                },
+                "technical": {
+                    "ma_difference": status.get('ma_difference', 0),
+                    "signal_proximity": status.get('ma_signal_proximity', 0)
+                }
+            }
+            
+            self.diagnostic_logger.log_event("HOURLY_STATUS", hourly_report)
+            self.logger.info("Logged hourly status report to diagnostics")
+            
+        except Exception as e:
+            self.diagnostic_logger.log_error(f"Failed to log hourly status: {e}")
 
     def determine_next_trigger(self, df_ma):
         """
@@ -492,6 +625,14 @@ class MACrossoverStrategy:
                 return
 
             self.logger.info(f"Buy signal triggered at {current_price}")
+            
+            # Log position before trade
+            position_before = {
+                "btc": self.balance_btc,
+                "usd": self.balance_usd,
+                "position": self.position
+            }
+
             self.position = 1
             self.last_trade_reason = "MA Crossover: short above long."
             self.buy_in_three_parts(
@@ -499,6 +640,19 @@ class MACrossoverStrategy:
             )
             self.trade_count_today += 1
             self.last_signal_time = signal_time
+            
+            # Log position after trade
+            self.diagnostic_logger.log_trade_execution(
+                trade_type="BUY",
+                price=current_price,
+                amount=self.position_size,
+                position_before=position_before,
+                position_after={"btc": self.balance_btc, "usd": self.balance_usd, "position": self.position},
+                pnl=self.total_profit_loss
+            )
+            
+            # Log full status after trade
+            self._log_trade_status()
 
         # If we see a SELL signal
         elif latest_signal == -1 and self.position >= 0:
@@ -508,6 +662,14 @@ class MACrossoverStrategy:
                 return
 
             self.logger.info(f"Sell signal triggered at {current_price}")
+
+            # Log position before trade
+            position_before = {
+                "btc": self.balance_btc,
+                "usd": self.balance_usd,
+                "position": self.position
+            }
+ 
             self.position = -1
             self.last_trade_reason = "MA Crossover: short below long."
             trade_btc = round(self.balance_btc, 8)
@@ -520,6 +682,20 @@ class MACrossoverStrategy:
             )
             self.trade_count_today += 1
             self.last_signal_time = signal_time
+            
+            # Log position after trade
+            self.diagnostic_logger.log_trade_execution(
+                trade_type="SELL",
+                price=current_price,
+                amount=trade_btc,
+                position_before=position_before,
+                position_after={"btc": self.balance_btc, "usd": self.balance_usd, "position": self.position},
+                pnl=self.total_profit_loss
+            )
+            
+            # Log full status after trade
+            self._log_trade_status()
+
 
     def buy_in_three_parts(self, price, timestamp, signal_time):
         """
@@ -528,15 +704,30 @@ class MACrossoverStrategy:
         # Store initial state
         initial_position_size = self.position_size
         initial_cost_basis = self.position_cost_basis
+        initial_usd = self.balance_usd
+        
+        # Log the start of multi-part trade
+        self.diagnostic_logger.log_event("MULTI_PART_TRADE_START", {
+            "reason": "3-part buy to avoid 90% rule",
+            "initial_usd": initial_usd,
+            "target_price": price,
+            "counts_as_trades": 1,
+            "note": "Will execute 3 buys but count as single daily trade"
+        })
+        
+        parts = []
 
         partial_btc_1 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1)
+        parts.append({"part": 1, "btc": partial_btc_1, "price": price})
 
         partial_btc_2 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_2)
+        parts.append({"part": 2, "btc": partial_btc_2, "price": price})
 
         partial_btc_3 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_3)
+        parts.append({"part": 3, "btc": partial_btc_3, "price": price})
         
         # Validate final position
         total_btc_bought = self.position_size - initial_position_size
@@ -547,11 +738,31 @@ class MACrossoverStrategy:
             if abs(actual_cost_added - expected_cost) > 1.0:
                 self.logger.warning(f"Position tracking error detected! Expected cost: ${expected_cost:.2f}, Actual: ${actual_cost_added:.2f}")
                 # Correct the cost basis
+                self.diagnostic_logger.log_position_anomaly(
+                    "Cost basis mismatch in update_balance",
+                    {
+                        "expected_cost": expected_cost,
+                        "actual_cost": actual_cost_added,
+                        "fill_btc": fill_btc,
+                        "fill_price": fill_price
+                    }
+                )
                 self.position_cost_basis = self.position_size * price
                 self.logger.info(f"Corrected position cost basis to ${self.position_cost_basis:.2f}")
         
-        # Log final position state
+        # Log final position state and multi-part summary
         self.logger.info(f"Three-part buy complete: {self.position_size:.8f} BTC, cost basis: ${self.position_cost_basis:.2f}")
+        
+        # Log the completed multi-part trade
+        self.diagnostic_logger.log_multi_part_trade(
+            parts=parts,
+            total_btc=total_btc_bought,
+            avg_price=price,
+            reason="MA Crossover buy signal"
+        )
+        
+        # Log full status after multi-part trade
+        self._log_trade_status()
 
     def get_89pct_btc_of_usd(self, price):
         available_usd = self.balance_usd * 0.89
@@ -807,6 +1018,16 @@ class MACrossoverStrategy:
             (self.balance_usd / current_price if current_price else 0.0)
         return total_usd_value, total_btc_value
 
+    def _calculate_unrealized_pnl(self):
+        """Calculate unrealized P&L for current position."""
+        current_price = self.data_manager.get_current_price(self.symbol) or 0
+        if self.position == 1 and self.position_size > 0:
+            return (self.position_size * current_price) - self.position_cost_basis
+        elif self.position == -1 and self.last_trade_price:
+            btc_sold = self.position_cost_basis
+            return (self.last_trade_price - current_price) * btc_sold if btc_sold > 0 else 0
+        return 0
+
     def get_status(self):
         """
         Return a dictionary summarizing the current status, including 'position_info'
@@ -1031,6 +1252,14 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
 
         # Initialize parent class
         super().__init__(*args, **kwargs)
+
+        # Log adaptive strategy initialization
+        self.diagnostic_logger.log_event("ADAPTIVE_STRATEGY_INIT", {
+            "strategy": "ADAPTIVE_MULTI",
+            "parameters": {"regime_threshold": self.regime_switch_threshold,
+                          "signal_confirmation_bars": self.signal_confirmation_bars,
+                          "min_trade_gap_minutes": self.min_trade_gap_minutes}
+        })
 
         # Adaptive state
         self.current_regime = "unknown"
@@ -1333,6 +1562,41 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                 df_resampled)
                         else:
                             signal, signal_reason = 0, "Unknown strategy"
+
+                        # Log diagnostic snapshot if needed
+                        if self.diagnostic_logger.should_snapshot():
+                            self._log_diagnostic_snapshot()
+                            
+                        # Log signal evaluation (with deduplication)
+                        will_trade = signal != 0 and self.confirm_signal(signal) and self.check_trade_gap()
+                        why_not = []
+                        if signal == 0:
+                            why_not.append("No signal")
+                        elif not self.confirm_signal(signal):
+                            why_not.append(f"Signal not confirmed: {len(self.signal_history)}/{self.signal_confirmation_bars}")
+                        elif not self.check_trade_gap():
+                            why_not.append(f"Trade gap constraint")
+                            
+                        # Only log interesting evaluations or periodic updates
+                        should_log = will_trade or regime != self.current_regime or self.diagnostic_logger.should_snapshot()
+                        if should_log:
+                            self.diagnostic_logger.log_signal_evaluation(
+                                signal_type=f"{self.active_strategy.upper()}_SIGNAL",
+                                signal_value=signal,
+                                reason=signal_reason,
+                                will_trade=will_trade,
+                                why_not=why_not if why_not else None
+                            )
+
+                        # Log regime change if it occurred
+                        if new_strategy != self.active_strategy and hasattr(self, '_last_logged_regime'):
+                            self.diagnostic_logger.log_regime_change(
+                                old_regime=self._last_logged_regime,
+                                new_regime=new_strategy,
+                                confidence=confidence,
+                                metrics=metrics
+                            )
+                        self._last_logged_regime = self.active_strategy
 
                         # 5. Execute if signal confirmed
                         if signal != 0 and self.confirm_signal(signal):

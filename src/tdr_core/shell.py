@@ -476,7 +476,24 @@ class CryptoShell(cmd.Cmd):
             volume_threshold=1.5,
             macd_threshold=0.001
         )
-
+        
+        # Log the auto_trade command to diagnostics
+        if hasattr(self.auto_trader, 'diagnostic_logger'):
+            self.auto_trader.diagnostic_logger.log_event("AUTO_TRADE_COMMAND", {
+                "command": f"auto_trade {arg}",
+                "parsed": {
+                    "amount": amount_num,
+                    "unit": amount_unit,
+                    "position": pos_str,
+                    "desired_position": desired_position,
+                    "initial_balance_btc": initial_balance_btc,
+                    "initial_balance_usd": initial_balance_usd,
+                    "strategy": strategy_name,
+                    "live_trading": do_live,
+                    "max_trades_per_day": max_trades_day
+                }
+            })
+ 
         current_market_price = self.data_manager.get_current_price(
             'btcusd') or 0.0
 
@@ -496,6 +513,16 @@ class CryptoShell(cmd.Cmd):
                     'theoretical': True
                 }
 
+                # Log theoretical trade
+                self.auto_trader.diagnostic_logger.log_event("THEORETICAL_TRADE", {
+                    "reason": "User position matches system recommendation",
+                    "position": "LONG",
+                    "amount_btc": amount_num,
+                    "entry_price": current_market_price,
+                    "cost_basis": self.auto_trader.position_cost_basis,
+                    "note": "No actual trade needed - positions aligned"
+                })
+
         # If the user starts "short" and hist_position is also short => theoretical
         if desired_position == -1 and hist_position == -1 and current_market_price > 0:
             short_btc = amount_num / current_market_price
@@ -513,6 +540,17 @@ class CryptoShell(cmd.Cmd):
                     'amount': amount_num,
                     'theoretical': True
                 }
+
+                # Log theoretical trade
+                self.auto_trader.diagnostic_logger.log_event("THEORETICAL_TRADE", {
+                    "reason": "User position matches system recommendation",
+                    "position": "SHORT",
+                    "amount_usd": amount_num,
+                    "btc_equivalent": short_btc,
+                    "entry_price": current_market_price,
+                    "cost_basis": self.auto_trader.position_cost_basis,
+                    "note": "No actual trade needed - positions aligned"
+                })
 
         # Handle all four initialization scenarios
         if desired_position == hist_position:
@@ -619,9 +657,21 @@ class CryptoShell(cmd.Cmd):
 
                 self.logger.info(
                     f"Case 2: User LONG but system says SHORT. Selling {amount_num:.8f} BTC")
+
+                # Log position mismatch and corrective trade
+                self.auto_trader.diagnostic_logger.log_event("POSITION_CORRECTION", {
+                    "reason": "User position disagrees with system",
+                    "user_position": "LONG",
+                    "system_position": "SHORT",
+                    "action": "SELL all BTC to align with system",
+                    "amount_btc": amount_num,
+                    "current_price": current_market_price
+                })
+
                 trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.auto_trader.execute_trade(
                     "sell", current_market_price, trade_ts, datetime.now(), amount_num)
+
             elif desired_position == -1 and hist_position == 1:
                 # Case 4: User short, system says long - execute 3-part buy
                 short_btc = amount_num / current_market_price
@@ -633,9 +683,25 @@ class CryptoShell(cmd.Cmd):
 
                 self.logger.info(
                     f"Case 4: User SHORT but system says LONG. Executing 3-part buy from ${amount_num:.2f}")
+                    
+                # Log position mismatch and corrective trade
+                self.auto_trader.diagnostic_logger.log_event("POSITION_CORRECTION", {
+                    "reason": "User position disagrees with system",
+                    "user_position": "SHORT",
+                    "system_position": "LONG",
+                    "action": "BUY in 3 parts to align with system",
+                    "amount_usd": amount_num,
+                    "btc_to_buy": short_btc,
+                    "current_price": current_market_price,
+                    "note": "Will execute 3 separate buys to work around 90% rule"
+                })
+
                 trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 self.auto_trader.buy_in_three_parts(
                     current_market_price, trade_ts, datetime.now())
+                    
+        # Log initial status after auto_trade setup
+        self._log_full_status_to_diagnostics()
 
         self.auto_trader.start()
         print(f"Auto-trading started with {balance_str}, position={pos_str}, "
@@ -921,6 +987,43 @@ class CryptoShell(cmd.Cmd):
             
         print("Shutdown complete.")
         return True
+        
+    def _log_full_status_to_diagnostics(self):
+        """Log a full status report to diagnostics."""
+        if not self.auto_trader or not hasattr(self.auto_trader, 'diagnostic_logger'):
+            return
+            
+        try:
+            status = self.auto_trader.get_status()
+            
+            # Create a comprehensive status dump
+            full_status = {
+                "timestamp": datetime.now().isoformat(),
+                "running": status['running'],
+                "position": status['position'],
+                "balances": {
+                    "btc": status['balance_btc'],
+                    "usd": status['balance_usd'],
+                    "mtm_usd": status['mark_to_market_usd'],
+                    "mtm_btc": status['mark_to_market_btc']
+                },
+                "position_info": status.get('position_info', {}),
+                "performance": {
+                    "total_return_pct": status['total_return_pct'],
+                    "total_pnl": status['total_profit_loss'],
+                    "trades_executed": status['trades_executed'],
+                    "win_rate": status['win_rate']
+                },
+                "trading": {
+                    "trades_today": status['trade_count_today'],
+                    "remaining_trades": status['remaining_trades_today']
+                }
+            }
+            
+            self.auto_trader.diagnostic_logger.log_event("STATUS_REPORT", full_status)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to log status: {e}")
 
     def stop_dash_app(self):
         """
