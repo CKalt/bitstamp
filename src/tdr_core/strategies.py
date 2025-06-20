@@ -1529,7 +1529,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         if self.signal_history and self.signal_history[-1] != current_signal:
             self.signal_history = []  # Reset on signal change
 
-         self.signal_history.append(current_signal)
+        self.signal_history.append(current_signal)
 
         # Keep only recent signals (max 5)
         if len(self.signal_history) > 5:
@@ -1683,15 +1683,18 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             current_price = df_resampled.iloc[-1]['close']
                             signal_time = df_resampled.index[-1]
                             self.logger.info(
-                                # Additional check for signal validity
-                                if signal == self.position:
-                                    self.logger.info(f"📊 {self.active_strategy.upper()}: {signal_reason} - but already in position")
-                                    self.signal_history = []  # Clear history since we can't act on this
-                                    continue
-                                if not self.check_trade_gap():
-                                    self.signal_history = []  # Clear if we can't trade yet
-                                    f"📊 {self.active_strategy.upper()}: {signal_reason}")
-                            self.check_for_signals( signal, current_price, signal_time)
+                                f"📊 {self.active_strategy.upper()}: {signal_reason}")
+                            
+                            # Additional check for signal validity
+                            if signal == self.position:
+                                self.logger.info(f"📊 {self.active_strategy.upper()}: {signal_reason} - but already in position")
+                                self.signal_history = []  # Clear history since we can't act on this
+                                continue
+                            if not self.check_trade_gap():
+                                self.signal_history = []  # Clear if we can't trade yet
+                                continue
+                                
+                            self.check_for_signals(signal, current_price, signal_time)
 
                         # Store regime info
                         self.current_regime = regime
