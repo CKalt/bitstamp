@@ -1241,7 +1241,7 @@ class MACrossoverStrategy:
                     # Fallback to old method if position_size not properly set
                     position_info['entry_price'] = self.last_trade_price
                     btc_sold = self.position_cost_basis / self.last_trade_price if self.last_trade_price > 0 else 0
-                     position_info['unrealized_pnl'] = (self.last_trade_price - cp) * btc_sold
+                    position_info['unrealized_pnl'] = (self.last_trade_price - cp) * btc_sold
                     # Log warning about position tracking
                     self.diagnostic_logger.log_position_anomaly(
                         "Short position using fallback tracking",
