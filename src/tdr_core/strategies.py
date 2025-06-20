@@ -703,6 +703,17 @@ class MACrossoverStrategy:
             # Log full status after trade
             self._log_trade_status()
 
+            # Additional diagnostic logging for shorts
+            if hasattr(self, 'diagnostic_logger'):
+                self.diagnostic_logger.log_event("SHORT_POSITION_DETAILS", {
+                    "action": "opening_short",
+                    "btc_to_sell": trade_btc,
+                    "price": current_price,
+                    "position_size_before": self.position_size,
+                    "position_size_after": self.position_size - trade_btc,  # Will be negative
+                    "cost_basis_after": trade_btc * current_price,
+                    "expected_tracking": "position_size should be negative for shorts"
+                })
 
     def buy_in_three_parts(self, price, timestamp, signal_time):
         """
@@ -974,9 +985,10 @@ class MACrossoverStrategy:
                     self.position_size -= fill_btc
 
             else:
-                # Going short: track USD held and BTC amount sold
-                self.position_size = 0.0  # No BTC held when short
-                self.position_cost_basis = fill_btc  # BTC amount sold for P&L calc
+                # Going short or adding to short: properly track the position
+                # Store the BTC amount sold as negative position_size for consistency
+                self.position_size -= fill_btc  # Negative value indicates short
+                self.position_cost_basis = fill_btc * fill_price  # USD value at entry
                 self.logger.info(f"Short position: sold {fill_btc:.8f} BTC @ ${fill_price:.2f}, holding ${self.balance_usd:.2f} USD")
 
             if self.last_trade_price is not None and self.position == 1:
@@ -1053,11 +1065,17 @@ class MACrossoverStrategy:
     def _calculate_unrealized_pnl(self):
         """Calculate unrealized P&L for current position."""
         current_price = self.data_manager.get_current_price(self.symbol) or 0
+
         if self.position == 1 and self.position_size > 0:
+            # Long position P&L
             return (self.position_size * current_price) - self.position_cost_basis
-        elif self.position == -1 and self.last_trade_price:
-            btc_sold = self.position_cost_basis
-            return (self.last_trade_price - current_price) * btc_sold if btc_sold > 0 else 0
+        elif self.position == -1 and self.position_size < 0:
+            # Short position P&L
+            # position_size is negative for shorts, representing -BTC sold
+            btc_sold = abs(self.position_size)
+            entry_price = self.position_cost_basis / btc_sold if btc_sold > 0 else 0
+            # P&L = (entry_price - current_price) * btc_amount
+            return (entry_price - current_price) * btc_sold
         return 0
 
     def get_status(self):
@@ -1209,15 +1227,26 @@ class MACrossoverStrategy:
                     position_info['unrealized_pnl'] = 0.0
                     
             elif self.position == -1:
-                # Short position - holding USD from selling BTC
-                position_info['entry_price'] = self.last_trade_price or 0.0
+                # Short position - properly calculate from stored position data
                 position_info['position_size_btc'] = 0.0  # No BTC held
                 position_info['position_size_usd'] = self.balance_usd  # USD from sale
-                
-                # P&L for short: (sell_price - current_price) * btc_amount_sold
-                if self.last_trade_price and self.position_cost_basis > 0:
-                    btc_sold = self.position_cost_basis
-                    position_info['unrealized_pnl'] = (self.last_trade_price - cp) * btc_sold
+                 
+                # Calculate entry price and P&L for short position
+                if self.position_size < 0:  # We have a short position
+                    btc_sold = abs(self.position_size)
+                    entry_price = self.position_cost_basis / btc_sold if btc_sold > 0 else 0
+                    position_info['entry_price'] = entry_price
+                    position_info['unrealized_pnl'] = (entry_price - cp) * btc_sold
+                elif self.last_trade_price and self.position_cost_basis > 0:
+                    # Fallback to old method if position_size not properly set
+                    position_info['entry_price'] = self.last_trade_price
+                    btc_sold = self.position_cost_basis / self.last_trade_price if self.last_trade_price > 0 else 0
+                     position_info['unrealized_pnl'] = (self.last_trade_price - cp) * btc_sold
+                    # Log warning about position tracking
+                    self.diagnostic_logger.log_position_anomaly(
+                        "Short position using fallback tracking",
+                        {"reason": "position_size not negative for short", "position_size": self.position_size}
+                    )
                 else:
                     position_info['unrealized_pnl'] = 0.0
             else:
@@ -1301,6 +1330,10 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         self.strategy_switches_today = 0
         self.signal_history = []
         self.last_confirmed_signal = 0
+
+        # Add time-based strategy switch constraint
+        self.last_strategy_switch_time = None
+        self.min_strategy_switch_minutes = 120  # 2 hours minimum between switches
 
         # Ensure critical attributes exist (fix AttributeError)
         if not hasattr(self, 'last_trade_time'):
@@ -1492,10 +1525,15 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
 
     def confirm_signal(self, current_signal):
         """Require multiple consecutive bars of the same signal."""
-        self.signal_history.append(current_signal)
+        # Clear history if signal changes
+        if self.signal_history and self.signal_history[-1] != current_signal:
+            self.signal_history = []  # Reset on signal change
 
-        if len(self.signal_history) > 10:
-            self.signal_history = self.signal_history[-10:]
+         self.signal_history.append(current_signal)
+
+        # Keep only recent signals (max 5)
+        if len(self.signal_history) > 5:
+            self.signal_history = self.signal_history[-5:]
 
         # Require more confirmation when holding positions
         current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
@@ -1510,11 +1548,15 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         if not all(s == recent_signals[0] for s in recent_signals):
             return False
 
-        if recent_signals[0] == self.last_confirmed_signal:
+        # Don't re-confirm the same signal
+        if recent_signals[0] == 0:  # No signal
             return False
 
-        self.last_confirmed_signal = recent_signals[0]
-        return True
+        # Confirm if we have enough consistent signals
+        confirmed = len(recent_signals) == required_bars and recent_signals[0] != 0
+        if confirmed:
+            self.last_confirmed_signal = recent_signals[0]
+        return confirmed
 
     def check_trade_gap(self):
         """Check if enough time passed since last trade."""
@@ -1556,8 +1598,18 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         # Only switch if confidence exceeds threshold
                         if confidence >= required_confidence:
                             new_strategy = regime
-                            if new_strategy != self.active_strategy:
-                                self.logger.info(f"✅ Switching to {regime} strategy - confidence {confidence:.1%} >= {required_confidence:.1%} required")
+                            # Check time constraint for strategy switching
+                            can_switch_time = True
+                            if self.last_strategy_switch_time:
+                                mins_since_switch = (datetime.now() - self.last_strategy_switch_time).total_seconds() / 60
+                                can_switch_time = mins_since_switch >= self.min_strategy_switch_minutes
+
+                            if new_strategy != self.active_strategy and can_switch_time:
+                                mins_str = f" (last switch {mins_since_switch:.0f}min ago)" if self.last_strategy_switch_time else ""
+                                self.logger.info(f"✅ Switching to {regime} strategy - confidence {confidence:.1%} >= {required_confidence:.1%} required{mins_str}")
+                            elif new_strategy != self.active_strategy and not can_switch_time:
+                                self.logger.info(f"⏳ Would switch to {regime} but only {mins_since_switch:.0f}min since last switch (need {self.min_strategy_switch_minutes}min)")
+                                new_strategy = self.active_strategy  # Don't switch yet
                         else:
                             new_strategy = self.active_strategy  # Stay with current strategy
                             self.logger.info(f"⏸️  Staying with {self.active_strategy} strategy - {regime} confidence {confidence:.1%} < {required_confidence:.1%} required (position: ${current_position_value:,.0f})")
@@ -1568,6 +1620,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             self.active_strategy = new_strategy
                             self.strategy_switches_today += 1
                             self.signal_history = []  # Reset signal history on strategy switch
+                            self.last_strategy_switch_time = datetime.now()
                         else:
                             self.logger.debug(f"Keeping {self.active_strategy} strategy (regime: {regime}, confidence: {confidence:.1%})")
 
@@ -1596,6 +1649,12 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         elif not self.confirm_signal(signal):
                             why_not.append(f"Signal not confirmed: {len(self.signal_history)}/{self.signal_confirmation_bars}")
                         elif not self.check_trade_gap():
+                            mins_since = (datetime.now() - self.last_trade_time).total_seconds() / 60 if self.last_trade_time else 999
+                            why_not.append(f"Trade gap: {mins_since:.0f}min < {self.min_trade_gap_minutes}min")
+                        elif self.trade_count_today >= self.max_trades_per_day:
+                            why_not.append(f"Daily limit: {self.trade_count_today}/{self.max_trades_per_day}")
+                        elif signal == self.position:
+                            why_not.append(f"Signal matches position")
                             why_not.append(f"Trade gap constraint")
                             
                         # Only log interesting evaluations or periodic updates
@@ -1623,11 +1682,16 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         if signal != 0 and self.confirm_signal(signal):
                             current_price = df_resampled.iloc[-1]['close']
                             signal_time = df_resampled.index[-1]
-
                             self.logger.info(
-                                f"📊 {self.active_strategy.upper()}: {signal_reason}")
-                            self.check_for_signals(
-                                signal, current_price, signal_time)
+                                # Additional check for signal validity
+                                if signal == self.position:
+                                    self.logger.info(f"📊 {self.active_strategy.upper()}: {signal_reason} - but already in position")
+                                    self.signal_history = []  # Clear history since we can't act on this
+                                    continue
+                                if not self.check_trade_gap():
+                                    self.signal_history = []  # Clear if we can't trade yet
+                                    f"📊 {self.active_strategy.upper()}: {signal_reason}")
+                            self.check_for_signals( signal, current_price, signal_time)
 
                         # Store regime info
                         self.current_regime = regime

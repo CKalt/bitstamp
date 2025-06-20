@@ -1443,9 +1443,10 @@ class CryptoShell(cmd.Cmd):
     def do_reset_position(self, arg):
         """
         Reset position tracking to fix calculation errors.
-        Usage: reset_position [entry_price]
-        
-        If no entry_price provided, uses current price minus 2%.
+        Usage: reset_position [entry_price] [btc_amount]
+
+        If no entry_price provided, uses current price.
+        If no btc_amount provided, calculates from current balances.
         """
         if not self.auto_trader or not self.auto_trader.running:
             print("No auto trader running.")
@@ -1456,27 +1457,60 @@ class CryptoShell(cmd.Cmd):
             print("Cannot get current price.")
             return
         
-        if arg:
-            try:
-                entry_price = float(arg)
-            except ValueError:
-                print("Invalid price. Usage: reset_position [entry_price]")
-                return
-        else:
-            entry_price = current_price * 0.98  # Default to 2% below current
+        args = arg.split()
+        entry_price = current_price
+        btc_amount = None
         
+        if len(args) >= 1:
+             try:
+                entry_price = float(args[0])
+             except ValueError:
+                print("Invalid price. Usage: reset_position [entry_price] [btc_amount]")
+                return
+                
+        if len(args) >= 2:
+            try:
+                btc_amount = float(args[1])
+            except ValueError:
+                print("Invalid BTC amount. Usage: reset_position [entry_price] [btc_amount]")
+                return
+
         # Reset position tracking
         if self.auto_trader.position == 1:
+            # Long position
             self.auto_trader.position_size = self.auto_trader.balance_btc
             self.auto_trader.position_cost_basis = self.auto_trader.position_size * entry_price
             print(f"Reset LONG position: {self.auto_trader.position_size:.8f} BTC @ ${entry_price:.2f}")
             print(f"New cost basis: ${self.auto_trader.position_cost_basis:.2f}")
         elif self.auto_trader.position == -1:
             # For short positions
-            btc_equivalent = self.auto_trader.balance_usd / current_price
-            self.auto_trader.position_size = 0.0
-            self.auto_trader.position_cost_basis = btc_equivalent
-            print(f"Reset SHORT position: {btc_equivalent:.8f} BTC equivalent @ ${entry_price:.2f}")
+            if btc_amount is None:
+                # Calculate BTC amount from USD balance and entry price
+                btc_amount = self.auto_trader.balance_usd / entry_price
+                
+            # Set position_size as negative for shorts
+            self.auto_trader.position_size = -btc_amount
+            self.auto_trader.position_cost_basis = btc_amount * entry_price
+            self.auto_trader.last_trade_price = entry_price  # Also set last trade price
+            
+             print(f"Reset SHORT position: {btc_equivalent:.8f} BTC equivalent @ ${entry_price:.2f}")
+            print(f"Position size: {self.auto_trader.position_size:.8f} (negative = short)")
+            print(f"Cost basis: ${self.auto_trader.position_cost_basis:.2f}")
+            
+            # Calculate and show what P&L should be
+            expected_pnl = (entry_price - current_price) * btc_amount
+            print(f"Expected P&L at current price ${current_price:.2f}: ${expected_pnl:.2f}")
+            
+            # Log the reset
+            if hasattr(self.auto_trader, 'diagnostic_logger'):
+                self.auto_trader.diagnostic_logger.log_event("POSITION_RESET", {
+                    "type": "manual_reset",
+                    "position": "SHORT",
+                    "entry_price": entry_price,
+                    "btc_amount": btc_amount,
+                    "current_price": current_price,
+                    "expected_pnl": expected_pnl
+                })
         else:
             print("No position to reset.")
 
