@@ -1493,7 +1493,7 @@ class CryptoShell(cmd.Cmd):
             self.auto_trader.position_cost_basis = btc_amount * entry_price
             self.auto_trader.last_trade_price = entry_price  # Also set last trade price
             
-             print(f"Reset SHORT position: {btc_equivalent:.8f} BTC equivalent @ ${entry_price:.2f}")
+            print(f"Reset SHORT position: {btc_equivalent:.8f} BTC equivalent @ ${entry_price:.2f}")
             print(f"Position size: {self.auto_trader.position_size:.8f} (negative = short)")
             print(f"Cost basis: ${self.auto_trader.position_cost_basis:.2f}")
             
