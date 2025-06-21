@@ -78,7 +78,8 @@ class CryptoShell(cmd.Cmd):
             'auto_trade': 'auto_trade 2.47btc long',
             'stop_auto_trade': 'stop_auto_trade',
             'status': 'status [long]',
-            'chart': 'chart btcusd 1H 8051 alt_strategy-1.json'
+            'chart': 'chart btcusd 1H 8051 alt_strategy-1.json',
+            'summary_diagnostics': 'summary_diagnostics [filename.json]'
         }
 
         # Register callbacks
@@ -1600,6 +1601,33 @@ class CryptoShell(cmd.Cmd):
         else:
             print("No diagnostic logger available.")
 
+    def do_summary_diagnostics(self, arg):
+        """
+        Export a condensed summary of diagnostics suitable for sharing.
+        Usage: summary_diagnostics [filename]
+
+        If no filename provided, prints to console.
+        """
+        if not self.auto_trader or not hasattr(self.auto_trader, 'diagnostic_logger'):
+            print("No diagnostic logger available.")
+            return
+
+        try:
+            summary = self.auto_trader.diagnostic_logger.export_summary()
+
+            filename = arg.strip() if arg.strip() else None
+
+            if filename:
+                # Save to file
+                with open(filename, 'w') as f:
+                    json.dump(summary, f, indent=2)
+                print(f"Summary exported to: {os.path.abspath(filename)}")
+                print(f"File size: {os.path.getsize(filename) / 1024:.1f} KB")
+            else:
+                # Print to console
+                print(json.dumps(summary, indent=2))
+        except Exception as e:
+            print(f"Error creating summary: {e}")
 
     def do_list_diagnostics(self, arg):
         """

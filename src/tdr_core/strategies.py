@@ -185,6 +185,82 @@ class DiagnosticLogger:
                 json.dump(summary, f, indent=2, default=str)
         except Exception as e:
             print(f"Failed to save diagnostic log: {e}")
+
+
+    def export_summary(self, max_events_per_type=5):
+        """Export a condensed summary of recent diagnostic events."""
+        try:
+            summary = {
+                "session_info": {
+                    "start_time": self.start_time.isoformat(),
+                    "duration_hours": (datetime.now() - self.start_time).total_seconds() / 3600,
+                    "total_events": len(self.events),
+                    "file_size_kb": os.path.getsize(self.filename) / 1024 if os.path.exists(self.filename) else 0
+                },
+                "event_summary": {},
+                "recent_events": {}
+            }
+            
+            # Count events by type
+            event_types = {}
+            for event in self.events:
+                event_type = event["type"]
+                event_types[event_type] = event_types.get(event_type, 0) + 1
+            summary["event_summary"] = event_types
+            
+            # Get recent events of each important type
+            important_types = ["TRADE", "REGIME_CHANGE", "SIGNAL_EVAL", "ERROR", "POSITION_ANOMALY", "MULTI_PART_TRADE"]
+            
+            for event_type in important_types:
+                matching_events = [e for e in self.events if e["type"] == event_type]
+                recent_events = matching_events[-max_events_per_type:] if matching_events else []
+                
+                # Condense the event data
+                condensed_events = []
+                for event in recent_events:
+                    condensed = {
+                        "timestamp": event["timestamp"],
+                        "type": event["type"]
+                    }
+                    
+                    # Add key data based on event type
+                    if event_type == "SIGNAL_EVAL":
+                        data = event.get("data", {})
+                        condensed.update({
+                            "signal_type": data.get("signal_type"),
+                            "signal_value": data.get("signal_value"),
+                            "will_trade": data.get("will_trade"),
+                            "why_not": data.get("why_not")
+                        })
+                    elif event_type == "TRADE":
+                        data = event.get("data", {})
+                        condensed.update({
+                            "trade_type": data.get("trade_type"),
+                            "price": data.get("price"),
+                            "amount": data.get("amount"),
+                            "pnl": data.get("pnl")
+                        })
+                    elif event_type == "REGIME_CHANGE":
+                        data = event.get("data", {})
+                        condensed.update({
+                            "old_regime": data.get("old_regime"),
+                            "new_regime": data.get("new_regime"),
+                            "confidence": data.get("confidence")
+                        })
+                    else:
+                        # For other types, include limited data
+                        condensed["summary"] = str(event.get("data", {}))[:200]
+                    
+                    condensed_events.append(condensed)
+                
+                if condensed_events:
+                    summary["recent_events"][event_type] = condensed_events
+            
+            return summary
+            
+        except Exception as e:
+            return {"error": f"Failed to create summary: {e}"}
+ 
             
     def close(self):
         """Final save on shutdown - add a closing event."""
