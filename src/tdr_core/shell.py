@@ -1196,7 +1196,9 @@ class CryptoShell(cmd.Cmd):
 
         try:
             # Get current data
+            status = self.auto_trader.get_status()
             df = self.data_manager.get_price_dataframe('btcusd')
+
             if df.empty:
                 print("No data available")
                 return

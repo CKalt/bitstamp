@@ -226,9 +226,15 @@ class DiagnosticLogger:
                     # Add key data based on event type
                     if event_type == "SIGNAL_EVAL":
                         data = event.get("data", {})
+                        # Convert numpy types to native Python types
+                        signal_value = data.get("signal_value")
+                        if hasattr(signal_value, 'item'):
+                            signal_value = signal_value.item()
+                        elif isinstance(signal_value, (np.integer, np.floating)):
+                            signal_value = float(signal_value)
                         condensed.update({
                             "signal_type": data.get("signal_type"),
-                            "signal_value": data.get("signal_value"),
+                            "signal_value": signal_value,  # Use the converted value
                             "will_trade": data.get("will_trade"),
                             "why_not": data.get("why_not")
                         })
@@ -236,16 +242,23 @@ class DiagnosticLogger:
                         data = event.get("data", {})
                         condensed.update({
                             "trade_type": data.get("trade_type"),
-                            "price": data.get("price"),
-                            "amount": data.get("amount"),
-                            "pnl": data.get("pnl")
+                            "price": float(data.get("price", 0)),
+                            "amount": float(data.get("amount", 0)),
+                            "pnl": float(data.get("pnl", 0))
+
                         })
+
                     elif event_type == "REGIME_CHANGE":
                         data = event.get("data", {})
+                        confidence = data.get("confidence")
+                        if hasattr(confidence, 'item'):
+                            confidence = confidence.item()
+                        elif isinstance(confidence, (np.integer, np.floating)):
+                            confidence = float(confidence)
                         condensed.update({
                             "old_regime": data.get("old_regime"),
                             "new_regime": data.get("new_regime"),
-                            "confidence": data.get("confidence")
+                            "confidence": confidence  # Use converted value
                         })
                     else:
                         # For other types, include limited data
@@ -1391,6 +1404,10 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         # Initialize parent class
         super().__init__(*args, **kwargs)
 
+        # Add startup grace period
+        self.startup_time = datetime.now()
+        self.startup_grace_period_minutes = 5  # No trades for first 5 minutes
+
         # Log adaptive strategy initialization
         self.diagnostic_logger.log_event("ADAPTIVE_STRATEGY_INIT", {
             "strategy": "ADAPTIVE_MULTI",
@@ -1783,6 +1800,13 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
 
     def check_for_signals(self, latest_signal, current_price, signal_time):
         """Execute trades with adaptive strategy logic."""
+        
+        # Check startup grace period
+        if (datetime.now() - self.startup_time).total_seconds() < (self.startup_grace_period_minutes * 60):
+            mins_remaining = self.startup_grace_period_minutes - ((datetime.now() - self.startup_time).total_seconds() / 60)
+            self.logger.info(f"🚫 STARTUP GRACE PERIOD: {mins_remaining:.1f} minutes remaining before trading")
+            return
+
         today = datetime.utcnow().date()
         if today != self.current_day:
             self.current_day = today
