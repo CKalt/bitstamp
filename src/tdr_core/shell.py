@@ -1492,6 +1492,13 @@ class CryptoShell(cmd.Cmd):
                 btc_amount = self.auto_trader.balance_usd / entry_price
                 
             # Set position_size as negative for shorts
+
+        if self.auto_trader.position == -1:
+            # For short positions
+            if btc_amount is None:
+                # Calculate BTC amount from USD balance and entry price
+                btc_amount = self.auto_trader.balance_usd / entry_price
+
             self.auto_trader.position_size = -btc_amount
             self.auto_trader.position_cost_basis = btc_amount * entry_price
             self.auto_trader.last_trade_price = entry_price  # Also set last trade price
@@ -1503,7 +1510,8 @@ class CryptoShell(cmd.Cmd):
             # Calculate and show what P&L should be
             expected_pnl = (entry_price - current_price) * btc_amount
             print(f"Expected P&L at current price ${current_price:.2f}: ${expected_pnl:.2f}")
-            
+
+            btc_equivalent = btc_amount  # Fix undefined variable
             # Log the reset
             if hasattr(self.auto_trader, 'diagnostic_logger'):
                 self.auto_trader.diagnostic_logger.log_event("POSITION_RESET", {
@@ -1699,6 +1707,9 @@ class CryptoShell(cmd.Cmd):
     def _print_diagnostics_summary(self, diagnostics):
         """Print a concise summary of strategy diagnostics."""
         status = self.auto_trader.get_status()
+
+        # FIX: Ensure pos_str is properly defined
+        pos_str = {1: 'LONG', -1: 'SHORT'}.get(status['position'], 'UNKNOWN')
         pos = diagnostics["position_analysis"]
         regime = diagnostics["regime_detection"]
         signals = diagnostics["strategy_signals"]
@@ -1745,10 +1756,6 @@ class CryptoShell(cmd.Cmd):
             print(f"\n✅ All constraints satisfied - trade should trigger on next signal!")
 
 
-
-        print(f"  • Current BTC Balance: {status['balance_btc']:.8f}")
-        print(
-            f"  • Total Return (vs initial): {status['total_return_pct']:.2f}%")
         print(f"  • Total P&L: ${status['total_profit_loss']:.2f}")
         print(f"  • Current Trade Amount: {status['current_amount']:.8f}")
         print(f"  • Total Fees Paid: ${status['total_fees_paid']:.2f}")

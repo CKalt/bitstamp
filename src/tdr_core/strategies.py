@@ -152,6 +152,15 @@ class DiagnosticLogger:
         }
         self.log_event("POSITION_ANOMALY", data)
         
+    def log_position_validation(self, validation_results):
+        """Log position validation results for debugging."""
+        self.log_event("POSITION_VALIDATION", {
+            "timestamp": datetime.now().isoformat(),
+            "validation_results": validation_results,
+            "corrections_made": validation_results.get("corrections", []),
+            "warnings": validation_results.get("warnings", [])
+        })
+
     def should_snapshot(self):
         """Check if it's time for a periodic snapshot."""
         return (datetime.now() - self.last_snapshot_time).total_seconds() >= self.snapshot_interval
@@ -1158,13 +1167,22 @@ class MACrossoverStrategy:
         if self.position == 1 and self.position_size > 0:
             # Long position P&L
             return (self.position_size * current_price) - self.position_cost_basis
-        elif self.position == -1 and self.position_size < 0:
-            # Short position P&L
-            # position_size is negative for shorts, representing -BTC sold
-            btc_sold = abs(self.position_size)
-            entry_price = self.position_cost_basis / btc_sold if btc_sold > 0 else 0
-            # P&L = (entry_price - current_price) * btc_amount
-            return (entry_price - current_price) * btc_sold
+        elif self.position == -1:
+            # Short position P&L - improved calculation
+            if self.position_size < 0:
+                # New method: position_size is negative for shorts
+                btc_sold = abs(self.position_size)
+                entry_price = self.position_cost_basis / btc_sold if btc_sold > 0 else 0
+                return (entry_price - current_price) * btc_sold
+            elif self.position_cost_basis > 0 and self.last_trade_price:
+                # Fallback method using cost basis
+                btc_equivalent = self.position_cost_basis / self.last_trade_price
+                return (self.last_trade_price - current_price) * btc_equivalent
+            else:
+                # Final fallback - use USD balance difference
+                initial_usd = getattr(self, 'initial_balance_usd', 0)
+                if initial_usd > 0:
+                    return self.balance_usd - initial_usd
         return 0
 
     def get_status(self):
@@ -1450,6 +1468,51 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         self.logger.info(f"   Signal confirmation: {self.signal_confirmation_bars} bars")
         self.logger.info(f"   Position-aware switching: $50k+ requires higher confidence")
 
+    def validate_position_tracking(self):
+        """Validate and correct position tracking inconsistencies."""
+        current_price = self.data_manager.get_current_price(self.symbol) or 0
+        
+        # Check for position flag inconsistencies
+        if abs(self.balance_btc) < 1e-6 and self.balance_usd > 10000:
+            if self.position != -1:
+                self.logger.warning("Position tracking error: holding USD but not marked SHORT")
+                self.position = -1
+                self.diagnostic_logger.log_position_anomaly(
+                    "Corrected position flag to SHORT",
+                    {"balance_btc": self.balance_btc, "balance_usd": self.balance_usd}
+                )
+        
+        elif self.balance_btc > 1e-6 and abs(self.balance_usd) < 1000:
+            if self.position != 1:
+                self.logger.warning("Position tracking error: holding BTC but not marked LONG")
+                self.position = 1
+                self.diagnostic_logger.log_position_anomaly(
+                    "Corrected position flag to LONG", 
+                    {"balance_btc": self.balance_btc, "balance_usd": self.balance_usd}
+                )
+        
+        # Validate cost basis reasonableness
+        if self.position == 1 and self.position_size > 0 and current_price > 0:
+            avg_entry = self.position_cost_basis / self.position_size
+            if avg_entry > current_price * 1.5:
+                self.logger.error(f"Unrealistic entry price: ${avg_entry:.2f} vs current ${current_price:.2f}")
+                self.position_cost_basis = self.position_size * current_price * 0.95
+                self.logger.info(f"Reset cost basis to ${self.position_cost_basis:.2f}")
+        
+        # Validate short position tracking
+        if self.position == -1 and self.position_size >= 0 and self.balance_usd > 50000:
+            # Short position should have negative position_size or proper cost basis
+            if self.position_cost_basis == 0 and self.last_trade_price:
+                self.logger.warning("Short position missing cost basis, attempting to reconstruct")
+                # Estimate based on USD balance and last trade price
+                estimated_btc_sold = self.balance_usd / self.last_trade_price
+                self.position_size = -estimated_btc_sold
+                self.position_cost_basis = self.balance_usd
+                self.diagnostic_logger.log_position_anomaly(
+                    "Reconstructed short position tracking",
+                    {"estimated_btc_sold": estimated_btc_sold, "entry_price": self.last_trade_price}
+                )
+
     def detect_market_regime(self, df):
         """Detect if market is trending, ranging, or volatile."""
         if len(df) < self.regime_lookback:
@@ -1617,7 +1680,8 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         return signal, reason
 
     def confirm_signal(self, current_signal):
-        """Require multiple consecutive bars of the same signal."""
+        """Enhanced signal confirmation with position-aware requirements."""
+
         # Clear history if signal changes
         if self.signal_history and self.signal_history[-1] != current_signal:
             self.signal_history = []  # Reset on signal change
@@ -1630,14 +1694,25 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
 
         # Require more confirmation when holding positions
         current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
-        has_position = current_position_value > 10000
+
+        # Position-aware confirmation requirements
+         current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
+        has_significant_position = current_position_value > 50000
+         
+        # Higher requirements for larger positions
+        base_bars = self.signal_confirmation_bars
+        required_bars = base_bars + (2 if has_significant_position else 0)
         
-        required_bars = self.signal_confirmation_bars + (2 if has_position else 0)
+        # Additional requirement: signal must be different from current position
+        if current_signal == 0 or current_signal == self.position:
+            return False
         
         if len(self.signal_history) < required_bars:
             return False
 
         recent_signals = self.signal_history[-required_bars:]
+
+        # All signals must be consistent
         if not all(s == recent_signals[0] for s in recent_signals):
             return False
 
@@ -1645,11 +1720,12 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         if recent_signals[0] == 0:  # No signal
             return False
 
-        # Confirm if we have enough consistent signals
-        confirmed = len(recent_signals) == required_bars and recent_signals[0] != 0
-        if confirmed:
-            self.last_confirmed_signal = recent_signals[0]
-        return confirmed
+        # Check if we've already confirmed this signal recently
+        if recent_signals[0] == getattr(self, 'last_confirmed_signal', None):
+            return False
+
+        self.last_confirmed_signal = recent_signals[0]
+        return True
 
     def check_trade_gap(self):
         """Check if enough time passed since last trade."""
@@ -1663,6 +1739,12 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
     def run_strategy_loop(self):
         """Main adaptive strategy loop."""
         while self.running:
+            # Add position validation every 10 minutes
+            if not hasattr(self, '_last_validation') or \
+               (datetime.now() - self._last_validation).total_seconds() > 600:
+                self.validate_position_tracking()
+                self._last_validation = datetime.now()
+
             df = self.data_manager.get_price_dataframe(self.symbol)
             if not df.empty:
                 try:
