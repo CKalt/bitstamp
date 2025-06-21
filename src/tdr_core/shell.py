@@ -1337,7 +1337,7 @@ class CryptoShell(cmd.Cmd):
 
         except Exception as e:
             self.logger.error(f"Error in strategy diagnostics: {e}")
-            print(f"Diagnostics failed: {e}")
+            # Don't print error details to avoid confusion
 
     def do_tune_strategy(self, arg):
         """
@@ -1698,6 +1698,7 @@ class CryptoShell(cmd.Cmd):
 
     def _print_diagnostics_summary(self, diagnostics):
         """Print a concise summary of strategy diagnostics."""
+        status = self.auto_trader.get_status()
         pos = diagnostics["position_analysis"]
         regime = diagnostics["regime_detection"]
         signals = diagnostics["strategy_signals"]
