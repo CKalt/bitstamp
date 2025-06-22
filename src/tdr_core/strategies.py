@@ -1696,7 +1696,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
 
         # Position-aware confirmation requirements
-         current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
+        current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
         has_significant_position = current_position_value > 50000
          
         # Higher requirements for larger positions
