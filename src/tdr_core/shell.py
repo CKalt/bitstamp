@@ -1772,6 +1772,11 @@ class CryptoShell(cmd.Cmd):
 
         pos_info = status.get('position_info', {})
         print("\nPosition Details:")
+
+        # Redefine pos_str here since it's used later in the method  
+        status = self.auto_trader.get_status()
+        pos_str = {1: 'LONG', -1: 'SHORT'}.get(status['position'], 'UNKNOWN')
+
         print(f"  • Direction:  {pos_str}")
         print(f"  • Current Price:  ${pos_info.get('current_price', 0.0):.2f}")
         print(f"  • Entry Price:    ${pos_info.get('entry_price', 0.0):.2f}")

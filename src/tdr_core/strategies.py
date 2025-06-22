@@ -1619,6 +1619,21 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         signal = 0
         reason = "No mean reversion signal"
 
+        # ENHANCEMENT: Add volatility-based position sizing for ranging markets
+        current_price = df.iloc[-1]['close']
+        volatility = df['close'].pct_change().tail(10).std()
+        
+        # Dynamic thresholds based on recent volatility
+        dynamic_oversold = self.rsi_oversold + (10 * volatility) if volatility > 0.02 else self.rsi_oversold
+        dynamic_overbought = self.rsi_overbought - (10 * volatility) if volatility > 0.02 else self.rsi_overbought
+        
+        # ENHANCEMENT: Add price momentum filter
+        price_momentum = (current_price - df['close'].rolling(5).mean().iloc[-1]) / df['close'].rolling(5).mean().iloc[-1]
+        strong_momentum = abs(price_momentum) > 0.01  # 1% momentum threshold
+        
+        self.logger.debug(f"Ranging strategy: RSI={current_rsi:.1f}, dynamic_oversold={dynamic_oversold:.1f}, dynamic_overbought={dynamic_overbought:.1f}")
+        self.logger.debug(f"Price momentum: {price_momentum:.3f}, strong={strong_momentum}")
+
         # Mean reversion logic - BUY OVERSOLD, SELL OVERBOUGHT
         if current_rsi < self.rsi_oversold and current_price < bb_lower:
             signal = 1  # Oversold = BUY
@@ -1626,6 +1641,13 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         elif current_rsi > self.rsi_overbought and current_price > bb_upper:
             signal = -1  # Overbought = SELL
             reason = f"Mean Reversion SELL: RSI {current_rsi:.1f} overbought + above BB"
+        # ENHANCEMENT: Additional entry with dynamic thresholds and momentum filter
+        elif current_rsi < dynamic_oversold and not strong_momentum:
+            signal = 1
+            reason = f"Dynamic Mean Reversion BUY: RSI {current_rsi:.1f} < {dynamic_oversold:.1f}, low momentum"
+        elif current_rsi > dynamic_overbought and not strong_momentum:
+            signal = -1
+            reason = f"Dynamic Mean Reversion SELL: RSI {current_rsi:.1f} > {dynamic_overbought:.1f}, low momentum"
         elif current_rsi < 40 and current_price < bb_middle * 0.99:  # Additional entry condition
             signal = 1
             reason = f"Mean Reversion BUY: RSI {current_rsi:.1f} low + below BB middle"
@@ -1695,17 +1717,16 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         # Require more confirmation when holding positions
         current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
 
-        # Position-aware confirmation requirements
-        current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
-        has_significant_position = current_position_value > 50000
-         
-        # Higher requirements for larger positions
+        # OPTIMIZATION: Adaptive confirmation based on market regime and position
         base_bars = self.signal_confirmation_bars
-        required_bars = base_bars + (2 if has_significant_position else 0)
         
-        # Additional requirement: signal must be different from current position
-        if current_signal == 0 or current_signal == self.position:
-            return False
+        # Reduce confirmation in trending markets, increase in ranging
+        if self.current_regime == "trending":
+            required_bars = max(1, base_bars - 1)  # Faster in trends
+        elif self.current_regime == "ranging":
+            required_bars = base_bars + 1  # More cautious in ranging
+        else:
+            required_bars = base_bars
         
         if len(self.signal_history) < required_bars:
             return False
@@ -1759,6 +1780,14 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         regime, confidence, metrics = self.detect_market_regime(
                             df_resampled)
 
+
+
+
+
+
+
+
+
                         # 2. BUG FIX: Use config threshold instead of hardcoded values
                         current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
                         has_significant_position = current_position_value > 50000  # $50k+ position
@@ -1770,7 +1799,23 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         if has_significant_position:
                             required_confidence = min(0.85, required_confidence + 0.1)
 
-                        # Only switch if confidence exceeds threshold
+                        # 2. BUG FIX: Use config threshold instead of hardcoded values
+                        current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
+                        has_significant_position = current_position_value > 50000  # $50k+ position
+                         
+                        # OPTIMIZATION: More responsive thresholds based on market regime
+                        if regime == "trending":
+                            required_confidence = min(0.70, self.regime_switch_threshold - 0.05)  # Lower for trending
+                        elif regime == "ranging":
+                            required_confidence = max(0.60, self.regime_switch_threshold - 0.15)  # Much lower for ranging
+                        else:  # volatile
+                            required_confidence = self.regime_switch_threshold
+                         
+                        # Smaller increase for significant positions to maintain responsiveness
+                        if has_significant_position:
+                           required_confidence = min(0.80, required_confidence + 0.05)
+ 
+                         # Only switch if confidence exceeds threshold
                         if confidence >= required_confidence:
                             new_strategy = regime
                             # Check time constraint for strategy switching
