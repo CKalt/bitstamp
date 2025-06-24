@@ -1780,32 +1780,21 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         regime, confidence, metrics = self.detect_market_regime(
                             df_resampled)
 
-
-
-
-
-
-
-
-
                         # 2. BUG FIX: Use config threshold instead of hardcoded values
                         current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
                         has_significant_position = current_position_value > 50000  # $50k+ position
                         
-                        # Use the actual regime_switch_threshold from config
-                        required_confidence = self.regime_switch_threshold
-                        
-                        # Increase requirement for significant positions
-                        if has_significant_position:
-                            required_confidence = min(0.85, required_confidence + 0.1)
 
-                        # 2. BUG FIX: Use config threshold instead of hardcoded values
-                        current_position_value = abs(self.balance_btc * (self.data_manager.get_current_price(self.symbol) or 0)) + self.balance_usd
-                        has_significant_position = current_position_value > 50000  # $50k+ position
-                         
-                        # OPTIMIZATION: More responsive thresholds based on market regime
+
+                        # EMERGENCY FIX: Much more responsive thresholds for losing positions
+                        unrealized_pnl = self._calculate_unrealized_pnl()
+                        is_losing_position = unrealized_pnl < -5000  # Losing more than $5k
+
                         if regime == "trending":
-                            required_confidence = min(0.70, self.regime_switch_threshold - 0.05)  # Lower for trending
+                            if is_losing_position:
+                                required_confidence = 0.40  # EMERGENCY: Very low threshold for losing positions
+                            else:
+                                required_confidence = min(0.65, self.regime_switch_threshold - 0.15)  # Much lower for trending
                         elif regime == "ranging":
                             required_confidence = max(0.60, self.regime_switch_threshold - 0.15)  # Much lower for ranging
                         else:  # volatile
@@ -1813,7 +1802,10 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                          
                         # Smaller increase for significant positions to maintain responsiveness
                         if has_significant_position:
-                           required_confidence = min(0.80, required_confidence + 0.05)
+                           if is_losing_position:
+                               required_confidence = min(0.50, required_confidence + 0.05)  # Emergency override
+                           else:
+                               required_confidence = min(0.75, required_confidence + 0.05)  # Reduced from 0.80
  
                          # Only switch if confidence exceeds threshold
                         if confidence >= required_confidence:
