@@ -1084,10 +1084,17 @@ class MACrossoverStrategy:
 
             else:
                 # Going short or adding to short: properly track the position
-                # Store the BTC amount sold as negative position_size for consistency
-                self.position_size -= fill_btc  # Negative value indicates short
-                self.position_cost_basis = fill_btc * fill_price  # USD value at entry
-                self.logger.info(f"Short position: sold {fill_btc:.8f} BTC @ ${fill_price:.2f}, holding ${self.balance_usd:.2f} USD")
+                if self.position_size <= 0:
+                    # Adding to existing short or new short
+                    self.position_size -= fill_btc  # Negative value indicates short
+                    # FIX: Accumulate cost basis for average entry price calculation
+                    self.position_cost_basis += fill_btc * fill_price  # Total USD value of BTC sold
+                    avg_entry = self.position_cost_basis / abs(self.position_size) if self.position_size < 0 else 0
+                    self.logger.info(f"Short position: sold {fill_btc:.8f} BTC @ ${fill_price:.2f}, "
+                                   f"total short {abs(self.position_size):.8f} BTC, "
+                                   f"avg entry ${avg_entry:.2f}, holding ${self.balance_usd:.2f} USD")
+                else:
+                    self.logger.error(f"Invalid state: trying to sell with positive position_size={self.position_size}")
 
             if self.last_trade_price is not None and self.position == 1:
                 profit = fill_btc * (fill_price - self.last_trade_price) - fee

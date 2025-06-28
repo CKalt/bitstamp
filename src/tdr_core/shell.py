@@ -531,10 +531,11 @@ class CryptoShell(cmd.Cmd):
             short_btc = amount_num / current_market_price
             if self.auto_trader.position_size > -1e-8 and short_btc > 0:
                 self.auto_trader.position_size = -short_btc  # Should be -1.67
-                # Should be 174540 (the USD amount)
-                self.auto_trader.position_cost_basis = amount_num
+                # FIX: Cost basis should be BTC amount * price for proper entry price calculation
+                self.auto_trader.position_cost_basis = short_btc * current_market_price
                 self.logger.info(
-                    f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
+                    f"(auto_trade) Setting position_size to {self.auto_trader.position_size:.6f} BTC and "
+                    f"cost basis to {self.auto_trader.position_cost_basis:.2f} "
                     f"for an initial SHORT of {short_btc:.6f} BTC (=-{short_btc:.6f}) at ${current_market_price:.2f}."
                 )
                 self.auto_trader.theoretical_trade = {
@@ -579,8 +580,10 @@ class CryptoShell(cmd.Cmd):
             elif desired_position == -1:  # Case 3: Both short
                 short_btc = amount_num / current_market_price
                 self.auto_trader.position = -1
-                self.auto_trader.position_size = 0.0  # Holding USD, not negative BTC
-                self.auto_trader.position_cost_basis = amount_num
+                # FIX: Track short position properly
+                self.auto_trader.position_size = -short_btc  # Negative BTC for short
+                # Cost basis = BTC sold * price for correct entry calculation
+                self.auto_trader.position_cost_basis = short_btc * current_market_price
                 self.auto_trader.balance_btc = 0.0
                 self.auto_trader.balance_usd = amount_num
 
@@ -719,6 +722,53 @@ class CryptoShell(cmd.Cmd):
             print("Auto-trading stopped.")
         else:
             print("No auto-trading is running.")
+
+    def do_fix_position(self, arg):
+        """
+        Manually fix position tracking when entry price is incorrect.
+        Usage: fix_position <entry_price>
+        Example: fix_position 107263
+        
+        This corrects the position_cost_basis to match the actual entry price.
+        """
+        if not self.auto_trader:
+            print("Auto-trader is not active.")
+            return
+            
+        try:
+            entry_price = float(arg.strip())
+            if entry_price <= 0:
+                print("Entry price must be positive.")
+                return
+                
+            status = self.auto_trader.get_status()
+            
+            if status['position'] == -1:
+                # For short position, calculate BTC amount from USD balance
+                if hasattr(self.auto_trader, 'balance_usd') and self.auto_trader.balance_usd > 0:
+                    # Estimate BTC sold based on current USD balance and entry price
+                    btc_sold = self.auto_trader.balance_usd / entry_price
+                    self.auto_trader.position_size = -btc_sold
+                    self.auto_trader.position_cost_basis = btc_sold * entry_price
+                    
+                    print(f"✅ Fixed SHORT position tracking:")
+                    print(f"   Entry Price: ${entry_price:.2f}")
+                    print(f"   BTC Sold: {btc_sold:.8f}")
+                    print(f"   USD Held: ${self.auto_trader.balance_usd:.2f}")
+                    print(f"   Cost Basis: ${self.auto_trader.position_cost_basis:.2f}")
+                    
+                    # Log the correction
+                    self.auto_trader.diagnostic_logger.log_position_anomaly(
+                        "Manual position correction",
+                        {"entry_price": entry_price, "btc_sold": btc_sold, "reason": "User correction"}
+                    )
+                else:
+                    print("Cannot determine position size from current balances.")
+            else:
+                print("Position correction only supported for SHORT positions currently.")
+                
+        except ValueError:
+            print("Invalid entry price. Usage: fix_position <entry_price>")
 
     def do_status(self, arg):
         """

@@ -1,0 +1,15 @@
+# Files that Claude Code should NEVER access
+.bitstamp
+.influxdb
+.ses_smtp_config.json
+*.key
+*.pem
+*.secret
+*_credentials*
+*_apikey*
+
+# Directories to avoid
+/secrets/
+/credentials/
+/.ssh/
+/.gnupg/
