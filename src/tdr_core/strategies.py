@@ -1803,7 +1803,9 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             else:
                                 required_confidence = min(0.65, self.regime_switch_threshold - 0.15)  # Much lower for trending
                         elif regime == "ranging":
-                            required_confidence = max(0.60, self.regime_switch_threshold - 0.15)  # Much lower for ranging
+                            # Changed from max(0.60, ...) to allow lower thresholds via tuning
+                            # But still maintain a minimum of 0.30 to prevent too frequent switches
+                            required_confidence = max(0.30, self.regime_switch_threshold - 0.15)  # Respect tunable threshold
                         else:  # volatile
                             required_confidence = self.regime_switch_threshold
                          
