@@ -30,4 +30,12 @@ foo*
 
 # Ignore files in any __pycache__ directory
 trades.json
-/src/__pycache__
+
+src/backtesting/__pycache__/
+src/data/__pycache__/
+src/indicators/__pycache__/
+src/optimization/__pycache__/
+src/strategies/__pycache__/
+src/tdr_core/__pycache__/
+src/utils/__pycache__/
+src/__pycache__/
