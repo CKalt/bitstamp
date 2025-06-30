@@ -657,59 +657,61 @@ class CryptoShell(cmd.Cmd):
                         'theoretical': True
                     }
 
-            # --- Original realignment logic (unchanged) -------------
-            elif desired_position == 1 and hist_position == -1:
-                # Case 2: User long, system says short - sell all BTC
-                self.auto_trader.position = -1
-                self.auto_trader.balance_btc = amount_num
-                self.auto_trader.balance_usd = 0.0
-                self.auto_trader.position_size = 0.0  # Will be set by trade execution
-                self.auto_trader.position_cost_basis = 0.0  # Will be set by trade execution
+            # --- Original realignment logic (only if auto_align is True) -------------
+            else:
+                # Auto-align is True, execute realignment
+                if desired_position == 1 and hist_position == -1:
+                    # Case 2: User long, system says short - sell all BTC
+                    self.auto_trader.position = -1
+                    self.auto_trader.balance_btc = amount_num
+                    self.auto_trader.balance_usd = 0.0
+                    self.auto_trader.position_size = 0.0  # Will be set by trade execution
+                    self.auto_trader.position_cost_basis = 0.0  # Will be set by trade execution
 
-                self.logger.info(
-                    f"Case 2: User LONG but system says SHORT. Selling {amount_num:.8f} BTC")
+                    self.logger.info(
+                        f"Case 2: User LONG but system says SHORT. Selling {amount_num:.8f} BTC")
 
-                # Log position mismatch and corrective trade
-                self.auto_trader.diagnostic_logger.log_event("POSITION_CORRECTION", {
-                    "reason": "User position disagrees with system",
-                    "user_position": "LONG",
-                    "system_position": "SHORT",
-                    "action": "SELL all BTC to align with system",
-                    "amount_btc": amount_num,
-                    "current_price": current_market_price
-                })
+                    # Log position mismatch and corrective trade
+                    self.auto_trader.diagnostic_logger.log_event("POSITION_CORRECTION", {
+                        "reason": "User position disagrees with system",
+                        "user_position": "LONG",
+                        "system_position": "SHORT",
+                        "action": "SELL all BTC to align with system",
+                        "amount_btc": amount_num,
+                        "current_price": current_market_price
+                    })
 
-                trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                self.auto_trader.execute_trade(
-                    "sell", current_market_price, trade_ts, datetime.now(), amount_num)
+                    trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    self.auto_trader.execute_trade(
+                        "sell", current_market_price, trade_ts, datetime.now(), amount_num)
 
-            elif desired_position == -1 and hist_position == 1:
-                # Case 4: User short, system says long - execute 3-part buy
-                short_btc = amount_num / current_market_price
-                self.auto_trader.position = 1
-                self.auto_trader.balance_btc = 0.0  # Starting short (USD only)
-                self.auto_trader.balance_usd = amount_num
-                self.auto_trader.position_size = 0.0  # Will be set by trade execution
-                self.auto_trader.position_cost_basis = 0.0  # Will be set by trade execution
+                elif desired_position == -1 and hist_position == 1:
+                    # Case 4: User short, system says long - execute 3-part buy
+                    short_btc = amount_num / current_market_price
+                    self.auto_trader.position = 1
+                    self.auto_trader.balance_btc = 0.0  # Starting short (USD only)
+                    self.auto_trader.balance_usd = amount_num
+                    self.auto_trader.position_size = 0.0  # Will be set by trade execution
+                    self.auto_trader.position_cost_basis = 0.0  # Will be set by trade execution
 
-                self.logger.info(
-                    f"Case 4: User SHORT but system says LONG. Executing 3-part buy from ${amount_num:.2f}")
-                    
-                # Log position mismatch and corrective trade
-                self.auto_trader.diagnostic_logger.log_event("POSITION_CORRECTION", {
-                    "reason": "User position disagrees with system",
-                    "user_position": "SHORT",
-                    "system_position": "LONG",
-                    "action": "BUY in 3 parts to align with system",
-                    "amount_usd": amount_num,
-                    "btc_to_buy": short_btc,
-                    "current_price": current_market_price,
-                    "note": "Will execute 3 separate buys to work around 90% rule"
-                })
+                    self.logger.info(
+                        f"Case 4: User SHORT but system says LONG. Executing 3-part buy from ${amount_num:.2f}")
+                        
+                    # Log position mismatch and corrective trade
+                    self.auto_trader.diagnostic_logger.log_event("POSITION_CORRECTION", {
+                        "reason": "User position disagrees with system",
+                        "user_position": "SHORT",
+                        "system_position": "LONG",
+                        "action": "BUY in 3 parts to align with system",
+                        "amount_usd": amount_num,
+                        "btc_to_buy": short_btc,
+                        "current_price": current_market_price,
+                        "note": "Will execute 3 separate buys to work around 90% rule"
+                    })
 
-                trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                self.auto_trader.buy_in_three_parts(
-                    current_market_price, trade_ts, datetime.now())
+                    trade_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    self.auto_trader.buy_in_three_parts(
+                        current_market_price, trade_ts, datetime.now())
                     
         # Log initial status after auto_trade setup
         self._log_full_status_to_diagnostics()
@@ -732,23 +734,61 @@ class CryptoShell(cmd.Cmd):
 
     def do_resume_auto_trade(self, arg):
         """
-        Resume auto-trading with exact position and entry price information.
-        This preserves continuity after a restart.
+        Resume auto-trading from saved state or with manual parameters.
         
         Usage: 
-          resume_auto_trade 1.55612586btc long 107374   # For LONG position
-          resume_auto_trade 167500usd short 107263      # For SHORT position
+          resume_auto_trade                              # Use saved resume-auto-trade.json
+          resume_auto_trade 1.55612586btc long 107374   # Manual LONG position
+          resume_auto_trade 167500usd short 107263      # Manual SHORT position
           
-        Args:
-          - amount with unit (btc for LONG, usd for SHORT)
-          - position (long/short)
-          - entry_price (average entry price)
+        If no arguments provided, reads from resume-auto-trade.json and asks for confirmation.
         """
         try:
-            parts = arg.strip().split()
-            if len(parts) != 3:
-                print("Usage: resume_auto_trade <amount><unit> <position> <entry_price>")
+            parts = arg.strip().split() if arg.strip() else []
+            
+            # If no arguments, try to load from resume file
+            if len(parts) == 0:
+                import json
+                import os
+                resume_file = os.path.abspath('resume-auto-trade.json')
+                
+                if not os.path.exists(resume_file):
+                    print(f"No resume file found at {resume_file}")
+                    print("Please provide manual parameters or ensure auto-trading has saved state.")
+                    return
+                    
+                # Load and display resume data
+                with open(resume_file, 'r') as f:
+                    resume_data = json.load(f)
+                
+                print("\n" + "="*60)
+                print("RESUME AUTO-TRADE FROM SAVED STATE")
+                print("="*60)
+                print(f"Position:      {resume_data['position']}")
+                print(f"Amount:        {resume_data['amount']:.8f} {resume_data['unit'].upper()}")
+                print(f"Entry Price:   ${resume_data['entry_price']:.2f}")
+                print(f"Current Price: ${resume_data['current_price']:.2f}")
+                print(f"Unrealized P&L: ${resume_data['unrealized_pnl']:.2f}")
+                print(f"Last Updated:  {resume_data['timestamp']}")
+                print(f"\nCommand: {resume_data['command']}")
+                print("="*60)
+                
+                # Ask for confirmation
+                response = input("\nDo you want to resume with these values? (yes/no): ").strip().lower()
+                if response not in ['yes', 'y']:
+                    print("Resume cancelled.")
+                    return
+                
+                # Execute the saved command
+                amount_str = f"{resume_data['amount']:.8f}{resume_data['unit']}"
+                position_str = resume_data['position'].lower()
+                entry_price_str = str(int(resume_data['entry_price']))
+                parts = [amount_str, position_str, entry_price_str]
+            
+            elif len(parts) != 3:
+                print("Usage: resume_auto_trade [<amount><unit> <position> <entry_price>]")
                 print("Examples:")
+                print("  resume_auto_trade                        # Use saved state")
                 print("  resume_auto_trade 1.55612586btc long 107374")
                 print("  resume_auto_trade 167500usd short 107263")
                 return
@@ -813,6 +853,118 @@ class CryptoShell(cmd.Cmd):
             import traceback
             traceback.print_exc()
 
+    def do_fix_position_tracking(self, arg):
+        """
+        Fix position tracking when entry price is incorrect.
+        
+        Usage: fix_position_tracking <entry_price>
+        Example: fix_position_tracking 106950
+        """
+        if not self.auto_trader:
+            print("No auto trader running")
+            return
+            
+        try:
+            entry_price = float(arg.strip())
+            current_price = self.data_manager.get_current_price('btcusd') or 0.0
+            
+            if self.auto_trader.position == -1:  # SHORT position
+                # For SHORT: Calculate BTC sold based on USD balance and entry price
+                usd_balance = self.auto_trader.balance_usd
+                btc_sold = usd_balance / entry_price
+                
+                self.auto_trader.position_size = -btc_sold
+                self.auto_trader.position_cost_basis = usd_balance
+                self.auto_trader.last_trade_price = entry_price
+                
+                # Calculate actual P&L
+                pnl = (entry_price - current_price) * btc_sold
+                
+                print(f"✅ Fixed SHORT position tracking:")
+                print(f"   Entry: ${entry_price:.2f}")
+                print(f"   BTC sold: {btc_sold:.8f}")
+                print(f"   USD held: ${usd_balance:.2f}")
+                print(f"   Current price: ${current_price:.2f}")
+                print(f"   Actual P&L: ${pnl:.2f}")
+                
+            elif self.auto_trader.position == 1:  # LONG position
+                # For LONG: position_size is BTC amount, cost_basis = BTC * entry_price
+                btc_balance = self.auto_trader.balance_btc
+                
+                self.auto_trader.position_size = btc_balance
+                self.auto_trader.position_cost_basis = btc_balance * entry_price
+                self.auto_trader.last_trade_price = entry_price
+                
+                # Calculate actual P&L
+                pnl = (current_price - entry_price) * btc_balance
+                
+                print(f"✅ Fixed LONG position tracking:")
+                print(f"   Entry: ${entry_price:.2f}")
+                print(f"   BTC held: {btc_balance:.8f}")
+                print(f"   Current price: ${current_price:.2f}")
+                print(f"   Actual P&L: ${pnl:.2f}")
+                
+        except Exception as e:
+            print(f"Error fixing position: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def do_save_resume_state(self, arg):
+        """
+        Manually save the current position state to resume-auto-trade.json.
+        This is also done automatically after trades and every 10 minutes.
+        
+        Usage: save_resume_state
+        """
+        if not self.auto_trader:
+            print("No auto trader running")
+            return
+            
+        try:
+            self.auto_trader.save_resume_state()
+            print("✅ Resume state saved to resume-auto-trade.json")
+            
+            # Show what was saved
+            import json
+            import os
+            resume_file = os.path.abspath('resume-auto-trade.json')
+            if os.path.exists(resume_file):
+                with open(resume_file, 'r') as f:
+                    data = json.load(f)
+                print(f"\nSaved position: {data['position']} {data['amount']:.8f} {data['unit']} @ ${data['entry_price']:.2f}")
+                print(f"Resume command: {data['command']}")
+        except Exception as e:
+            print(f"Error saving resume state: {e}")
+
+    def do_set_trade_limit(self, arg):
+        """
+        Adjust the daily trade limit for the auto trader.
+        
+        Usage: set_trade_limit <number>
+        Example: set_trade_limit 10
+        """
+        if not self.auto_trader:
+            print("No auto trader running")
+            return
+            
+        try:
+            new_limit = int(arg.strip())
+            if new_limit < 1:
+                print("Trade limit must be at least 1")
+                return
+                
+            old_limit = self.auto_trader.max_trades_per_day
+            self.auto_trader.max_trades_per_day = new_limit
+            
+            print(f"✅ Daily trade limit changed from {old_limit} to {new_limit}")
+            print(f"   Trades today: {self.auto_trader.trade_count_today}")
+            print(f"   Remaining: {new_limit - self.auto_trader.trade_count_today}")
+            
+        except ValueError:
+            print("❌ Invalid number. Usage: set_trade_limit <number>")
+        except Exception as e:
+            print(f"❌ Error setting trade limit: {e}")
+    
     def do_enable_commands(self, arg):
         """
         Enable external command interface for Claude Code or other systems.

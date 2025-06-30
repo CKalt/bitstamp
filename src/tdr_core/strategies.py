@@ -822,6 +822,9 @@ class MACrossoverStrategy:
         initial_cost_basis = self.position_cost_basis
         initial_usd = self.balance_usd
         
+        # Disable resume state saving during multi-part trade
+        self._in_multi_part_trade = True
+        
         # Log the start of multi-part trade
         self.diagnostic_logger.log_event("MULTI_PART_TRADE_START", {
             "reason": "3-part buy to avoid 90% rule",
@@ -879,6 +882,10 @@ class MACrossoverStrategy:
         
         # Log full status after multi-part trade
         self._log_trade_status()
+        
+        # Re-enable saving and save once for the complete trade
+        self._in_multi_part_trade = False
+        self.save_resume_state()
 
     def get_89pct_btc_of_usd(self, price):
         available_usd = self.balance_usd * 0.89
@@ -1156,6 +1163,76 @@ class MACrossoverStrategy:
             f"Total P&L: ${self.total_profit_loss:.2f} || "
             f"[BTC Balance: {self.balance_btc:.8f}, USD Balance: {self.balance_usd:.2f}]"
         )
+        
+        # Automatically save resume state after each trade (unless in multi-part trade)
+        if not getattr(self, '_in_multi_part_trade', False):
+            self.save_resume_state()
+
+    def save_resume_state(self):
+        """Save current position state to resume-auto-trade.json for easy restart."""
+        import json
+        import os
+        from datetime import datetime
+        
+        try:
+            # Get current position info
+            status = self.get_status()
+            position_info = status.get('position_info', {})
+            current_price = self.data_manager.get_current_price(self.symbol) or 0.0
+            
+            # Determine position type and amount
+            if self.position == 1:  # LONG
+                amount = self.balance_btc
+                unit = 'btc'
+                position_type = 'long'
+                entry_price = position_info.get('entry_price', self.last_trade_price or 0)
+            elif self.position == -1:  # SHORT
+                amount = self.balance_usd
+                unit = 'usd'
+                position_type = 'short'
+                # For SHORT, try to get correct entry from position tracking or trades.json
+                if self.position_size < 0:
+                    entry_price = self.position_cost_basis / abs(self.position_size)
+                else:
+                    entry_price = position_info.get('entry_price', self.last_trade_price or 0)
+            else:
+                # Should not happen in this system
+                return
+                
+            # Create resume data
+            resume_data = {
+                'timestamp': datetime.now().isoformat(),
+                'position': position_type.upper(),
+                'amount': round(amount, 8),
+                'unit': unit,
+                'entry_price': round(entry_price, 2),
+                'current_price': round(current_price, 2),
+                'unrealized_pnl': round(position_info.get('unrealized_pnl', 0), 2),
+                'command': f"resume_auto_trade {amount:.8f}{unit} {position_type} {entry_price:.0f}",
+                'strategy': {
+                    'type': 'AdaptiveMultiStrategy',
+                    'short_window': self.short_window,
+                    'long_window': self.long_window,
+                    'current_regime': getattr(self, 'current_regime', 'unknown'),
+                    'active_strategy': getattr(self, 'active_strategy', 'unknown')
+                },
+                'balances': {
+                    'btc': round(self.balance_btc, 8),
+                    'usd': round(self.balance_usd, 2)
+                },
+                'trades_executed': self.trades_executed,
+                'last_trade_time': self.last_trade_time.isoformat() if self.last_trade_time else None
+            }
+            
+            # Save to file
+            resume_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'resume-auto-trade.json')
+            with open(resume_file, 'w') as f:
+                json.dump(resume_data, f, indent=2)
+                
+            self.logger.info(f"Saved resume state to {resume_file}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to save resume state: {e}")
 
     def get_mark_to_market_values(self):
         """
@@ -1354,23 +1431,48 @@ class MACrossoverStrategy:
                 position_info['position_size_usd'] = self.balance_usd  # USD from sale
                  
                 # Calculate entry price and P&L for short position
-                if self.position_size < 0:  # We have a short position
+                if self.position_size < 0:  # We have a short position properly tracked
                     btc_sold = abs(self.position_size)
                     entry_price = self.position_cost_basis / btc_sold if btc_sold > 0 else 0
                     position_info['entry_price'] = entry_price
                     position_info['unrealized_pnl'] = (entry_price - cp) * btc_sold
-                elif self.last_trade_price and self.position_cost_basis > 0:
-                    # Fallback to old method if position_size not properly set
-                    position_info['entry_price'] = self.last_trade_price
-                    btc_sold = self.position_cost_basis / self.last_trade_price if self.last_trade_price > 0 else 0
-                    position_info['unrealized_pnl'] = (self.last_trade_price - cp) * btc_sold
-                    # Log warning about position tracking
-                    self.diagnostic_logger.log_position_anomaly(
-                        "Short position using fallback tracking",
-                        {"reason": "position_size not negative for short", "position_size": self.position_size}
-                    )
                 else:
-                    position_info['unrealized_pnl'] = 0.0
+                    # For SHORT positions after resume, try to find the actual entry price
+                    try:
+                        import json
+                        import os
+                        trades_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'trades.json')
+                        if os.path.exists(trades_file):
+                            with open(trades_file, 'r') as f:
+                                trades = json.load(f)
+                            # Find the most recent SELL trade
+                            sell_trades = [t for t in trades if t.get('type') == 'sell']
+                            if sell_trades:
+                                last_sell = sell_trades[-1]
+                                actual_short_entry = float(last_sell.get('price', 0))
+                                
+                                if actual_short_entry > 0 and self.balance_usd > 0:
+                                    btc_sold = self.balance_usd / actual_short_entry
+                                    position_info['entry_price'] = actual_short_entry
+                                    position_info['unrealized_pnl'] = (actual_short_entry - cp) * btc_sold
+                                    
+                                    # Fix the position tracking for future calculations
+                                    self.position_size = -btc_sold
+                                    self.position_cost_basis = self.balance_usd
+                                    self.last_trade_price = actual_short_entry
+                                else:
+                                    position_info['entry_price'] = self.last_trade_price or 0.0
+                                    position_info['unrealized_pnl'] = 0.0
+                            else:
+                                position_info['entry_price'] = self.last_trade_price or 0.0
+                                position_info['unrealized_pnl'] = 0.0
+                        else:
+                            position_info['entry_price'] = self.last_trade_price or 0.0
+                            position_info['unrealized_pnl'] = 0.0
+                    except Exception as e:
+                        # If anything fails, use fallback
+                        position_info['entry_price'] = self.last_trade_price or 0.0
+                        position_info['unrealized_pnl'] = 0.0
             else:
                 # This should never happen in this system
                 self.logger.error("System in neutral position - this should not occur!")
@@ -1607,10 +1709,10 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         # Create metrics dict first
         metrics = {'whipsaw_ratio': whipsaw_ratio, 'trend_strength': trend_strength, 'volatility': volatility}
         
-        self.logger.info(
+        self.logger.debug(
             f"📊 Regime Scores: TRENDING={regime_scores['trending']:.1f}, RANGING={regime_scores['ranging']:.1f}, VOLATILE={regime_scores['volatile']:.1f}")
-        self.logger.info(f"📈 Market Metrics: whipsaw={metrics.get('whipsaw_ratio', 0):.1f}%, trend_strength={metrics.get('trend_strength', 0):.3f}, volatility={volatility:.4f}")
-        self.logger.info(f"🎯 Final: {regime.upper()} (confidence: {confidence:.1%})")
+        self.logger.debug(f"📈 Market Metrics: whipsaw={metrics.get('whipsaw_ratio', 0):.1f}%, trend_strength={metrics.get('trend_strength', 0):.3f}, volatility={volatility:.4f}")
+        self.logger.debug(f"🎯 Final: {regime.upper()} (confidence: {confidence:.1%})")
 
         return regime, confidence, metrics
 
@@ -1780,11 +1882,17 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
     def run_strategy_loop(self):
         """Main adaptive strategy loop."""
         while self.running:
-            # Add position validation every 10 minutes
+            # Add position validation and save resume state every 10 minutes
             if not hasattr(self, '_last_validation') or \
                (datetime.now() - self._last_validation).total_seconds() > 600:
                 self.validate_position_tracking()
                 self._last_validation = datetime.now()
+                
+                # Save resume state periodically
+                try:
+                    self.save_resume_state()
+                except Exception as e:
+                    self.logger.error(f"Failed to save resume state: {e}")
 
             df = self.data_manager.get_price_dataframe(self.symbol)
             if not df.empty:
@@ -1970,7 +2078,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         # Check startup grace period
         if (datetime.now() - self.startup_time).total_seconds() < (self.startup_grace_period_minutes * 60):
             mins_remaining = self.startup_grace_period_minutes - ((datetime.now() - self.startup_time).total_seconds() / 60)
-            self.logger.info(f"🚫 STARTUP GRACE PERIOD: {mins_remaining:.1f} minutes remaining before trading")
+            self.logger.debug(f"🚫 STARTUP GRACE PERIOD: {mins_remaining:.1f} minutes remaining before trading")
             return
 
         today = datetime.utcnow().date()

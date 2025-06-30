@@ -1,3 +1,4 @@
+/.*
 /*.json
 /app-tdr.txt
 /app-bktst.txt
@@ -28,5 +29,5 @@ trades/*
 foo*
 
 # Ignore files in any __pycache__ directory
-__pycache__/
 trades.json
+/src/__pycache__

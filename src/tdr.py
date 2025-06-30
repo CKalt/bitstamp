@@ -107,7 +107,11 @@ def run_websocket(url, symbols, data_manager, stop_event):
 def setup_logging(verbose):
     logger = logging.getLogger("CryptoShellLogger")
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
+    logger.propagate = False  # Prevent duplicate logging
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+    # Clear any existing handlers to prevent duplicates
+    logger.handlers.clear()
 
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setLevel(logging.INFO)
