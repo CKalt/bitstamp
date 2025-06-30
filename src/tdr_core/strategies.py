@@ -379,6 +379,7 @@ class MACrossoverStrategy:
 
         # Daily trade limits
         self.max_trades_per_day = max_trades_per_day
+        self.default_max_trades_per_day = max_trades_per_day  # Store default for daily reset
         self.trade_count_today = 0
         self.current_day = datetime.utcnow().date()
         self.logger.debug(
@@ -717,7 +718,12 @@ class MACrossoverStrategy:
         if today != self.current_day:
             self.current_day = today
             self.trade_count_today = 0
-            self.logger.debug("New day, resetting daily trade count.")
+            # Reset to default trade limit on new day
+            if hasattr(self, 'default_max_trades_per_day'):
+                self.max_trades_per_day = self.default_max_trades_per_day
+                self.logger.debug(f"New day, resetting daily trade count and limit to {self.max_trades_per_day}.")
+            else:
+                self.logger.debug("New day, resetting daily trade count.")
 
         if self.last_signal_time == signal_time:
             return

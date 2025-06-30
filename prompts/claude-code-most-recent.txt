@@ -156,7 +156,7 @@ Technical Analysis:
 Warning: Win rate is below 40%. Consider reviewing parameters.
 
 Adaptive Strategy Details:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━
   • Current Market Regime: RANGING
   • Regime Confidence: 50.0%
   • Active Trading Strategy: RANGING
@@ -304,3 +304,61 @@ Please analyze everything comprehensively and provide actionable recommendations
 
 Once again during my last session with you we added a command that once I run it, will allow you to directly interact with the system.
 Please tell me how to use it so you may check my status.
+
+## KEY LEARNINGS FROM SESSION (2025-06-30):
+
+### 1. COMMAND INTERFACE FOR CLAUDE CODE:
+To enable Claude Code to interact with the system:
+```bash
+enable_commands
+```
+This creates a command queue that Claude Code can use to check status, run diagnostics, etc.
+
+### 2. RESUME FUNCTIONALITY ISSUES FIXED:
+- **BUG**: System was auto-selling positions on resume when `auto_align_position: true`
+- **FIX**: Changed to `auto_align_position: false` in best_strategy.json
+- **NEW**: System now respects saved positions and waits for organic signals
+
+### 3. MULTI-PART TRADE HANDLING:
+- 3-part buys are now treated as single logical trades (workaround for Bitstamp 90% rule)
+- Fixed save_resume_state to only save once after all 3 parts complete
+- Trade count correctly reflects logical trades, not individual parts
+
+### 4. TEMPORARY TRADE LIMITS:
+- New command: `set_trade_limit <number>` - temporarily increases daily limit
+- Automatically resets to default (5) at midnight UTC
+- Allows manual override when actively monitoring
+
+### 5. MARKET REGIME UNDERSTANDING:
+
+**RANGING Mode Exit Conditions (for SHORT positions):**
+- Price breaks above Bollinger Band middle by 1%
+- RSI drops below 35 (oversold)
+- Emergency exit if loss > $2,000
+
+**Regime Change FROM RANGING:**
+- **To TRENDING**: Needs 50%+ confidence (40% if losing >$5k)
+  - Trend strength > 0.3
+  - Whipsaw ratio < 2.0
+  - Low volatility < 0.02
+  - 60%+ directional bars
+- **To VOLATILE**: Needs 40%+ confidence
+  - Volatility > 0.035
+  - Price range > 8%
+
+**Why System Stays in RANGING:**
+- High whipsaw ratio (>8.0) indicates MA crossovers failing
+- Market lacks clear directional movement
+- Mean reversion more profitable than trend following
+
+### 6. CRITICAL BUGS FIXED:
+- `AdaptiveMultiStrategy' object has no attribute 'trades'` - Fixed by using last_trade_time
+- Auto-alignment on resume causing unwanted trades - Fixed with config change
+- Position tracking after system restarts - Enhanced with proper resume file handling
+
+### 7. POSITION TRACKING:
+- System is 100% allocated (always LONG BTC or SHORT USD)
+- Entry prices calculated as weighted average for multi-part trades
+- Unrealized P&L tracked accurately for both LONG and SHORT positions
+
+Remember: The system is designed to be patient and wait for high-confidence signals rather than overtrade.

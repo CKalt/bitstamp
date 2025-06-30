@@ -938,7 +938,8 @@ class CryptoShell(cmd.Cmd):
 
     def do_set_trade_limit(self, arg):
         """
-        Adjust the daily trade limit for the auto trader.
+        Temporarily adjust the daily trade limit for the auto trader.
+        This change applies only to the current day and resets to default on the next day.
         
         Usage: set_trade_limit <number>
         Example: set_trade_limit 10
@@ -954,9 +955,11 @@ class CryptoShell(cmd.Cmd):
                 return
                 
             old_limit = self.auto_trader.max_trades_per_day
+            default_limit = self.auto_trader.default_max_trades_per_day
             self.auto_trader.max_trades_per_day = new_limit
             
             print(f"✅ Daily trade limit changed from {old_limit} to {new_limit}")
+            print(f"   Default limit: {default_limit} (will reset tomorrow)")
             print(f"   Trades today: {self.auto_trader.trade_count_today}")
             print(f"   Remaining: {new_limit - self.auto_trader.trade_count_today}")
             
