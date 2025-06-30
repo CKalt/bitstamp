@@ -32,7 +32,6 @@ from multiprocessing import Process, Manager
 
 # We'll need references to modules from our codebase:
 from tdr_core.strategies import MACrossoverStrategy, AdaptiveMultiStrategy
-from tdr_core.command_interface import CommandInterface
 from indicators.technical_indicators import ensure_datetime_index, add_moving_averages, generate_ma_signals
 
 ###############################################################################
@@ -65,9 +64,6 @@ class CryptoShell(cmd.Cmd):
         self.manager = Manager()
         self.data_manager_dict = self.manager.dict()
         self.max_trades_per_day = max_trades_per_day
-        
-        # Initialize command interface
-        self.command_interface = None
 
         self.examples = {
             'price': 'price btcusd',
@@ -80,7 +76,6 @@ class CryptoShell(cmd.Cmd):
             'limit_buy': 'limit_buy btcusd 0.001 50000 daily_order=true',
             'limit_sell': 'limit_sell btcusd 0.001 60000 ioc_order=true',
             'auto_trade': 'auto_trade 2.47btc long',
-            'resume_auto_trade': 'resume_auto_trade 1.55612586btc long 107374',
             'stop_auto_trade': 'stop_auto_trade',
             'status': 'status [long]',
             'chart': 'chart btcusd 1H 8051 alt_strategy-1.json',
@@ -536,11 +531,10 @@ class CryptoShell(cmd.Cmd):
             short_btc = amount_num / current_market_price
             if self.auto_trader.position_size > -1e-8 and short_btc > 0:
                 self.auto_trader.position_size = -short_btc  # Should be -1.67
-                # FIX: Cost basis should be BTC amount * price for proper entry price calculation
-                self.auto_trader.position_cost_basis = short_btc * current_market_price
+                # Should be 174540 (the USD amount)
+                self.auto_trader.position_cost_basis = amount_num
                 self.logger.info(
-                    f"(auto_trade) Setting position_size to {self.auto_trader.position_size:.6f} BTC and "
-                    f"cost basis to {self.auto_trader.position_cost_basis:.2f} "
+                    f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
                     f"for an initial SHORT of {short_btc:.6f} BTC (=-{short_btc:.6f}) at ${current_market_price:.2f}."
                 )
                 self.auto_trader.theoretical_trade = {
@@ -585,10 +579,8 @@ class CryptoShell(cmd.Cmd):
             elif desired_position == -1:  # Case 3: Both short
                 short_btc = amount_num / current_market_price
                 self.auto_trader.position = -1
-                # FIX: Track short position properly
-                self.auto_trader.position_size = -short_btc  # Negative BTC for short
-                # Cost basis = BTC sold * price for correct entry calculation
-                self.auto_trader.position_cost_basis = short_btc * current_market_price
+                self.auto_trader.position_size = 0.0  # Holding USD, not negative BTC
+                self.auto_trader.position_cost_basis = amount_num
                 self.auto_trader.balance_btc = 0.0
                 self.auto_trader.balance_usd = amount_num
 
@@ -715,9 +707,7 @@ class CryptoShell(cmd.Cmd):
         self._log_full_status_to_diagnostics()
 
         self.auto_trader.start()
-        # Fix: Use proper capitalization for position display
-        position_display = {1: 'LONG', -1: 'SHORT'}.get(desired_position, 'UNKNOWN')
-        print(f"Auto-trading started with {balance_str}, position={position_display}, "
+        print(f"Auto-trading started with {balance_str}, position={pos_str}, "
               f"MA strategy (Short={short_window}, Long={long_window}), do_live_trades={do_live}")
 
     def do_stop_auto_trade(self, arg):
@@ -729,169 +719,6 @@ class CryptoShell(cmd.Cmd):
             print("Auto-trading stopped.")
         else:
             print("No auto-trading is running.")
-
-    def do_resume_auto_trade(self, arg):
-        """
-        Resume auto-trading with exact position and entry price information.
-        This preserves continuity after a restart.
-        
-        Usage: 
-          resume_auto_trade 1.55612586btc long 107374   # For LONG position
-          resume_auto_trade 167500usd short 107263      # For SHORT position
-          
-        Args:
-          - amount with unit (btc for LONG, usd for SHORT)
-          - position (long/short)
-          - entry_price (average entry price)
-        """
-        try:
-            parts = arg.strip().split()
-            if len(parts) != 3:
-                print("Usage: resume_auto_trade <amount><unit> <position> <entry_price>")
-                print("Examples:")
-                print("  resume_auto_trade 1.55612586btc long 107374")
-                print("  resume_auto_trade 167500usd short 107263")
-                return
-                
-            amount_str, position_str, entry_price_str = parts
-            entry_price = float(entry_price_str)
-            
-            # Parse amount and unit
-            import re
-            match = re.match(r'([0-9.]+)(btc|usd)', amount_str.lower())
-            if not match:
-                print(f"Invalid amount format: {amount_str}")
-                print("Use format like '1.5btc' or '167500usd'")
-                return
-                
-            amount = float(match.group(1))
-            unit = match.group(2)
-            position_str = position_str.lower()
-            
-            # Validate position matches unit
-            if unit == 'btc' and position_str != 'long':
-                print("Error: BTC amount requires 'long' position")
-                return
-            elif unit == 'usd' and position_str != 'short':
-                print("Error: USD amount requires 'short' position")
-                return
-                
-            # Call auto_trade with special resume flag
-            auto_trade_cmd = f"{amount_str} {position_str}"
-            print(f"Resuming auto-trade: {auto_trade_cmd} with entry price ${entry_price:.2f}")
-            
-            # Store the entry price for the auto_trade to use
-            self._resume_entry_price = entry_price
-            
-            # Execute auto_trade
-            self.do_auto_trade(auto_trade_cmd)
-            
-            # After auto_trade completes, update the position tracking
-            if self.auto_trader and hasattr(self.auto_trader, 'position'):
-                if position_str == 'long':
-                    # For LONG: position_size should be BTC amount, cost_basis = BTC * entry_price
-                    self.auto_trader.position_size = amount
-                    self.auto_trader.position_cost_basis = amount * entry_price
-                    self.auto_trader.last_trade_price = entry_price
-                    self.logger.info(f"Resumed LONG: {amount} BTC @ ${entry_price:.2f}, cost basis ${self.auto_trader.position_cost_basis:.2f}")
-                else:
-                    # For SHORT: position_size should be negative BTC sold, cost_basis = USD received
-                    btc_sold = amount / entry_price
-                    self.auto_trader.position_size = -btc_sold
-                    self.auto_trader.position_cost_basis = amount  # USD amount
-                    self.auto_trader.last_trade_price = entry_price
-                    self.logger.info(f"Resumed SHORT: {btc_sold:.8f} BTC sold @ ${entry_price:.2f}, holding ${amount:.2f} USD")
-                    
-                print(f"✅ Position tracking updated with entry price ${entry_price:.2f}")
-                
-            # Clean up
-            if hasattr(self, '_resume_entry_price'):
-                delattr(self, '_resume_entry_price')
-                
-        except Exception as e:
-            print(f"Error in resume_auto_trade: {e}")
-            import traceback
-            traceback.print_exc()
-
-    def do_enable_commands(self, arg):
-        """
-        Enable external command interface for Claude Code or other systems.
-        This creates a command queue in the 'commands/' directory.
-        
-        Usage: enable_commands
-        """
-        if self.command_interface is None:
-            self.command_interface = CommandInterface(self, self.logger)
-            self.command_interface.start()
-            print("✅ Command interface enabled")
-            print("   Monitoring: commands/pending/")
-            print("   Processed commands: commands/processed/")
-            print("   Failed commands: commands/failed/")
-            print("\nTo send commands externally:")
-            print("   python send_tdr_command.py status")
-            print("   python send_tdr_command.py strategy_diagnostics")
-        else:
-            print("Command interface is already enabled")
-    
-    def do_disable_commands(self, arg):
-        """
-        Disable external command interface.
-        
-        Usage: disable_commands
-        """
-        if self.command_interface:
-            self.command_interface.stop()
-            self.command_interface = None
-            print("✅ Command interface disabled")
-        else:
-            print("Command interface is not enabled")
-
-    def do_fix_position(self, arg):
-        """
-        Manually fix position tracking when entry price is incorrect.
-        Usage: fix_position <entry_price>
-        Example: fix_position 107263
-        
-        This corrects the position_cost_basis to match the actual entry price.
-        """
-        if not self.auto_trader:
-            print("Auto-trader is not active.")
-            return
-            
-        try:
-            entry_price = float(arg.strip())
-            if entry_price <= 0:
-                print("Entry price must be positive.")
-                return
-                
-            status = self.auto_trader.get_status()
-            
-            if status['position'] == -1:
-                # For short position, calculate BTC amount from USD balance
-                if hasattr(self.auto_trader, 'balance_usd') and self.auto_trader.balance_usd > 0:
-                    # Estimate BTC sold based on current USD balance and entry price
-                    btc_sold = self.auto_trader.balance_usd / entry_price
-                    self.auto_trader.position_size = -btc_sold
-                    self.auto_trader.position_cost_basis = btc_sold * entry_price
-                    
-                    print(f"✅ Fixed SHORT position tracking:")
-                    print(f"   Entry Price: ${entry_price:.2f}")
-                    print(f"   BTC Sold: {btc_sold:.8f}")
-                    print(f"   USD Held: ${self.auto_trader.balance_usd:.2f}")
-                    print(f"   Cost Basis: ${self.auto_trader.position_cost_basis:.2f}")
-                    
-                    # Log the correction
-                    self.auto_trader.diagnostic_logger.log_position_anomaly(
-                        "Manual position correction",
-                        {"entry_price": entry_price, "btc_sold": btc_sold, "reason": "User correction"}
-                    )
-                else:
-                    print("Cannot determine position size from current balances.")
-            else:
-                print("Position correction only supported for SHORT positions currently.")
-                
-        except ValueError:
-            print("Invalid entry price. Usage: fix_position <entry_price>")
 
     def do_status(self, arg):
         """
@@ -1148,11 +975,6 @@ class CryptoShell(cmd.Cmd):
         if self.auto_trader and self.auto_trader.running:
             print("Stopping auto trader...")
             self.auto_trader.stop()
-            
-        # Stop command interface
-        if self.command_interface:
-            print("Stopping command interface...")
-            self.command_interface.stop()
             
         # Stop chart process
         if self.chart_process and self.chart_process.is_alive():
@@ -1621,24 +1443,6 @@ class CryptoShell(cmd.Cmd):
         else:
             print("Usage: force_regime <trending|ranging|volatile|auto>")
 
-    def do_force_signal_log(self, arg):
-        """
-        Force the next signal evaluation to be logged regardless of deduplication.
-        Usage: force_signal_log
-        
-        This resets the signal deduplication counter to ensure the next evaluation is logged.
-        """
-        if not self.auto_trader or not hasattr(self.auto_trader, 'diagnostic_logger'):
-            print("No auto trader with diagnostic logging running.")
-            return
-            
-        # Reset the deduplication state
-        self.auto_trader.diagnostic_logger.last_signal_eval = None
-        self.auto_trader.diagnostic_logger.signal_eval_count = 0
-        print("✅ Signal evaluation deduplication reset")
-        print("   Next signal evaluation will be logged to diagnostics")
-        print("   Check diagnostics in ~1 minute with: show_diagnostics SIGNAL_EVAL 1")
-    
     def do_reset_position(self, arg):
         """
         Reset position tracking to fix calculation errors.
@@ -1699,7 +1503,7 @@ class CryptoShell(cmd.Cmd):
             self.auto_trader.position_cost_basis = btc_amount * entry_price
             self.auto_trader.last_trade_price = entry_price  # Also set last trade price
             
-            print(f"Reset SHORT position: {btc_amount:.8f} BTC equivalent @ ${entry_price:.2f}")
+            print(f"Reset SHORT position: {btc_equivalent:.8f} BTC equivalent @ ${entry_price:.2f}")
             print(f"Position size: {self.auto_trader.position_size:.8f} (negative = short)")
             print(f"Cost basis: ${self.auto_trader.position_cost_basis:.2f}")
             

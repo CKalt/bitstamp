@@ -97,8 +97,8 @@ class DiagnosticLogger:
         # Skip if this is the same as the last signal (avoid logging every minute)
         if signal_signature == self.last_signal_eval and not will_trade:
             self.signal_eval_count += 1
-            # Log every 5th duplicate or if it's been 10 minutes (more frequent logging)
-            if self.signal_eval_count < 5 and (datetime.now() - self.last_snapshot_time).total_seconds() < 600:
+            # Only log every 10th duplicate or if it's been 30 minutes
+            if self.signal_eval_count < 10 and (datetime.now() - self.last_snapshot_time).total_seconds() < 1800:
                 return
                 
         self.last_signal_eval = signal_signature
@@ -1084,17 +1084,10 @@ class MACrossoverStrategy:
 
             else:
                 # Going short or adding to short: properly track the position
-                if self.position_size <= 0:
-                    # Adding to existing short or new short
-                    self.position_size -= fill_btc  # Negative value indicates short
-                    # FIX: Accumulate cost basis for average entry price calculation
-                    self.position_cost_basis += fill_btc * fill_price  # Total USD value of BTC sold
-                    avg_entry = self.position_cost_basis / abs(self.position_size) if self.position_size < 0 else 0
-                    self.logger.info(f"Short position: sold {fill_btc:.8f} BTC @ ${fill_price:.2f}, "
-                                   f"total short {abs(self.position_size):.8f} BTC, "
-                                   f"avg entry ${avg_entry:.2f}, holding ${self.balance_usd:.2f} USD")
-                else:
-                    self.logger.error(f"Invalid state: trying to sell with positive position_size={self.position_size}")
+                # Store the BTC amount sold as negative position_size for consistency
+                self.position_size -= fill_btc  # Negative value indicates short
+                self.position_cost_basis = fill_btc * fill_price  # USD value at entry
+                self.logger.info(f"Short position: sold {fill_btc:.8f} BTC @ ${fill_price:.2f}, holding ${self.balance_usd:.2f} USD")
 
             if self.last_trade_price is not None and self.position == 1:
                 profit = fill_btc * (fill_price - self.last_trade_price) - fee
@@ -1334,19 +1327,11 @@ class MACrossoverStrategy:
                     position_info['position_size_usd'] = self.position_size * cp
                     position_info['unrealized_pnl'] = (self.position_size * cp) - self.position_cost_basis
                 else:
-                    # Long position but position_size not tracked - use last trade price
-                    if self.last_trade_price and self.last_trade_price > 0:
-                        position_info['entry_price'] = self.last_trade_price
-                        position_info['position_size_btc'] = self.balance_btc
-                        position_info['position_size_usd'] = self.balance_btc * cp
-                        # Calculate P&L based on last trade price
-                        position_info['unrealized_pnl'] = (cp - self.last_trade_price) * self.balance_btc
-                    else:
-                        # Fallback: no entry price available
-                        position_info['entry_price'] = 0.0
-                        position_info['position_size_btc'] = self.balance_btc
-                        position_info['position_size_usd'] = self.balance_btc * cp
-                        position_info['unrealized_pnl'] = 0.0
+                    # Long but check actual balance
+                    position_info['entry_price'] = 0.0
+                    position_info['position_size_btc'] = self.balance_btc
+                    position_info['position_size_usd'] = self.balance_btc * cp
+                    position_info['unrealized_pnl'] = 0.0
                     
             elif self.position == -1:
                 # Short position - properly calculate from stored position data
@@ -1583,12 +1568,12 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             if directional_moves >= 6:  # Reduced from 7 - 60% directional consistency
                 regime_scores['trending'] += 1.0
 
-        # RANGING indicators
+        # RANGING indicators (YOUR CURRENT SITUATION!)
         if range_bound_score > 0.8:
             regime_scores['ranging'] += 2.0
-        if whipsaw_ratio > 8.0:  # Increased from 4.0 to prevent false ranging detection
+        if whipsaw_ratio > 4.0:  # Your 6.14 whipsaw ratio!
             regime_scores['ranging'] += 2.0
-        if trend_strength < 0.15:  # Tightened from 0.2
+        if trend_strength < 0.2:
             regime_scores['ranging'] += 1.0
 
         # VOLATILE indicators
@@ -1667,18 +1652,13 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             signal = 1
             reason = f"Mean Reversion BUY: RSI {current_rsi:.1f} low + below BB middle"
         elif self.position != 0:
-            # Exit positions when price returns to middle or shows reversal
+            # Exit positions when price returns to middle
             if self.position == 1 and current_price > bb_middle:
                 signal = -1
                 reason = f"Mean Reversion EXIT LONG: Price returned to BB middle"
-            elif self.position == -1:
-                # Exit short when price shows strength or approaches our entry
-                if current_price > bb_middle * 1.01:  # Price breaking above middle
-                    signal = 1
-                    reason = f"Mean Reversion EXIT SHORT: Price breaking above BB middle"
-                elif current_rsi < 35:  # Oversold - potential reversal
-                    signal = 1
-                    reason = f"Mean Reversion EXIT SHORT: RSI {current_rsi:.1f} oversold"
+            elif self.position == -1 and current_price < bb_middle:
+                signal = 1
+                reason = f"Mean Reversion EXIT SHORT: Price returned to BB middle"
 
         return signal, reason
 
@@ -1796,24 +1776,6 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                     }).dropna()
 
                     if len(df_resampled) >= self.long_window:
-                        # 0. Check for emergency exit conditions
-                        status = self.get_status()
-                        position_info = status.get('position_info', {})
-                        unrealized_pnl = position_info.get('unrealized_pnl', 0)
-                        
-                        # Emergency exit if losing more than $2000
-                        if self.position != 0 and unrealized_pnl < -2000:
-                            self.logger.warning(f"🚨 EMERGENCY EXIT: Unrealized loss ${unrealized_pnl:.2f} exceeds threshold")
-                            emergency_signal = -self.position  # Flip position
-                            emergency_reason = f"Emergency exit: loss ${unrealized_pnl:.2f}"
-                            
-                            # Force immediate execution by bypassing confirmation
-                            current_price = df_resampled.iloc[-1]['close']
-                            signal_time = df_resampled.index[-1]
-                            self.signal_history = [emergency_signal] * self.signal_confirmation_bars  # Force confirmation
-                            self.check_for_signals(emergency_signal, current_price, signal_time)
-                            continue
-                        
                         # 1. Detect market regime
                         regime, confidence, metrics = self.detect_market_regime(
                             df_resampled)
@@ -1834,9 +1796,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             else:
                                 required_confidence = min(0.65, self.regime_switch_threshold - 0.15)  # Much lower for trending
                         elif regime == "ranging":
-                            # Changed from max(0.60, ...) to allow lower thresholds via tuning
-                            # But still maintain a minimum of 0.30 to prevent too frequent switches
-                            required_confidence = max(0.30, self.regime_switch_threshold - 0.15)  # Respect tunable threshold
+                            required_confidence = max(0.60, self.regime_switch_threshold - 0.15)  # Much lower for ranging
                         else:  # volatile
                             required_confidence = self.regime_switch_threshold
                          
@@ -1951,13 +1911,6 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         # Store regime info
                         self.current_regime = regime
                         self.regime_confidence = confidence
-                    
-                    else:
-                        # Log insufficient data warning
-                        if not hasattr(self, '_last_insufficient_data_warning') or \
-                           (datetime.now() - self._last_insufficient_data_warning).seconds > 300:
-                            self.logger.warning(f"Insufficient data for signal evaluation: {len(df_resampled)}/{self.long_window} hours available")
-                            self._last_insufficient_data_warning = datetime.now()
 
                 except Exception as e:
                     self.logger.error(f"Error in adaptive strategy loop: {e}")

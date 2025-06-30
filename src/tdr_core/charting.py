@@ -257,6 +257,10 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
 
             if df.empty:
                 return {}, "No data available"
+            
+            # Debug logging
+            print(f"Raw data points: {len(df)}")
+            print(f"Data columns: {df.columns.tolist()}")
 
             # Ensure we have required columns
             required_columns = ['timestamp', 'close']
@@ -295,23 +299,25 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
 
             if len(df_resampled) == 0:
                 return {}, "No resampled data available"
+            
+            print(f"Resampled to {bar_size}: {len(df_resampled)} bars")
+            print(f"Date range: {df_resampled.index[0]} to {df_resampled.index[-1]}")
 
-            # Limit to recent hours
-            if hours_to_show and len(df_resampled) > 0:
-                cutoff_time = df_resampled.index[-1] - \
-                    pd.Timedelta(hours=hours_to_show)
-                df_resampled = df_resampled[df_resampled.index >= cutoff_time]
-
-            # Calculate indicators based on strategy type
+            # Calculate indicators based on strategy type BEFORE limiting data
+            # This ensures we have enough historical data for MA calculations
             df_ma = df_resampled.copy()
 
             if current_strategy_type == 'MA':
                 # Calculate moving averages - bypass the ensure_datetime_index issue
+                print(f"MA windows: short={current_short_window}, long={current_long_window}")
+                print(f"Available data points: {len(df_resampled)}")
+                
                 if len(df_resampled) >= max(current_short_window, current_long_window):
                     df_ma['Short_MA'] = df_ma['close'].rolling(
                         window=current_short_window).mean()
                     df_ma['Long_MA'] = df_ma['close'].rolling(
                         window=current_long_window).mean()
+                    print(f"MAs calculated successfully")
 
                     # Generate signals manually
                     df_ma['MA_Signal'] = 0
@@ -320,6 +326,7 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                     df_ma.loc[df_ma['Short_MA'] <
                               df_ma['Long_MA'], 'MA_Signal'] = -1
                 else:
+                    print(f"INSUFFICIENT DATA: Need {max(current_short_window, current_long_window)} bars, have {len(df_resampled)}")
                     df_ma['Short_MA'] = np.nan
                     df_ma['Long_MA'] = np.nan
                     df_ma['MA_Signal'] = 0
@@ -341,6 +348,11 @@ def run_dash_app(data_manager_dict, symbol, bar_size, short_window, long_window,
                 else:
                     df_ma['RSI'] = np.nan
                     df_ma['RSI_Signal'] = 0
+
+            # NOW limit to recent hours after calculating indicators
+            if hours_to_show and len(df_ma) > 0:
+                cutoff_time = df_ma.index[-1] - pd.Timedelta(hours=hours_to_show)
+                df_ma = df_ma[df_ma.index >= cutoff_time]
 
             # Create subplots: main chart + RSI
             fig = make_subplots(
