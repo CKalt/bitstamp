@@ -108,7 +108,7 @@ class AdaptiveStrategyBacktester:
             btc_amount = 0
             trades = []
             regime_history = []
-            current_regime = None
+            current_regime = 'TRENDING'  # Initialize with valid regime
             
             # Track performance by regime
             regime_performance = {
@@ -132,12 +132,13 @@ class AdaptiveStrategyBacktester:
                 
                 # Get data slice up to current point
                 data_slice = df.iloc[:i+1].copy()
+                # Fix column name mismatch
+                data_slice['close'] = data_slice['price']
                 
                 # Detect market regime periodically (every hour in the data)
                 if i % 60 == 0 or current_regime is None:
-                    regime_result = strategy.detect_market_regime(data_slice)
-                    new_regime = regime_result['regime']
-                    confidence = regime_result['confidence']
+                    # Fix return format mismatch
+                    new_regime, confidence, metrics = strategy.detect_market_regime(data_slice)
                     
                     # Check if regime should switch
                     if current_regime != new_regime and confidence >= strategy.regime_switch_threshold:
@@ -146,7 +147,7 @@ class AdaptiveStrategyBacktester:
                             'timestamp': current_time,
                             'regime': new_regime,
                             'confidence': confidence,
-                            'metrics': regime_result['metrics']
+                            'metrics': metrics
                         })
                 
                 # Track time in regime
@@ -156,11 +157,11 @@ class AdaptiveStrategyBacktester:
                 # Generate signals based on current regime
                 signal = None
                 if current_regime == 'TRENDING':
-                    signal = strategy.generate_trending_signal(data_slice)
+                    signal, reason = strategy.generate_trending_signal(data_slice)
                 elif current_regime == 'RANGING':
-                    signal = strategy.generate_ranging_signal(data_slice)
+                    signal, reason = strategy.generate_ranging_signal(data_slice)
                 elif current_regime == 'VOLATILE':
-                    signal = strategy.generate_volatile_signal(data_slice)
+                    signal, reason = strategy.generate_volatile_signal(data_slice)
                 
                 # Execute trades based on signals
                 if signal and signal != position:
@@ -168,6 +169,7 @@ class AdaptiveStrategyBacktester:
                     trade_fee = abs(balance * self.backtest_settings.get('trading_fee', 0.001))
                     slippage = current_price * self.backtest_settings.get('slippage', 0.0005)
                     
+                    profit = 0  # Initialize profit variable
                     # Execute trade
                     if signal == 1 and position <= 0:  # Buy signal
                         if position == -1:  # Close short
@@ -324,7 +326,7 @@ class AdaptiveStrategyBacktester:
         # For now, process sequentially to avoid complexity
         
         for i, params in enumerate(param_combinations):
-            if i % 10 == 0:
+            if i % 100 == 0:  # Reduce frequency of progress messages
                 print(f"Progress: {i}/{len(param_combinations)} combinations tested")
                 
             param_dict = {
@@ -389,10 +391,13 @@ def run_enhanced_trading_system(df, config, include_adaptive=True):
         
         # Prepare data for adaptive strategy
         df_hourly = df.resample('1H').agg({
-            'price': 'last',
+            'price': ['first', 'max', 'min', 'last'],
             'amount': 'sum',
             'volume': 'sum'
         }).dropna()
+        # Flatten multi-level columns and create OHLC
+        df_hourly.columns = ['open', 'high', 'low', 'close', 'amount', 'volume']
+        df_hourly['price'] = df_hourly['close']  # Keep price column for compatibility
         
         # Initialize adaptive backtester
         adaptive_backtester = AdaptiveStrategyBacktester(df_hourly, config)
@@ -462,8 +467,52 @@ def generate_enhanced_best_strategy_json(strategy_comparison, config, df, output
     Generate an enhanced best_strategy.json with comprehensive metadata.
     """
     if strategy_comparison.empty:
-        print("No strategies to compare.")
-        return None
+        print("No strategies to compare. Creating minimal configuration.")
+        
+        # Create a minimal configuration with current parameters
+        minimal_config = {
+            "backtest_metadata": {
+                "test_period_start": df.index.min().strftime("%Y-%m-%d") if not df.empty else "unknown",
+                "test_period_end": df.index.max().strftime("%Y-%m-%d") if not df.empty else "unknown",
+                "total_days": (df.index.max() - df.index.min()).days if not df.empty else 0,
+                "data_frequency": config.get('high_frequency', '1H'),
+                "backtest_timestamp": datetime.now().isoformat() + 'Z',
+                "backtester_version": "2.0",
+                "note": "No strategies met the criteria. Using default parameters."
+            },
+            "performance_metrics": {
+                "total_return_pct": 0.0,
+                "sharpe_ratio": 0.0,
+                "max_drawdown_pct": 0.0,
+                "win_rate": 0.0,
+                "total_trades": 0,
+                "avg_trades_per_day": 0.0,
+                "profit_factor": 1.0
+            },
+            "optimal_parameters": {
+                "strategy": "MA",
+                "short_window": 10,
+                "long_window": 46
+            },
+            "live_trading_config": {
+                "do_live_trades": False,
+                "auto_align_position": False,
+                "emergency_override_enabled": True
+            },
+            "validation_status": {
+                "backtest_passed": False,
+                "risk_limits_ok": False,
+                "trade_frequency_ok": False,
+                "ready_for_deployment": False,
+                "reason": "No strategies met the backtesting criteria"
+            }
+        }
+        
+        with open(output_file, 'w') as f:
+            json.dump(minimal_config, f, indent=4)
+            
+        print(f"\nMinimal configuration saved to '{output_file}'")
+        return minimal_config
     
     # Find best strategy
     best_idx = strategy_comparison['Total_Return'].idxmax()
@@ -645,6 +694,9 @@ def main():
     # Load and parse data
     df = parse_log_file(file_path, start_date, end_date)
     print(f"Parsed {len(df)} trade events.")
+    
+    # Ensure datetime index
+    df = ensure_datetime_index(df)
     
     # Analyze data
     print("Starting data analysis...")
