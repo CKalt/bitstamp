@@ -4,6 +4,8 @@
 
 You have been given an important task to significantly improve the backtesting system and integrate it with the live adaptive trading strategy. The goal is to create a unified system that can be deployed tomorrow with confidence.
 
+Thus please megathink your solution.
+
 ## Current Situation
 
 1. **Live Trading System** (`src/tdr.py`):
