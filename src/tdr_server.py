@@ -248,13 +248,13 @@ def get_status():
                 'entry_price': data_manager.position_cost_basis / data_manager.position_size 
                               if data_manager.position_size > 0 else 0
             }
-            status['last_price'] = data_manager.get_last_price('btcusd')
+            status['last_price'] = data_manager.last_price.get('btcusd', 0)
         
         if shell and shell.auto_trader:
             status['auto_trader'] = {
-                'active': shell.auto_trader.active,
-                'strategy': type(shell.auto_trader.strategy).__name__,
-                'trades_today': shell.auto_trader.trades_today
+                'active': shell.auto_trader.running if hasattr(shell.auto_trader, 'running') else False,
+                'strategy': type(shell.auto_trader).__name__,
+                'trades_today': shell.auto_trader.trades_today if hasattr(shell.auto_trader, 'trades_today') else 0
             }
         
         return jsonify(status), 200
