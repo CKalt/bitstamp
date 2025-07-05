@@ -156,6 +156,8 @@ class LocalCommandInterface:
                     'failed_at': datetime.now().isoformat(),
                     'reason': reason
                 }, f, indent=2)
+        except Exception as e:
+            print(f"Error moving command to failed directory: {e}")
 
 class RemoteTDRClient(cmd.Cmd):
     """Enhanced TDR client that initializes server with local config"""

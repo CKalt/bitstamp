@@ -92,12 +92,12 @@ def initialize():
         do_live_trades = best_strategy.get('do_live_trades', False)
         verbose = config.get('verbose', False)
         
-        # Create data manager
-        data_manager = CryptoDataManager(verbose=verbose)
+        # Create data manager with required arguments
+        data_manager = CryptoDataManager(["btcusd"], logger=logger, verbose=verbose)
         
         # Load historical data if available locally
         # Note: Only the log file is read from server's local filesystem
-        log_file = 'btcusd.csv'  # Always use local log file
+        log_file = 'btcusd.log'  # Always use local log file
         if os.path.exists(log_file):
             logger.info(f"Loading historical data from local {log_file}")
             
