@@ -254,7 +254,7 @@ def get_status():
             status['auto_trader'] = {
                 'active': shell.auto_trader.running if hasattr(shell.auto_trader, 'running') else False,
                 'strategy': type(shell.auto_trader).__name__,
-                'trades_today': shell.auto_trader.trades_today if hasattr(shell.auto_trader, 'trades_today') else 0
+                'trades_today': shell.auto_trader.trade_count_today if hasattr(shell.auto_trader, 'trade_count_today') else 0
             }
         
         return jsonify(status), 200
@@ -338,8 +338,8 @@ def execute_command():
                 global auto_trader
                 auto_trader = shell.auto_trader
                 result['auto_trader'] = {
-                    'active': auto_trader.active,
-                    'strategy': type(auto_trader.strategy).__name__
+                    'active': shell.auto_trader.running if hasattr(shell.auto_trader, 'running') else False,
+                    'strategy': type(shell.auto_trader).__name__
                 }
             
             return jsonify(result), 200
