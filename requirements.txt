@@ -16,3 +16,5 @@ dash-html-components
 dash-bootstrap-components
 numpy==1.24.3
 tabulate
+flask==3.0.0
+flask-cors==4.0.0

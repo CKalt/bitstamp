@@ -349,6 +349,39 @@ def ping():
         'initialized': initialization_complete
     }), 200
 
+@app.route('/api/config', methods=['GET'])
+def get_config():
+    """Get active server configuration for verification"""
+    if not initialization_complete:
+        return jsonify({'error': 'Server not initialized'}), 503
+    
+    config_data = {
+        'server_config': server_config,
+        'live_trading': order_placer.do_live_trades if order_placer else False,
+        'best_strategy': server_config.get('best_strategy', {}) if server_config else {},
+        'position': {
+            'btc_balance': data_manager.balance_btc if data_manager else 0,
+            'usd_balance': data_manager.balance_usd if data_manager else 0,
+            'position': data_manager.position if data_manager else 0,
+            'entry_price': data_manager.position_cost_basis / data_manager.position_size 
+                          if data_manager and data_manager.position_size > 0 else 0
+        } if data_manager else {}
+    }
+    
+    # Extract key parameters for easy verification
+    bs = config_data['best_strategy']
+    config_data['key_parameters'] = {
+        'strategy': bs.get('Strategy', 'Unknown'),
+        'short_window': bs.get('Short_Window', 0),
+        'long_window': bs.get('Long_Window', 0),
+        'do_live_trades': bs.get('do_live_trades', False),
+        'regime_switch_threshold': bs.get('regime_switch_threshold', 0),
+        'signal_confirmation_bars': bs.get('signal_confirmation_bars', 0),
+        'min_trade_gap_minutes': bs.get('min_trade_gap_minutes', 0)
+    }
+    
+    return jsonify(config_data), 200
+
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
     """Get server logs"""

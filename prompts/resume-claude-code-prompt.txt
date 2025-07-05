@@ -1,3 +1,39 @@
+
+I need to have you review these prompts and get back to me because you just crashed 
+and left a bunch of changes that did not make it to these prompts towards the goal of
+providing a client server model of src/tdr.py such that the client is where commands come from -- either
+interactively or through the command json structure. This what we must do now is 
+discover where we are towards this project's goal and then come up with a set of steps 
+for finishing and then deploying this to a version that I have runnning remotely on
+a previous version.
+
+
+We expect the remote src/tdr.py --server to be with it's own local copy of btcusd.log that iscontinually being updated
+with crypto data as well as a .bitstamp file that you must ignore.
+
+The best_strategy.json and other config json files should be sent from a client to get the server doing what it should
+from that point forward the client shell as well as the "enable_commands" oriented commands coming from a claude instance 
+in a different terminal session shall be used to interact with the server using a rest model.
+
+For this project let us mega think to a correct solution.
+
+-------------------
+Last prompt 0:
+The following prompt was created using a different session of claude code. I provide it to you to help understand the system I am 
+running now.
+
+This claude code session is currently running in a screen session `screen -S claude`
+In another screen session `screen -S tdr` I am running an active instance of `python src/tdr.py` 
+
+Please read the following prompt to understand the architecture.
+
+Then please run the system that we have for you to inspect the live instance by submitting commands that are run using a json format
+
+Please do this and tell me the curren trading status we are in.
+
+
+
+Last prompt -1:
 # Bitcoin Trading System - Claude Code Resume Context
 
 ## System Overview
