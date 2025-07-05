@@ -95,23 +95,9 @@ def initialize():
         # Create data manager with required arguments
         data_manager = CryptoDataManager(["btcusd"], logger=logger, verbose=verbose)
         
-        # Load historical data if available locally
-        # Note: Only the log file is read from server's local filesystem
-        log_file = 'btcusd.log'  # Always use local log file
-        if os.path.exists(log_file):
-            logger.info(f"Loading historical data from local {log_file}")
-            
-            # Calculate date range from config
-            start_back = best_strategy.get('start_window_days_back', 30)
-            end_back = best_strategy.get('end_window_days_back', 0)
-            now = datetime.now()
-            start_date = now - timedelta(days=start_back) if start_back else None
-            end_date = now - timedelta(days=end_back) if end_back else None
-            
-            df = parse_log_file(log_file, start_date=start_date, end_date=end_date)
-            if not df.empty:
-                data_manager.update_data_from_dataframe('btcusd', df)
-                logger.info(f"Loaded {len(df)} historical records")
+        # Mark that historical data loading is pending
+        server_config['history_loaded'] = False
+        server_config['history_loading'] = False
         
         # Create order placer
         order_placer = OrderPlacer(
@@ -347,6 +333,84 @@ def ping():
         'status': 'pong',
         'timestamp': datetime.now().isoformat(),
         'initialized': initialization_complete
+    }), 200
+
+@app.route('/api/load_history', methods=['POST'])
+def load_history():
+    """Load historical data in the background"""
+    global server_config
+    
+    if not initialization_complete:
+        return jsonify({'error': 'Server not initialized'}), 503
+        
+    if server_config.get('history_loading', False):
+        return jsonify({'status': 'already_loading', 'message': 'History is already being loaded'}), 200
+        
+    if server_config.get('history_loaded', False):
+        return jsonify({'status': 'already_loaded', 'message': 'History has already been loaded'}), 200
+    
+    # Start loading in background
+    def load_history_background():
+        try:
+            server_config['history_loading'] = True
+            logger.info("Starting historical data load...")
+            
+            log_file = 'btcusd.log'
+            if os.path.exists(log_file):
+                # Get config parameters
+                best_strategy = server_config.get('best_strategy', {})
+                start_back = best_strategy.get('start_window_days_back', 30)
+                end_back = best_strategy.get('end_window_days_back', 0)
+                now = datetime.now()
+                start_date = now - timedelta(days=start_back) if start_back else None
+                end_date = now - timedelta(days=end_back) if end_back else None
+                
+                logger.info(f"Loading historical data from {log_file}")
+                df = parse_log_file(log_file, start_date=start_date, end_date=end_date)
+                
+                if not df.empty:
+                    # Need to process the dataframe like in main tdr.py
+                    df.rename(columns={'price': 'close'}, inplace=True)
+                    df['open'] = df['close']
+                    df['high'] = df['close']
+                    df['low'] = df['close']
+                    df['trades'] = 1
+                    if 'volume' not in df.columns:
+                        df['volume'] = df.get('amount', 0.0)
+                    
+                    data_manager.load_historical_data({'btcusd': df})
+                    logger.info(f"Loaded {len(df)} historical records")
+                    server_config['history_record_count'] = len(df)
+            
+            server_config['history_loaded'] = True
+            server_config['history_loading'] = False
+            logger.info("Historical data load complete")
+            
+        except Exception as e:
+            logger.error(f"Error loading history: {e}")
+            server_config['history_loading'] = False
+            server_config['history_error'] = str(e)
+    
+    # Start in background thread
+    history_thread = threading.Thread(target=load_history_background, daemon=True)
+    history_thread.start()
+    
+    return jsonify({
+        'status': 'loading_started',
+        'message': 'Historical data loading started in background'
+    }), 200
+
+@app.route('/api/history_status', methods=['GET'])
+def history_status():
+    """Check historical data loading status"""
+    if not initialization_complete:
+        return jsonify({'error': 'Server not initialized'}), 503
+        
+    return jsonify({
+        'history_loaded': server_config.get('history_loaded', False),
+        'history_loading': server_config.get('history_loading', False),
+        'history_error': server_config.get('history_error', None),
+        'record_count': server_config.get('history_record_count', 0)
     }), 200
 
 @app.route('/api/config', methods=['GET'])

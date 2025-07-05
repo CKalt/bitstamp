@@ -19,7 +19,7 @@ import shutil
 
 # Configuration
 DEFAULT_SERVER_URL = "http://localhost:4000"
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = 30  # 30 seconds default, history loads separately
 
 # Setup logging
 def setup_client_logging(verbose=False):
@@ -464,6 +464,37 @@ Initializing connection to remote server...
             self.update_status()
         else:
             print("❌ Reconnection failed")
+    
+    def do_load_history(self, arg):
+        """Start loading historical data on the server"""
+        try:
+            response = requests.post(f"{self.server_url}/api/load_history", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                print(f"Status: {data['status']}")
+                print(f"Message: {data['message']}")
+            else:
+                print(f"Error: {response.text}")
+        except Exception as e:
+            print(f"Error loading history: {e}")
+    
+    def do_history_status(self, arg):
+        """Check historical data loading status"""
+        try:
+            response = requests.get(f"{self.server_url}/api/history_status", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                print("\n=== History Loading Status ===")
+                print(f"Loaded: {data['history_loaded']}")
+                print(f"Loading: {data['history_loading']}")
+                if data.get('history_error'):
+                    print(f"Error: {data['history_error']}")
+                if data.get('record_count'):
+                    print(f"Records: {data['record_count']:,}")
+            else:
+                print(f"Error: {response.text}")
+        except Exception as e:
+            print(f"Error checking status: {e}")
     
     def do_server(self, arg):
         """Show server information"""
