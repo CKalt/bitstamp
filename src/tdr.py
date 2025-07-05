@@ -148,7 +148,7 @@ def main():
     # Handle client mode
     if args.client:
         from tdr_client import RemoteTDRClient
-        print(f"Starting TDR in CLIENT mode with configuration-based initialization")
+        print(f"Starting TDR in CLIENT mode")
         # Use best_strategy.json from current directory
         config_file = os.path.abspath("best_strategy.json")
         client = RemoteTDRClient(args.server_url, config_file=config_file)

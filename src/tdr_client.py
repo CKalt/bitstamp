@@ -186,14 +186,21 @@ Initializing connection to remote server...
         # Load local configuration
         self.config = self.load_configuration()
         
-        # Initialize server with configuration
-        if self.initialize_server():
-            print(f"✅ Successfully initialized TDR server at {self.server_url}")
+        # Check if server is already initialized
+        if self.check_server_initialized():
+            print(f"✅ Server at {self.server_url} is already initialized")
             self.initialized = True
             self.update_status()
         else:
-            print(f"❌ Failed to initialize server at {self.server_url}")
-            print("Some commands may not work properly.")
+            # Initialize server with configuration
+            print(f"Server not initialized, sending configuration...")
+            if self.initialize_server():
+                print(f"✅ Successfully initialized TDR server at {self.server_url}")
+                self.initialized = True
+                self.update_status()
+            else:
+                print(f"❌ Failed to initialize server at {self.server_url}")
+                print("Some commands may not work properly.")
     
     def load_configuration(self) -> Dict[str, Any]:
         """Load configuration from local files"""
@@ -283,6 +290,21 @@ Initializing connection to remote server...
         try:
             response = requests.get(f"{self.server_url}/api/ping", timeout=5)
             return response.status_code == 200
+        except:
+            return False
+    
+    def check_server_initialized(self) -> bool:
+        """Check if server is already initialized"""
+        try:
+            response = requests.get(f"{self.server_url}/api/status", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                # Server is initialized if it returns a valid status
+                return data.get('initialized', False)
+            elif response.status_code == 503:
+                # 503 means server not initialized
+                return False
+            return False
         except:
             return False
     
@@ -811,9 +833,9 @@ def main():
     server_url = args.server or os.environ.get('TDR_SERVER_URL', DEFAULT_SERVER_URL)
     
     logger.info(f"Starting TDR Client - Server: {server_url}, Config: {args.config}")
-    print(f"TDR Client - Configuration-based initialization")
+    print(f"TDR Client - Connecting to server")
     print(f"Server: {server_url}")
-    print(f"Config: {args.config}")
+    print(f"Config: {args.config} (will only be sent if server needs initialization)")
     
     # Create client
     client = RemoteTDRClient(server_url, config_file=args.config, verbose=args.verbose)

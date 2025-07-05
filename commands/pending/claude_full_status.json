@@ -1,0 +1,6 @@
+{
+  "timestamp": "2025-01-05T20:03:30Z",
+  "command": "status long",
+  "source": "claude_check",
+  "args": ""
+}

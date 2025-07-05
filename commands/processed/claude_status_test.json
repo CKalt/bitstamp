@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-01-05T19:59:00Z",
+  "command": "status",
+  "source": "claude_test",
+  "args": "",
+  "result": {
+    "auto_trader": {
+      "active": true,
+      "strategy": "AdaptiveMultiStrategy"
+    },
+    "command": "status",
+    "output": "\nPosition Details (Short View):\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n  \u2022 Direction: Long\n  \u2022 Current Price:  $108178.00\n  \u2022 Entry Price:    $108177.00\n  \u2022 Position Size (BTC): 1.52275326\n  \u2022 Position Value (USD): $164728.40\n  \u2022 Unrealized PnL:  $1.52\n\n  This is a theoretical trade (no actual trades yet):\n    \u2022 Timestamp:  2025-07-05 19:58:33\n    \u2022 Direction:  long\n    \u2022 Amount:     1.52275326\n    \u2022 Theoretical? True\n\n  \ud83c\udfaf Adaptive Strategy:\n  \u2022 Market Regime: TRENDING\n  \u2022 Confidence: 58.3%\n  \u2022 Active Strategy: TRENDING\n\n",
+    "position": {
+      "btc_balance": 1.52275326,
+      "entry_price": 108233.99999999999,
+      "position": "long",
+      "usd_balance": 0
+    },
+    "success": true,
+    "timestamp": "2025-07-05T20:00:20.456445"
+  },
+  "processed_at": "2025-07-05T16:00:20.420396"
+}
