@@ -234,7 +234,7 @@ def get_status():
             'websocket': 'connected' if websocket_thread and websocket_thread.is_alive() else 'disconnected',
             'data_manager': 'initialized' if data_manager else 'not initialized',
             'order_placer': 'initialized' if order_placer else 'not initialized',
-            'live_trading': order_placer.do_live_trades if order_placer else False,
+            'live_trading': shell.live_trading if shell else False,
             'history_loaded': server_config.get('history_loaded', False),
             'history_loading': server_config.get('history_loading', False)
         }
