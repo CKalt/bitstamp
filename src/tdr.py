@@ -130,7 +130,48 @@ def main():
     """
     Main entry point: reads best_strategy.json for config, 
     parses historical log if present, then launches the CryptoShell.
+    Now supports --server and --client modes for remote operation.
     """
+    import argparse
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='TDR Trading System')
+    parser.add_argument('--server', action='store_true', help='Run as server with REST API')
+    parser.add_argument('--client', action='store_true', help='Run as client connecting to remote server')
+    parser.add_argument('--server-url', type=str, default='http://localhost:4000', 
+                       help='Server URL for client mode (default: http://localhost:4000)')
+    parser.add_argument('--port', type=int, default=4000, help='Server port (default: 4000)')
+    parser.add_argument('--host', type=str, default='0.0.0.0', help='Server host (default: 0.0.0.0)')
+    
+    args = parser.parse_args()
+    
+    # Handle client mode
+    if args.client:
+        from tdr_client import RemoteTDRClient
+        print(f"Starting TDR in CLIENT mode with configuration-based initialization")
+        # Use best_strategy.json from current directory
+        config_file = os.path.abspath("best_strategy.json")
+        client = RemoteTDRClient(args.server_url, config_file=config_file)
+        try:
+            client.cmdloop()
+        except KeyboardInterrupt:
+            print("\nExiting...")
+            client.do_quit('')
+        return
+    
+    # Handle server mode
+    if args.server:
+        print(f"Starting TDR in SERVER mode on {args.host}:{args.port}")
+        print("Server will wait for client to send configuration")
+        print("Use --client flag on another instance to connect")
+        # Import and run the server
+        from tdr_server import main as server_main
+        # Modify sys.argv to pass arguments to server
+        sys.argv = ['tdr_server.py', '--port', str(args.port), '--host', args.host]
+        server_main()
+        return
+    
+    # Default: run in normal local mode
     config_file = os.path.abspath("best_strategy.json")
     if not os.path.exists(config_file):
         print(f"No '{config_file}' found. Using default settings.")

@@ -462,7 +462,18 @@ class MACrossoverStrategy:
         """
         Strategy loop that checks for signals every minute.
         """
+        evaluation_count = 0
+        last_evaluation_log = datetime.now()
+        
         while self.running:
+            evaluation_count += 1
+            current_time = datetime.now()
+            
+            # Log evaluation frequency every 5 evaluations or every 5 minutes
+            if evaluation_count % 5 == 0 or (current_time - last_evaluation_log).total_seconds() > 300:
+                self.logger.info(f"📊 Strategy evaluation #{evaluation_count} at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                last_evaluation_log = current_time
+            
             df = self.data_manager.get_price_dataframe(self.symbol)
             if not df.empty:
                 try:
@@ -543,7 +554,8 @@ class MACrossoverStrategy:
                 self._log_hourly_status()
                 self._last_hourly_status = datetime.now()
 
-            time.sleep(60)
+            # Reduce sleep time to 30 seconds for more responsive evaluations
+            time.sleep(30)
 
     def _log_diagnostic_snapshot(self):
         """Create a diagnostic snapshot."""
@@ -1887,7 +1899,20 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
 
     def run_strategy_loop(self):
         """Main adaptive strategy loop."""
+        evaluation_count = 0
+        last_evaluation_log = datetime.now()
+        last_successful_eval = datetime.now()
+        
         while self.running:
+            evaluation_count += 1
+            current_time = datetime.now()
+            
+            # Log evaluation frequency every 5 evaluations or every 5 minutes
+            if evaluation_count % 5 == 0 or (current_time - last_evaluation_log).total_seconds() > 300:
+                mins_since_last = (current_time - last_successful_eval).total_seconds() / 60
+                self.logger.info(f"📊 Adaptive strategy evaluation #{evaluation_count} at {current_time.strftime('%Y-%m-%d %H:%M:%S')} (last successful: {mins_since_last:.1f}min ago)")
+                last_evaluation_log = current_time
+            
             # Add position validation and save resume state every 10 minutes
             if not hasattr(self, '_last_validation') or \
                (datetime.now() - self._last_validation).total_seconds() > 600:
@@ -2008,13 +2033,17 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             self._log_diagnostic_snapshot()
                             
                         # Log signal evaluation (with deduplication)
-                        will_trade = signal != 0 and self.confirm_signal(signal) and self.check_trade_gap()
+                        # Store confirmation result to avoid double-calling
+                        signal_confirmed = self.confirm_signal(signal) if signal != 0 else False
+                        trade_gap_ok = self.check_trade_gap()
+                        
+                        will_trade = signal != 0 and signal_confirmed and trade_gap_ok
                         why_not = []
                         if signal == 0:
                             why_not.append("No signal")
-                        elif not self.confirm_signal(signal):
+                        elif not signal_confirmed:
                             why_not.append(f"Signal not confirmed: {len(self.signal_history)}/{self.signal_confirmation_bars}")
-                        elif not self.check_trade_gap():
+                        elif not trade_gap_ok:
                             mins_since = (datetime.now() - self.last_trade_time).total_seconds() / 60 if self.last_trade_time else 999
                             why_not.append(f"Trade gap: {mins_since:.0f}min < {self.min_trade_gap_minutes}min")
                         elif self.trade_count_today >= self.max_trades_per_day:
@@ -2044,8 +2073,8 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             )
                         self._last_logged_regime = regime
 
-                        # 5. Execute if signal confirmed
-                        if signal != 0 and self.confirm_signal(signal):
+                        # 5. Execute if signal confirmed (use stored result)
+                        if signal != 0 and signal_confirmed:
                             current_price = df_resampled.iloc[-1]['close']
                             signal_time = df_resampled.index[-1]
                             self.logger.info(
@@ -2056,7 +2085,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                 self.logger.info(f"📊 {self.active_strategy.upper()}: {signal_reason} - but already in position")
                                 self.signal_history = []  # Clear history since we can't act on this
                                 continue
-                            if not self.check_trade_gap():
+                            if not trade_gap_ok:
                                 self.signal_history = []  # Clear if we can't trade yet
                                 continue
                                 
@@ -2065,6 +2094,9 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         # Store regime info
                         self.current_regime = regime
                         self.regime_confidence = confidence
+                        
+                        # Mark successful evaluation
+                        last_successful_eval = current_time
                     
                     else:
                         # Log insufficient data warning
@@ -2076,7 +2108,15 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                 except Exception as e:
                     self.logger.error(f"Error in adaptive strategy loop: {e}")
                     self.diagnostic_logger.log_error(f"Adaptive strategy error: {e}")
-            time.sleep(60)
+            else:
+                # Log when no data is available
+                if not hasattr(self, '_last_no_data_warning') or \
+                   (datetime.now() - self._last_no_data_warning).seconds > 300:
+                    self.logger.warning("No price data available for evaluation")
+                    self._last_no_data_warning = datetime.now()
+            
+            # Reduce sleep time to 30 seconds for more responsive evaluations
+            time.sleep(30)
 
     def check_for_signals(self, latest_signal, current_price, signal_time):
         """Execute trades with adaptive strategy logic."""

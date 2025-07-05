@@ -1140,6 +1140,8 @@ class CryptoShell(cmd.Cmd):
         print("\nAuto-Trading Status:")
         print("━"*50)
         print(f"  • Running: {status['running']}")
+        # Redefine pos_str for the full status section
+        pos_str = {1: 'Long', -1: 'Short'}.get(status['position'], 'Unknown')
         print(f"  • Position: {pos_str}")
         print(
             f"  • Daily Trades: {status['trade_count_today']}/{self.auto_trader.max_trades_per_day}")
