@@ -756,6 +756,8 @@ Local Client Commands:
   logs [n] [type] [search]  - View server logs
   show_diagnostics [type] [n] - View diagnostic events  
   trades [n]                - Show recent trades
+  load_history              - Start loading historical data
+  history_status            - Check history loading progress
   enable_commands           - Enable Claude command interface
   disable_commands          - Disable command interface
   reconnect                 - Reinitialize server connection

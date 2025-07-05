@@ -183,7 +183,9 @@ def get_status():
             'websocket': 'connected' if websocket_thread and websocket_thread.is_alive() else 'disconnected',
             'data_manager': 'initialized' if data_manager else 'not initialized',
             'order_placer': 'initialized' if order_placer else 'not initialized',
-            'live_trading': order_placer.do_live_trades if order_placer else False
+            'live_trading': order_placer.do_live_trades if order_placer else False,
+            'history_loaded': server_config.get('history_loaded', False),
+            'history_loading': server_config.get('history_loading', False)
         }
         
         if data_manager:
@@ -237,6 +239,27 @@ def execute_command():
         output_buffer = io.StringIO()
         
         try:
+            # Check if command requires history and block if not loaded
+            history_required_commands = ['auto_trade', 'resume_auto_trade', 'buy', 'sell', 
+                                       'limit_buy', 'limit_sell', 'strategy_diagnostics']
+            
+            if any(cmd in command for cmd in history_required_commands):
+                if not server_config.get('history_loaded', False):
+                    if server_config.get('history_loading', False):
+                        return jsonify({
+                            'command': command,
+                            'success': False,
+                            'error': 'Historical data is still loading. Please wait and check history_status.',
+                            'history_loading': True
+                        }), 400
+                    else:
+                        return jsonify({
+                            'command': command,
+                            'success': False,
+                            'error': 'Historical data not loaded. Please run load_history first.',
+                            'history_loaded': False
+                        }), 400
+            
             with redirect_stdout(output_buffer):
                 shell.onecmd(command)
             
