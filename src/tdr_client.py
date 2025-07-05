@@ -242,17 +242,25 @@ Initializing connection to remote server...
             response = requests.post(
                 f"{self.server_url}/api/initialize",
                 json=self.config,
-                timeout=REQUEST_TIMEOUT
+                timeout=30  # Longer timeout for initialization
             )
             
             if response.status_code == 200:
                 result = response.json()
-                print("Server initialization response:")
+                print("✅ Server initialization successful!")
                 summary = result.get('config_summary', {})
                 print(f"  - Live Trading: {summary.get('do_live_trades', False)}")
                 print(f"  - Strategy: {summary.get('strategy', 'Unknown')}")
                 print(f"  - WebSocket: {'Enabled' if summary.get('websocket', False) else 'Disabled'}")
-                print(f"  - Historical Data: {'Loaded' if summary.get('historical_data_loaded', False) else 'Not loaded'}")
+                
+                if summary.get('history_loading', False):
+                    print(f"  - Historical Data: Loading in background...")
+                    print("\n⚠️  IMPORTANT: Historical data is loading in the background.")
+                    print("  - Use 'history_status' to check loading progress")
+                    print("  - Trading commands will be blocked until loading completes")
+                else:
+                    print(f"  - Historical Data: {'Loaded' if summary.get('historical_data_loaded', False) else 'Not loaded'}")
+                
                 return True
             else:
                 print(f"Server initialization failed: {response.status_code}")

@@ -48,6 +48,49 @@ logger = None
 server_config = {}
 initialization_complete = False
 
+def auto_load_history():
+    """Automatically load history after initialization"""
+    global server_config
+    try:
+        server_config['history_loading'] = True
+        logger.info("Auto-loading historical data...")
+        
+        log_file = 'btcusd.log'
+        if os.path.exists(log_file):
+            # Get config parameters
+            best_strategy = server_config.get('best_strategy', {})
+            start_back = best_strategy.get('start_window_days_back', 30)
+            end_back = best_strategy.get('end_window_days_back', 0)
+            now = datetime.now()
+            start_date = now - timedelta(days=start_back) if start_back else None
+            end_date = now - timedelta(days=end_back) if end_back else None
+            
+            logger.info(f"Loading historical data from {log_file}")
+            df = parse_log_file(log_file, start_date=start_date, end_date=end_date)
+            
+            if not df.empty:
+                # Need to process the dataframe like in main tdr.py
+                df.rename(columns={'price': 'close'}, inplace=True)
+                df['open'] = df['close']
+                df['high'] = df['close']
+                df['low'] = df['close']
+                df['trades'] = 1
+                if 'volume' not in df.columns:
+                    df['volume'] = df.get('amount', 0.0)
+                
+                data_manager.load_historical_data({'btcusd': df})
+                logger.info(f"Loaded {len(df)} historical records")
+                server_config['history_record_count'] = len(df)
+        
+        server_config['history_loaded'] = True
+        server_config['history_loading'] = False
+        logger.info("Historical data loaded successfully")
+            
+    except Exception as e:
+        logger.error(f"Error loading history: {e}")
+        server_config['history_loading'] = False
+        server_config['history_error'] = str(e)
+
 def setup_logging(verbose=False):
     """Configure server logging"""
     global logger
@@ -154,6 +197,12 @@ def initialize():
         initialization_complete = True
         logger.info("Server initialization complete")
         
+        # Store best_strategy in server config
+        server_config['best_strategy'] = best_strategy
+        
+        # Automatically start loading history after initialization
+        threading.Thread(target=auto_load_history, daemon=True).start()
+        
         return jsonify({
             'success': True,
             'message': 'Server initialized successfully',
@@ -161,7 +210,9 @@ def initialize():
                 'do_live_trades': do_live_trades,
                 'strategy': best_strategy.get('Strategy', 'Unknown'),
                 'websocket': config.get('enable_websocket', True),
-                'historical_data_loaded': not df.empty if 'df' in locals() else False
+                'historical_data_loaded': False,
+                'history_loading': True,
+                'message': 'History loading will start automatically'
             }
         }), 200
         
