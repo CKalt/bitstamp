@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-01-05T20:52:00Z",
+  "command": "strategy_diagnostics",
+  "source": "claude_signal_check",
+  "args": "",
+  "result": {
+    "auto_trader": {
+      "active": true,
+      "strategy": "AdaptiveMultiStrategy"
+    },
+    "command": "strategy_diagnostics",
+    "output": "\n================================================================================\nADAPTIVE STRATEGY DIAGNOSTICS\n================================================================================\n\n\ud83c\udfaf CURRENT POSITION:\n   Direction: LONG\n   Entry: $108114.00 \u2192 Current: $108123.00\n   P&L: $13.70\n\n\ud83d\udcca REGIME DETECTION:\n   Detected: TRENDING\n   Confidence: 75.0% (need 80.0%)\n   Active Strategy: TRENDING\n   Can Switch: \u274c NO\n   Gap: -5.0% short of required confidence\n\n\ud83c\udfaa STRATEGY SIGNALS:\n   \ud83d\udd35 TRENDING: SHORT\n      \u2192 MA Crossover: SHORT\n   \u26aa RANGING: NEUTRAL\n   \u26aa VOLATILE: LONG\n\n\u2699\ufe0f  TRADING CONSTRAINTS:\n   Signal Confirmed: \u2705 (5/2 bars)\n   Trade Gap OK: \u2705\n   Daily Trades: 0/5\n\n\u2705 All constraints satisfied - trade should trigger on next signal!\n  \u2022 Total P&L: $0.00\n  \u2022 Current Trade Amount: 1.52275326\n  \u2022 Total Fees Paid: $0.00\n\nMark-to-Market & Drawdowns:\n  \u2022 Current MTM (USD): $164644.65\n  \u2022 Current MTM (BTC): 1.52275326\n  \u2022 Max MTM (USD): $164729.92\n  \u2022 Min MTM (USD): $164487.81\n  \u2022 Max USD Balance: $0.00\n  \u2022 Min USD Balance: $0.00\n  \u2022 Max BTC Balance: 1.52275326\n  \u2022 Min BTC Balance: 1.52275326\n\nPosition Details:\n  \u2022 Direction:  LONG\n  \u2022 Current Price:  $108123.00\n  \u2022 Entry Price:    $108114.00\n  \u2022 Position Size (BTC): 1.52275326\n  \u2022 Position Value (USD): $164644.65\n  \u2022 Unrealized PnL:  $13.70\n\nTrading Statistics:\n  \u2022 Total Trades: 0\n  \u2022 Profitable Trades: 0\n  \u2022 Win Rate: 0.0%\n\nTechnical Analysis:\n\nNo trades yet, stats are limited.\n\nAdaptive Strategy Details:\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n  \u2022 Current Market Regime: TRENDING\n  \u2022 Regime Confidence: 75.0%\n  \u2022 Active Trading Strategy: TRENDING\n  \u2022 Strategy Switches Today: 0\n  \u2022 Signal Confirmation: 5/2 bars\n  \u2022 Min Trade Gap: 15 minutes\n\n  Strategy Performance Breakdown:\n    \ud83d\udd35 TRENDING: 0 trades, $0.00 profit\n    \u26aa RANGING: 0 trades, $0.00 profit\n    \u26aa VOLATILE: 0 trades, $0.00 profit\n\n  \ud83d\udcc8 TRENDING MARKET DETECTED:\n     \u2022 Clear directional movement\n     \u2022 Using MA CROSSOVER strategy\n\nSession Duration: 1.1 hours\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n================================================================================\n",
+    "success": true,
+    "timestamp": "2025-07-05T21:20:28.433996"
+  },
+  "processed_at": "2025-07-05T17:20:28.410666"
+}

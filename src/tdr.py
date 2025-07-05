@@ -135,31 +135,17 @@ def main():
     import argparse
     
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='TDR Trading System')
+    parser = argparse.ArgumentParser(description='TDR Trading System - Client/Server Architecture')
     parser.add_argument('--server', action='store_true', help='Run as server with REST API')
-    parser.add_argument('--client', action='store_true', help='Run as client connecting to remote server')
+    parser.add_argument('--local', action='store_true', help='Run in local mode (deprecated)')
     parser.add_argument('--server-url', type=str, default='http://localhost:4000', 
                        help='Server URL for client mode (default: http://localhost:4000)')
-    parser.add_argument('--port', type=int, default=4000, help='Server port (default: 4000)')
-    parser.add_argument('--host', type=str, default='0.0.0.0', help='Server host (default: 0.0.0.0)')
+    parser.add_argument('--port', type=int, default=4000, help='Server port when running as server (default: 4000)')
+    parser.add_argument('--host', type=str, default='0.0.0.0', help='Server host when running as server (default: 0.0.0.0)')
     
     args = parser.parse_args()
     
-    # Handle client mode
-    if args.client:
-        from tdr_client import RemoteTDRClient
-        print(f"Starting TDR in CLIENT mode")
-        # Use best_strategy.json from current directory
-        config_file = os.path.abspath("best_strategy.json")
-        client = RemoteTDRClient(args.server_url, config_file=config_file)
-        try:
-            client.cmdloop()
-        except KeyboardInterrupt:
-            print("\nExiting...")
-            client.do_quit('')
-        return
-    
-    # Handle server mode
+    # Handle server mode explicitly
     if args.server:
         print(f"Starting TDR in SERVER mode on {args.host}:{args.port}")
         print("Server will wait for client to send configuration")
@@ -171,12 +157,49 @@ def main():
         server_main()
         return
     
-    # Default: run in normal local mode
+    # Handle deprecated local mode
+    if args.local:
+        print("WARNING: Local mode is deprecated. Please use client-server architecture.")
+        print("Start a server with: python src/tdr.py --server")
+        print("Then connect with: python src/tdr.py")
+        return
+    
+    # DEFAULT: Run as client
+    from tdr_client import RemoteTDRClient
+    import requests
+    
+    # Test if server is available
+    print(f"Starting TDR client...")
+    print(f"Connecting to server at {args.server_url}")
+    
+    try:
+        # Quick connection test
+        response = requests.get(f"{args.server_url}/api/ping", timeout=2)
+        server_available = response.status_code == 200
+    except:
+        server_available = False
+    
+    if not server_available:
+        print("\n❌ ERROR: Cannot connect to server at", args.server_url)
+        print("\nPlease ensure the server is running:")
+        print("  1. On the server machine, run: python src/tdr.py --server")
+        print("  2. Or specify a different server: python src/tdr.py --server-url http://host:port")
+        print("\nIf you need to run everything locally (deprecated):")
+        print("  python src/tdr.py --local")
+        return
+    
+    # Server is available, start client
     config_file = os.path.abspath("best_strategy.json")
-    if not os.path.exists(config_file):
-        print(f"No '{config_file}' found. Using default settings.")
-        config = {}
-    else:
+    client = RemoteTDRClient(args.server_url, config_file=config_file)
+    try:
+        client.cmdloop()
+    except KeyboardInterrupt:
+        print("\nExiting...")
+        client.do_quit('')
+    return
+
+    # Original local mode code below (now unreachable)
+    if False:  # Keep for reference but never execute
         with open(config_file, 'r') as f:
             config = json.load(f)
 

@@ -1,133 +1,146 @@
-# TDR Client-Server Deployment Session Resume
-Date: 2025-01-05
-Status: Mid-deployment - Server running, client needs to connect
+# TDR Client-Server Trading System Health Check
 
-## Current Position to Preserve
-- Position: LONG 1.52275326 BTC
-- Entry Price: $108,234
-- Unrealized P&L: ~-$272 (as of last check)
-- Strategy: Adaptive (TRENDING regime)
-- Live Trading: ENABLED (do_live_trades: true)
+## System Overview
+You are being asked to check the health and status of a Bitcoin trading system that runs in a client-server architecture:
+- **Server**: Runs on remote machine (chriskoin), handles trading logic and order execution
+- **Client**: Runs locally, provides interface and allows Claude to send commands
+- **Claude Interface**: Can send commands via JSON files when client is running
 
-## What We've Accomplished So Far
+### Critical Trading Behavior
+⚠️ **ALL trades are position reversals** - The system is always either:
+- **100% LONG** (all USD converted to BTC)
+- **100% SHORT** (all BTC converted to USD)
 
-### 1. Architecture Created
-- ✅ Created src/tdr_server.py - Flask REST API server
-- ✅ Created src/tdr_client.py - Interactive client with Claude interface
-- ✅ Modified src/tdr.py to support --server and --client modes
-- ✅ Added enhanced logging to both client and server (logs/ directory)
-- ✅ Fixed syntax errors and initialization bugs
-- ✅ Split history loading into separate command for faster startup
+There are no partial positions or gradual entries/exits. Every trade flips the entire position.
 
-### 2. Remote Server Status
-- ✅ Stopped old trading session (saved position)
-- ✅ Stashed local changes on remote
-- ✅ Pulled new code from local commits
-- ✅ Server is RUNNING in screen session "tdr_server"
-- Server started at: ~18:38 (waiting for client)
-- Server has btcusd.log locally for historical data
+## Prerequisites for Claude Interaction
 
-### 3. Local Setup Completed
-- ✅ best_strategy.json updated to match remote parameters:
-  - Short_Window: 10
-  - Long_Window: 46
-  - do_live_trades: true
-- ✅ Created resume-auto-trade.json with position data
-- ✅ All code committed and pushed
+⚠️ **IMPORTANT**: Before Claude can check the system status, the following MUST be running:
 
-### 4. Current Server State
-The server is running but:
-- History is NOT loaded yet (split into separate command)
-- Waiting for client to connect and initialize
-- Once client connects, must run `load_history` command
-
-## Next Steps After Reboot
-
-### 1. Restart SSH Tunnel
+### 1. SSH Tunnel
+The user must have an SSH tunnel running to connect to the remote server:
 ```bash
 ssh -L 4000:localhost:4000 chriskoin
 ```
 
-### 2. Start Client
+### 2. TDR Client
+The client must be running with Claude commands enabled:
 ```bash
 cd /Users/chris/projects/python/btc
 source env/bin/activate
 python src/tdr.py --client
+
+# In the client:
+tdr> enable_commands
 ```
 
-### 3. Initialize and Load History
-```bash
-tdr> status  # Check connection
-tdr> load_history  # Start background history loading
-tdr> history_status  # Check progress (repeat until loaded)
+## Initial Health Check Procedure
+
+When asked to check the trading system status, Claude should:
+
+1. **First, confirm prerequisites**:
+   - Ask: "Is your SSH tunnel running? (ssh -L 4000:localhost:4000 chriskoin)"
+   - Ask: "Is the TDR client running with commands enabled?"
+   - If not, provide instructions to start them
+
+2. **Check system status** by creating a command file:
+   ```json
+   {
+     "timestamp": "2025-01-05T20:00:00Z",
+     "command": "status long",
+     "source": "claude_health_check",
+     "args": ""
+   }
+   ```
+
+3. **Verify the response** in commands/processed/ directory
+
+4. **Check for critical items**:
+   - Auto-trader status (running/stopped)
+   - Current position (LONG/SHORT, BTC amount)
+   - Live trading status (enabled/disabled)
+   - Market regime (TRENDING/RANGING/VOLATILE)
+   - Recent trades
+   - Any errors or warnings
+
+## Key System Information
+
+### Expected Position (as of last session)
+- Position: LONG 1.52275326 BTC
+- Entry Price: ~$108,234
+- Strategy: Adaptive Multi-Strategy
+- Live Trading: ENABLED
+
+### Important Paths
+- **Local**: /Users/chris/projects/python/btc/
+- **Commands**: commands/pending/ (Claude writes here)
+- **Results**: commands/processed/ (Claude reads responses)
+- **Config**: best_strategy.json (DO NOT modify during testing)
+
+### Critical Commands for Health Check
+1. `status` or `status long` - Full system status
+2. `trades` - Recent trading activity
+3. `logs` - View recent server logs
+4. `history_status` - Check if historical data is loaded
+
+## Common Issues to Check
+
+1. **Auto-trader not running**: 
+   - User needs to run: `resume_auto_trade [btc_amount] [long/short] [entry_price]`
+
+2. **Client disconnected**:
+   - Commands will remain in pending/
+   - User needs to restart client
+
+3. **Server not initialized**:
+   - Server may have restarted
+   - Client will auto-initialize on first connection
+
+4. **Position mismatch**:
+   - Compare reported position with expected
+   - DO NOT proceed if mismatched - investigate first
+
+## Safe Operations
+
+✅ **Claude CAN safely**:
+- Check status
+- View logs
+- Check trades
+- Monitor position
+- Read configuration
+
+❌ **Claude should NOT**:
+- Modify best_strategy.json
+- Execute trades without explicit user request
+- Stop auto-trader without user confirmation
+- Change configuration files
+
+## Response Format
+
+When reporting system health, include:
+1. Connection status (client → server)
+2. Auto-trader status (running/stopped)
+3. Current position details
+4. Recent trading activity
+5. Any warnings or concerns
+6. Recommended actions (if any)
+
+## Example Health Check Report
+
+```
+✅ System Health Check Complete
+
+Connection: Active (client connected to server)
+Auto-Trader: Running (AdaptiveMultiStrategy)
+Position: LONG 1.52275326 BTC @ $108,234
+Current Price: $108,150
+Unrealized P&L: -$128 (-0.08%)
+Market Regime: TRENDING (65% confidence)
+Live Trading: ENABLED
+Recent Trades: 0 in last 24 hours
+
+⚠️ Warnings: None
+✅ Status: System operating normally
 ```
 
-### 4. Resume Trading (ONLY after history loaded)
-```bash
-tdr> resume_auto_trade 1.52275326btc long 108234
-tdr> enable_commands  # For Claude integration
-```
-
-## Important Files & Locations
-
-### Local (your Mac):
-- /Users/chris/projects/python/btc/
-- best_strategy.json (configured correctly)
-- resume-auto-trade.json (position data)
-- logs/tdr_client.log (client logs)
-
-### Remote (chriskoin):
-- /home/chris/projects/bitstamp/
-- Server running in: screen -r tdr_server
-- logs/tdr_server.log (server logs)
-- btcusd.log (historical data file)
-
-## Key Commands for Monitoring
-
-### Check Server (on remote):
-```bash
-screen -r tdr_server  # View server
-tail -f logs/tdr_server.log  # Monitor logs
-```
-
-### Check Client (locally):
-```bash
-tail -f logs/tdr_client.log  # Monitor client logs
-```
-
-### Useful Client Commands:
-- `status` - Check position and connection
-- `load_history` - Start loading historical data
-- `history_status` - Check if history is loaded
-- `logs` - View server logs from client
-- `trades` - View recent trades
-- `enable_commands` - Enable Claude interface
-
-## Critical Notes
-1. DO NOT start auto_trade until history_status shows loaded=true
-2. SSH tunnel MUST be running for client to connect
-3. Position must match: LONG 1.52275326 BTC @ $108,234
-4. Live trading is ENABLED - be careful with commands
-
-## Troubleshooting
-- If client can't connect: Check SSH tunnel
-- If "not initialized": Server may have restarted, check screen
-- If history won't load: Check server logs for errors
-- If position mismatch: DO NOT proceed, investigate first
-
-## Git Status
-- Branch: stable-added-adaptive-trad-n-chart-more
-- Last commit: "Add safety check to prevent trading before history is loaded"
-- All changes pushed to remote
-
-## Enhanced Logging
-Both client and server log with format:
-```
-2025-01-05 HH:MM:SS - [Component] - LEVEL - Message
-```
-Key log markers:
-- [CMD-SEND] - Client sending command
-- [CMD-EXEC] - Server executing command
-- [CLAUDE-CMD] - Commands from Claude
-
-This file contains everything needed to resume after reboot!
+Remember: Always ensure the client and SSH tunnel are running before attempting to interact with the system!

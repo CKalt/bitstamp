@@ -220,6 +220,11 @@ def initialize():
         logger.error(f"Initialization error: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/ping', methods=['GET'])
+def ping():
+    """Simple ping endpoint for connection testing"""
+    return jsonify({'status': 'pong', 'timestamp': datetime.now().isoformat()}), 200
+
 @app.route('/api/status', methods=['GET'])
 def get_status():
     """Get current system status"""
