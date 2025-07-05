@@ -143,11 +143,7 @@ def initialize():
         server_config['history_loading'] = False
         
         # Create order placer
-        order_placer = OrderPlacer(
-            do_live_trades=do_live_trades,
-            verbose=verbose,
-            data_manager=data_manager
-        )
+        order_placer = OrderPlacer()
         
         # Initialize position from config if provided
         if 'initial_position' in config:
@@ -163,7 +159,11 @@ def initialize():
         shell = CryptoShell(
             data_manager=data_manager,
             order_placer=order_placer,
-            do_chart=False  # Never run chart on server
+            logger=logger,
+            verbose=verbose,
+            live_trading=do_live_trades,
+            stop_event=stop_event,
+            max_trades_per_day=best_strategy.get('max_trades_per_day', 5)
         )
         
         # Apply strategy configuration

@@ -1,0 +1,131 @@
+# Claude Session History - TDR Client-Server Migration
+Date: 2025-01-05
+Session Goal: Deploy client-server architecture for remote TDR trading system
+
+## Current Trading Position (CRITICAL TO PRESERVE)
+- Position: LONG 1.52275326 BTC
+- Entry Price: $108,234
+- Current Price: ~$108,099
+- Unrealized P&L: -$205.57
+- Strategy: Adaptive (currently in TRENDING regime)
+- Live Trading: Enabled (do_live_trades: true)
+
+## Architecture Status
+### Completed:
+1. Created tdr_server.py - Flask REST API server that waits for client config
+2. Created tdr_client.py - Client with LocalCommandInterface for Claude
+3. Modified src/tdr.py to support --server and --client modes
+4. Created supporting files:
+   - TDR_CLIENT_SERVER_SETUP.md (documentation)
+   - claude_command_example.py (Claude integration example)
+   - test_client_server.py (testing script)
+   - tdr (bash launcher)
+
+### Patches Applied (2025-01-05):
+- shell.py: Fixed position string display bug
+- strategies.py: Added evaluation logging, reduced sleep to 30s, fixed double-calling
+
+## Remote Server Status
+- Location: chriskoin:/home/chris/projects/bitstamp
+- Branch: stable-added-adaptive-trad-n-chart-more
+- Running: screen session "tdr" with active auto_trade
+- Files: btcusd.log (local), .bitstamp (credentials)
+
+## Deployment Plan
+### Phase 1 - Remote Preparation:
+```bash
+(crypto) stop_auto_trade
+(crypto) quit
+git add .
+git commit -m "Add client-server architecture for remote trading"
+git push origin stable-added-adaptive-trad-n-chart-more
+```
+
+### Phase 2 - Local Setup:
+```bash
+cd /Users/chris/projects/python/btc
+git pull origin stable-added-adaptive-trad-n-chart-more
+
+# Create position resume file
+cat > resume-auto-trade.json << 'EOF'
+{
+  "btc_amount": 1.52275326,
+  "usd_amount": 0,
+  "position": "long",
+  "entry_price": 108234.0,
+  "timestamp": "2025-01-05T00:58:21"
+}
+EOF
+```
+
+### Phase 3 - Start Server:
+```bash
+ssh chriskoin
+screen -S tdr
+cd /home/chris/projects/bitstamp
+source env/bin/activate
+python src/tdr.py --server
+```
+
+### Phase 4 - Start Client:
+```bash
+# Terminal 1: SSH tunnel
+ssh -L 4000:localhost:4000 chriskoin
+
+# Terminal 2: Client
+cd /Users/chris/projects/python/btc
+source env/bin/activate
+python src/tdr.py --client
+
+# In client:
+tdr> status
+tdr> resume_auto_trade 1.52275326btc long 108234
+tdr> enable_commands
+```
+
+## Key Design Decisions
+1. Client holds all config files (best_strategy.json)
+2. Server is stateless until initialized by client
+3. Claude creates JSON commands locally, client forwards to server
+4. All logs stay on server, accessible via REST API
+5. Position persistence via resume-auto-trade.json
+
+## REST API Endpoints
+- POST /api/initialize - Client sends config
+- POST /api/command - Execute any shell command
+- GET /api/status - System and position info
+- GET /api/logs - View server logs
+- GET /api/diagnostics - Trading diagnostics
+- GET /api/trades - Trade history
+
+## Claude Integration
+When enabled, monitors local commands/pending/ directory:
+```python
+command = {
+    "timestamp": datetime.now().isoformat(),
+    "command": "status",
+    "source": "claude_check",
+    "args": ""
+}
+```
+
+## Critical Notes
+- SSH tunnel (port 4000) provides security
+- Remote has btcusd.log updated via WebSocket
+- .bitstamp credentials stay on server only
+- Always preserve position continuity during migration
+- Rollback plan: git checkout previous commit on remote
+
+## Next Steps After Deployment
+1. Verify position matches exactly
+2. Test Claude command interface
+3. Monitor for 1 hour to ensure stability
+4. Consider adding authentication layer
+5. Setup monitoring/alerting
+
+## Important Files Modified
+- src/tdr.py (added --server/--client modes)
+- src/tdr_core/shell.py (position display fix)
+- src/tdr_core/strategies.py (evaluation logging, 30s sleep)
+- NEW: src/tdr_server.py
+- NEW: src/tdr_client.py

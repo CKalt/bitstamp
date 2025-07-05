@@ -1,0 +1,99 @@
+#!/bin/bash
+# TDR launcher script - simplifies client/server startup
+
+# Default values
+MODE=""
+SERVER_URL="http://localhost:4000"
+PORT=4000
+HOST="0.0.0.0"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        server|--server)
+            MODE="server"
+            shift
+            ;;
+        client|--client)
+            MODE="client"
+            shift
+            ;;
+        -p|--port)
+            PORT="$2"
+            shift 2
+            ;;
+        -h|--host)
+            HOST="$2"
+            shift 2
+            ;;
+        -s|--server-url)
+            SERVER_URL="$2"
+            shift 2
+            ;;
+        --help)
+            echo "TDR Trading System Launcher"
+            echo ""
+            echo "Usage:"
+            echo "  ./tdr server [options]    # Start server mode"
+            echo "  ./tdr client [options]    # Start client mode"
+            echo "  ./tdr [options]          # Start normal mode"
+            echo ""
+            echo "Server options:"
+            echo "  -p, --port PORT          Server port (default: 4000)"
+            echo "  -h, --host HOST          Server host (default: 0.0.0.0)"
+            echo ""
+            echo "Client options:"
+            echo "  -s, --server-url URL     Server URL (default: http://localhost:4000)"
+            echo ""
+            echo "Examples:"
+            echo "  ./tdr server                    # Start server on port 4000"
+            echo "  ./tdr server -p 5000            # Start server on port 5000"
+            echo "  ./tdr client                    # Connect to localhost:4000"
+            echo "  ./tdr client -s http://remote:5000  # Connect to remote server"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Check if virtual environment is activated
+if [[ -z "$VIRTUAL_ENV" ]]; then
+    echo "Warning: Virtual environment not activated"
+    echo "Looking for virtual environment..."
+    
+    # Try common venv locations
+    if [[ -f "env/bin/activate" ]]; then
+        echo "Activating env/bin/activate"
+        source env/bin/activate
+    elif [[ -f "venv/bin/activate" ]]; then
+        echo "Activating venv/bin/activate"
+        source venv/bin/activate
+    elif [[ -f ".venv/bin/activate" ]]; then
+        echo "Activating .venv/bin/activate"
+        source .venv/bin/activate
+    else
+        echo "No virtual environment found. Proceeding anyway..."
+    fi
+fi
+
+# Launch appropriate mode
+case $MODE in
+    server)
+        echo "Starting TDR Server on $HOST:$PORT"
+        echo "Server will wait for client to send configuration"
+        python src/tdr.py --server --host "$HOST" --port "$PORT"
+        ;;
+    client)
+        echo "Starting TDR Client connecting to $SERVER_URL"
+        echo "Configuration will be loaded from local best_strategy.json"
+        python src/tdr.py --client --server-url "$SERVER_URL"
+        ;;
+    *)
+        echo "Starting TDR in normal mode"
+        python src/tdr.py
+        ;;
+esac

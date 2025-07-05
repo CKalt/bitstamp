@@ -1,0 +1,133 @@
+# TDR Client-Server Deployment Session Resume
+Date: 2025-01-05
+Status: Mid-deployment - Server running, client needs to connect
+
+## Current Position to Preserve
+- Position: LONG 1.52275326 BTC
+- Entry Price: $108,234
+- Unrealized P&L: ~-$272 (as of last check)
+- Strategy: Adaptive (TRENDING regime)
+- Live Trading: ENABLED (do_live_trades: true)
+
+## What We've Accomplished So Far
+
+### 1. Architecture Created
+- ✅ Created src/tdr_server.py - Flask REST API server
+- ✅ Created src/tdr_client.py - Interactive client with Claude interface
+- ✅ Modified src/tdr.py to support --server and --client modes
+- ✅ Added enhanced logging to both client and server (logs/ directory)
+- ✅ Fixed syntax errors and initialization bugs
+- ✅ Split history loading into separate command for faster startup
+
+### 2. Remote Server Status
+- ✅ Stopped old trading session (saved position)
+- ✅ Stashed local changes on remote
+- ✅ Pulled new code from local commits
+- ✅ Server is RUNNING in screen session "tdr_server"
+- Server started at: ~18:38 (waiting for client)
+- Server has btcusd.log locally for historical data
+
+### 3. Local Setup Completed
+- ✅ best_strategy.json updated to match remote parameters:
+  - Short_Window: 10
+  - Long_Window: 46
+  - do_live_trades: true
+- ✅ Created resume-auto-trade.json with position data
+- ✅ All code committed and pushed
+
+### 4. Current Server State
+The server is running but:
+- History is NOT loaded yet (split into separate command)
+- Waiting for client to connect and initialize
+- Once client connects, must run `load_history` command
+
+## Next Steps After Reboot
+
+### 1. Restart SSH Tunnel
+```bash
+ssh -L 4000:localhost:4000 chriskoin
+```
+
+### 2. Start Client
+```bash
+cd /Users/chris/projects/python/btc
+source env/bin/activate
+python src/tdr.py --client
+```
+
+### 3. Initialize and Load History
+```bash
+tdr> status  # Check connection
+tdr> load_history  # Start background history loading
+tdr> history_status  # Check progress (repeat until loaded)
+```
+
+### 4. Resume Trading (ONLY after history loaded)
+```bash
+tdr> resume_auto_trade 1.52275326btc long 108234
+tdr> enable_commands  # For Claude integration
+```
+
+## Important Files & Locations
+
+### Local (your Mac):
+- /Users/chris/projects/python/btc/
+- best_strategy.json (configured correctly)
+- resume-auto-trade.json (position data)
+- logs/tdr_client.log (client logs)
+
+### Remote (chriskoin):
+- /home/chris/projects/bitstamp/
+- Server running in: screen -r tdr_server
+- logs/tdr_server.log (server logs)
+- btcusd.log (historical data file)
+
+## Key Commands for Monitoring
+
+### Check Server (on remote):
+```bash
+screen -r tdr_server  # View server
+tail -f logs/tdr_server.log  # Monitor logs
+```
+
+### Check Client (locally):
+```bash
+tail -f logs/tdr_client.log  # Monitor client logs
+```
+
+### Useful Client Commands:
+- `status` - Check position and connection
+- `load_history` - Start loading historical data
+- `history_status` - Check if history is loaded
+- `logs` - View server logs from client
+- `trades` - View recent trades
+- `enable_commands` - Enable Claude interface
+
+## Critical Notes
+1. DO NOT start auto_trade until history_status shows loaded=true
+2. SSH tunnel MUST be running for client to connect
+3. Position must match: LONG 1.52275326 BTC @ $108,234
+4. Live trading is ENABLED - be careful with commands
+
+## Troubleshooting
+- If client can't connect: Check SSH tunnel
+- If "not initialized": Server may have restarted, check screen
+- If history won't load: Check server logs for errors
+- If position mismatch: DO NOT proceed, investigate first
+
+## Git Status
+- Branch: stable-added-adaptive-trad-n-chart-more
+- Last commit: "Add safety check to prevent trading before history is loaded"
+- All changes pushed to remote
+
+## Enhanced Logging
+Both client and server log with format:
+```
+2025-01-05 HH:MM:SS - [Component] - LEVEL - Message
+```
+Key log markers:
+- [CMD-SEND] - Client sending command
+- [CMD-EXEC] - Server executing command
+- [CLAUDE-CMD] - Commands from Claude
+
+This file contains everything needed to resume after reboot!
