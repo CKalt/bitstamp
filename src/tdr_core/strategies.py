@@ -1182,6 +1182,13 @@ class MACrossoverStrategy:
             f"[BTC Balance: {self.balance_btc:.8f}, USD Balance: {self.balance_usd:.2f}]"
         )
         
+        # Sync position tracking to data_manager for consistent display
+        if hasattr(self.data_manager, 'position_size'):
+            self.data_manager.position_size = self.position_size
+            self.data_manager.position_cost_basis = self.position_cost_basis
+            self.data_manager.position = self.position
+            self.logger.debug(f"Synced position to data_manager: size={self.position_size}, cost_basis={self.position_cost_basis}")
+        
         # Automatically save resume state after each trade (unless in multi-part trade)
         if not getattr(self, '_in_multi_part_trade', False):
             self.save_resume_state()

@@ -503,6 +503,13 @@ class CryptoShell(cmd.Cmd):
                 self.auto_trader.position_cost_basis = amount_num  # USD amount
                 self.auto_trader.last_trade_price = entry_price
                 self.logger.info(f"Resume: Set SHORT position tracking - {btc_sold:.8f} BTC sold @ ${entry_price:.2f}, holding ${amount_num:.2f} USD")
+                
+            # Sync to data_manager for consistent display
+            if hasattr(self.data_manager, 'position_size'):
+                self.data_manager.position_size = self.auto_trader.position_size
+                self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
+                self.data_manager.position = desired_position
+                self.logger.info(f"Resume: Synced position to data_manager")
         
         # Log the auto_trade command to diagnostics
         if hasattr(self.auto_trader, 'diagnostic_logger'):

@@ -28,11 +28,16 @@ The client must be running with Claude commands enabled:
 ```bash
 cd /Users/chris/projects/python/btc
 source env/bin/activate
-python src/tdr.py --client
+python src/tdr.py  # Client mode is now default!
 
 # In the client:
 tdr> enable_commands
 ```
+
+**Note**: As of latest update, client mode is the default. The client will:
+- Automatically check if server is available at localhost:4000
+- Show clear error message if server not found
+- No need for --client flag anymore
 
 ## Initial Health Check Procedure
 
@@ -143,4 +148,44 @@ Recent Trades: 0 in last 24 hours
 ✅ Status: System operating normally
 ```
 
-Remember: Always ensure the client and SSH tunnel are running before attempting to interact with the system!
+## Quick Command Reference
+
+### Starting the System
+```bash
+# On remote server (chriskoin)
+python src/tdr.py --server
+
+# On local machine (with SSH tunnel running)
+python src/tdr.py  # Connects to localhost:4000 by default
+python src/tdr.py --server-url http://other-host:4000  # For different server
+```
+
+### Quick Status Check on Remote
+```bash
+# Directly on remote server (no tunnel needed)
+cd /home/chris/projects/bitstamp/
+source env/bin/activate
+python src/tdr.py  # Will connect to localhost:4000
+tdr> status
+tdr> exit
+```
+
+## Signal Direction Information
+
+**IMPORTANT**: When checking status, note that signal confirmations show as "X/Y bars" where:
+- X = bars since signal detected
+- Y = bars required for confirmation
+
+However, the basic status does NOT show signal direction. Use `strategy_diagnostics` to see:
+- Current position direction (LONG/SHORT)
+- Signal direction (LONG/SHORT)
+- Whether they match or conflict
+
+Remember: 
+- ALL trades are full position reversals (100% BTC ↔ 100% USD)
+- System requires high confidence (80%) for reversals
+- Always ensure the client and SSH tunnel are running before attempting to interact with the system!
+
+
+
+GOAL: Please fix the bug that is causing an incorrect entry price.  Note that the last Sell was at 108,572 which you should be able to inspect and if not I would like you to be able to request the trading history from the running instance.

@@ -2,7 +2,9 @@
 
 ## Overview
 
-The TDR backtesting system allows you to test trading strategies against historical data before deploying them live. The backtester uses the **same strategy code** as the live trading system, ensuring accurate results.
+The TDR backtesting system tests trading strategies against historical Bitcoin price data. The backtester uses the **same strategy code** as the live trading system, ensuring accurate results.
+
+**Current Implementation**: `src/backtest.py` (uses shared AdaptiveStrategyCore)
 
 ## Quick Start
 
@@ -13,101 +15,106 @@ source env/bin/activate
 # Run default backtest (last 120 days)
 python src/backtest.py
 
-# Test last 90 days with custom output
-python src/backtest.py --start-window-days-back 90 --output-file my_test.json
+# ALWAYS specify output file to avoid overwriting live config
+python src/backtest.py --start-window-days-back 90 --output-file test_90d.json
 ```
 
-## Important Safety Rules
+## ⚠️ Critical Safety Rules
 
-⚠️ **NEVER overwrite `best_strategy.json` during testing!** This file controls your live trading.
+1. **NEVER overwrite `best_strategy.json` during testing** - This controls live trading!
+2. **ALWAYS use `--output-file`** parameter
+3. **BACKUP before applying changes** to production
 
 ### Safe Testing Workflow
 
-1. **Always use custom output files**:
 ```bash
-python src/backtest.py --output-file test_strategy.json
-```
+# 1. Run backtest with custom output
+python src/backtest.py --start-window-days-back 90 --output-file test_strategy.json
 
-2. **Use the safe wrapper script** (recommended):
-```bash
+# 2. Use the safe wrapper (recommended)
 ./backtest --start-window-days-back 90
-# Automatically creates timestamped output files
+# Creates timestamped files automatically
 # Warns before overwriting production config
-```
 
-3. **Review before deploying**:
-```bash
-# Compare results
-cat test_strategy.json | grep -E "Total_Return|Sharpe_Ratio"
+# 3. Review results
+cat test_strategy.json | grep -E "Total_Return|Sharpe_Ratio|Total_Trades"
 
-# Backup current config
+# 4. Only when ready to deploy:
 cp best_strategy.json best_strategy.backup.json
-
-# Apply new config (only when ready!)
 cp test_strategy.json best_strategy.json
 ```
 
 ## Command Line Options
 
-### Date Range Options
-
+### Date Range
 ```bash
-# Test specific number of days back from today
---start-window-days-back 90    # Start 90 days ago (default: 120)
---end-window-days-back 0       # End today (default: 0)
+# Days back from today
+--start-window-days-back 90   # Start 90 days ago (default: 120)
+--end-window-days-back 0      # End today (default: 0)
 
-# Or specify a trading window
---trading-window-days 60       # Test 60-day window from start date
+# Specific trading window
+--trading-window-days 60      # Test 60-day window from start
 ```
 
-### Strategy Options
-
+### Strategy Selection
 ```bash
-# Skip adaptive strategy testing (faster)
+# Skip adaptive strategy (faster testing)
 --skip-adaptive
 
-# Test specific timeframes
---high-frequency 1H    # Primary timeframe (default: 1H)
---low-frequency 15T    # Secondary timeframe (default: 15T)
-# Options: 5T, 15T, 30T, 1H, 4H, 1D
+# Timeframe selection
+--high-frequency 1H    # Primary timeframe: 5T, 15T, 30T, 1H, 4H, 1D
+--low-frequency 15T    # Secondary timeframe (for some strategies)
 ```
 
-### Output Options
-
+### Optimization
 ```bash
-# Specify output file (REQUIRED for safety!)
---output-file my_strategy.json
-
 # Set optimization iterations
---max-iterations 100   # More iterations = better optimization (default: 50)
+--max-iterations 100   # More = better optimization (default: 50)
+
+# Output file (REQUIRED for safety)
+--output-file results.json
 ```
 
-## Example Scenarios
+## Testing Scenarios
 
-### 1. Test Recent Market Conditions (30 days)
+### 1. Recent Market (30 days)
 ```bash
 python src/backtest.py \
   --start-window-days-back 30 \
-  --output-file recent_market_test.json
+  --output-file recent_30d.json
 ```
 
-### 2. Test Longer Historical Period (6 months)
+### 2. Extended Period (180 days)
 ```bash
 python src/backtest.py \
   --start-window-days-back 180 \
-  --output-file historical_test.json
+  --output-file extended_180d.json
 ```
 
-### 3. Test Specific Date Range (Skip recent volatile period)
+### 3. Specific Date Range
 ```bash
-# Test 90 days starting from 180 days ago, ending 30 days ago
+# Test 90 days ending 30 days ago (skip recent volatility)
 python src/backtest.py \
-  --start-window-days-back 180 \
+  --start-window-days-back 120 \
   --end-window-days-back 30 \
-  --output-file stable_period_test.json
+  --output-file stable_period.json
 ```
 
-### 4. Quick Test Without Adaptive Strategy
+### 4. Different Timeframes
+```bash
+# Conservative 4-hour candles
+python src/backtest.py \
+  --high-frequency 4H \
+  --output-file conservative_4h.json
+
+# Aggressive 30-minute
+python src/backtest.py \
+  --high-frequency 30T \
+  --low-frequency 5T \
+  --output-file aggressive_30m.json
+```
+
+### 5. Quick Test (no adaptive)
 ```bash
 python src/backtest.py \
   --skip-adaptive \
@@ -115,217 +122,165 @@ python src/backtest.py \
   --output-file quick_test.json
 ```
 
-### 5. Test Different Timeframes
-```bash
-# 4-hour candles
-python src/backtest.py \
-  --high-frequency 4H \
-  --output-file conservative_4h.json
-
-# 30-minute candles with 5-minute secondary
-python src/backtest.py \
-  --high-frequency 30T \
-  --low-frequency 5T \
-  --output-file aggressive_30m.json
-```
-
 ## Understanding Results
 
-### Output Files Created
+### Key Files Generated
 
-1. **Main output file** (specified by --output-file):
+1. **Main output** (your specified filename):
    - Complete strategy configuration
-   - Performance metrics
-   - Ready to use as best_strategy.json
+   - Ready to use as `best_strategy.json`
 
-2. **Additional files** (automatically created):
+2. **Additional files**:
    - `optimization_results.csv` - All parameter combinations tested
-   - `strategy_comparison_enhanced.csv` - Comparison of strategies
+   - `strategy_comparison_enhanced.csv` - Strategy comparison
    - `all_strategy_results_enhanced.csv` - Detailed results
-   - `adaptive_strategy_detailed_results.json` - Regime performance breakdown
+   - `adaptive_strategy_detailed_results.json` - Regime performance
 
-### Key Metrics to Evaluate
+### Important Metrics
 
 ```json
 {
-  "Total_Return": 5.38,        // 538% gain (higher is better)
-  "Sharpe_Ratio": 0.097,       // Risk-adjusted returns (> 0 is good, > 1 is excellent)
-  "Total_Trades": 135,         // Number of trades
-  "Average_Trades_Per_Day": 1.1, // Trading frequency
-  "Profit_Factor": 1.019,      // Wins/Losses ratio (> 1 is profitable)
-  "Max_Drawdown": -15.2        // Largest peak-to-trough loss %
+  "Total_Return": 5.38,         // 538% gain (multiplier, not percentage)
+  "Sharpe_Ratio": 0.097,        // Risk-adjusted returns (>0 good, >1 excellent)
+  "Total_Trades": 135,          // Number of trades executed
+  "Average_Trades_Per_Day": 1.1,// Trading frequency
+  "Profit_Factor": 1.019,       // Win/loss ratio (>1 is profitable)
+  "Max_Drawdown": -15.2,        // Largest loss from peak (%)
+  "Win_Rate": 0.52              // Percentage of profitable trades
 }
 ```
 
 ### Adaptive Strategy Results
 
-When testing adaptive strategies, review regime performance:
-
 ```json
 "regime_performance": {
-  "trending": {
+  "TRENDING": {
     "trades": 89,
     "success_rate": 0.64,
-    "avg_profit": 1.2
+    "total_return": 3.2
   },
-  "ranging": {
+  "RANGING": {
     "trades": 32,
     "success_rate": 0.71,
-    "avg_profit": 0.8
+    "total_return": 1.5
   },
-  "volatile": {
+  "VOLATILE": {
     "trades": 14,
     "success_rate": 0.43,
-    "avg_profit": -0.3
+    "total_return": 0.9
   }
 }
 ```
 
-## Comparing Multiple Tests
+## Deployment Process
 
-### Run Multiple Backtests
-```bash
-# Conservative test
-python src/backtest.py \
-  --start-window-days-back 180 \
-  --output-file conservative.json
+### When to Update Production
 
-# Moderate test  
-python src/backtest.py \
-  --start-window-days-back 90 \
-  --output-file moderate.json
-
-# Aggressive test
-python src/backtest.py \
-  --start-window-days-back 30 \
-  --high-frequency 30T \
-  --output-file aggressive.json
-```
-
-### Compare Results
-```bash
-# Quick comparison
-for f in conservative.json moderate.json aggressive.json; do
-  echo "=== $f ==="
-  cat $f | grep -E "Total_Return|Sharpe_Ratio|Total_Trades"
-done
-
-# Detailed comparison
-diff conservative.json moderate.json
-```
-
-## Applying Backtest Results
-
-### When to Update Production Config
-
-Consider updating `best_strategy.json` when:
+Consider updating when ALL conditions are met:
 - ✅ Total Return > current strategy
-- ✅ Sharpe Ratio > 0 (positive risk-adjusted returns)
-- ✅ Reasonable trade frequency (0.5-5 trades/day)
-- ✅ Tested on sufficient data (> 30 days)
-- ✅ Lower max drawdown than current
+- ✅ Sharpe Ratio > 0 (positive risk-adjusted)
+- ✅ Win Rate > 45%
+- ✅ Max Drawdown < 25%
+- ✅ Tested on > 30 days of data
+- ✅ At least 0.5 trades per day average
 
-### Deployment Process
+### Safe Deployment Steps
 
-1. **Stop trading** (on server):
 ```bash
+# 1. Stop trading on server
 tdr> stop_auto_trade
-```
 
-2. **Backup current config** (locally):
-```bash
-cp best_strategy.json best_strategy.$(date +%Y%m%d).json
-```
+# 2. Backup current configuration
+cp best_strategy.json backups/best_strategy.$(date +%Y%m%d_%H%M%S).json
 
-3. **Apply new config**:
-```bash
-cp tested_strategy.json best_strategy.json
-```
+# 3. Review changes
+diff best_strategy.json test_strategy.json
 
-4. **Restart server** to load new config
+# 4. Apply new configuration
+cp test_strategy.json best_strategy.json
 
-5. **Resume trading**:
-```bash
-tdr> resume_auto_trade [amount] [position] [entry_price]
-```
+# 5. Restart server to load new config
+# On remote: Restart the server process
 
-## Advanced Testing
-
-### Custom Parameter Ranges
-
-Edit the parameter ranges in `src/backtest.py`:
-
-```python
-# MA strategy parameters
-short_range = range(5, 25, 5)    # Test 5, 10, 15, 20
-long_range = range(20, 60, 10)   # Test 20, 30, 40, 50
-
-# Adaptive parameters
-regime_thresholds = [0.3, 0.4, 0.5, 0.6]
-confirmation_bars = [1, 2, 3]
-```
-
-### Testing Specific Market Conditions
-
-```bash
-# Bull market test (if you know dates)
-python src/backtest.py \
-  --start-window-days-back 365 \
-  --end-window-days-back 180 \
-  --output-file bull_market.json
-
-# Recent volatility
-python src/backtest.py \
-  --start-window-days-back 14 \
-  --high-frequency 15T \
-  --output-file volatile_period.json
+# 6. Resume trading with position
+tdr> resume_auto_trade 1.52275326btc long 108234
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **"No data found in the specified date range"**
-   - Check that btcusd.log exists
-   - Verify date range is within available data
-   - Try `ls -la btcusd.log` to check file size
+**"No data found"**
+- Check `btcusd.log` exists
+- Verify date range has data
+- Try `ls -la btcusd.log`
 
-2. **"MemoryError" with large date ranges**
-   - Reduce date range
-   - Use higher frequency (4H instead of 1H)
-   - Add `--skip-adaptive` for faster testing
+**"MemoryError"**
+- Reduce date range
+- Use higher frequency (4H not 1H)
+- Add `--skip-adaptive`
 
-3. **Results seem unrealistic**
-   - Check for data quality issues
-   - Verify fee and slippage settings
-   - Review trade frequency constraints
+**Unrealistic results**
+- Check for lookahead bias
+- Verify fees/slippage included
+- Review trade frequency
 
-### Getting Help
+### Debugging
 
-Check logs for detailed error messages:
 ```bash
-# Recent errors
-tail -50 logs/backtest.log
+# Check available data range
+head -1 btcusd.log  # First record
+tail -1 btcusd.log  # Last record
 
-# Search for specific errors
-grep ERROR logs/backtest.log
+# Test with minimal settings
+python src/backtest.py \
+  --start-window-days-back 7 \
+  --skip-adaptive \
+  --output-file debug_test.json
 ```
 
 ## Best Practices
 
-1. **Test multiple time periods** to avoid overfitting
-2. **Start conservative** - test longer periods first
-3. **Document your tests** - keep notes on what you tested and why
-4. **Never rush deployment** - a bad strategy can lose money quickly
-5. **Monitor after deployment** - new strategies need extra attention
+1. **Test multiple periods** - Markets change, avoid overfitting
+2. **Start conservative** - Test longer periods first  
+3. **Document tests** - Keep notes on what/why you tested
+4. **Monitor after deployment** - New strategies need attention
+5. **Regular reoptimization** - Run monthly or after major market changes
+
+## Parameter Guidelines
+
+### MA Strategy Windows
+- Short: 5-25 (typically 10-15)
+- Long: 20-100 (typically 40-50)
+- Constraint: Long > Short
+
+### Adaptive Parameters
+- `regime_switch_threshold`: 0.3-0.7 (default 0.4)
+- `signal_confirmation_bars`: 1-3 (default 2)
+- `min_trade_gap_minutes`: 15-60 (default 15)
+
+### Position Sizing (Current: 100% only)
+- System trades all-in/all-out
+- No partial positions
+- Every trade is a full reversal
 
 ## Summary Checklist
 
-- [ ] Always use `--output-file` to avoid overwriting production config
-- [ ] Test sufficient historical data (minimum 30 days)
-- [ ] Review all performance metrics, not just returns
-- [ ] Backup current config before applying changes
-- [ ] Stop trading before updating configuration
-- [ ] Monitor closely after deploying new strategy
+Before running backtest:
+- [ ] Have backup of `best_strategy.json`
+- [ ] Know your current live position
+- [ ] Understand test parameters
 
-Remember: Backtesting shows historical performance. Future results may differ!
+During backtest:
+- [ ] Use `--output-file` parameter
+- [ ] Save test results
+- [ ] Document test conditions
+
+Before deployment:
+- [ ] Stop live trading
+- [ ] Review all metrics
+- [ ] Backup current config
+- [ ] Test on recent data
+- [ ] Have rollback plan
+
+Remember: **Backtesting shows historical performance. Future results will differ!**
