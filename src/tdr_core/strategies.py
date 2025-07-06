@@ -1247,6 +1247,29 @@ class MACrossoverStrategy:
             with open(resume_file, 'w') as f:
                 json.dump(resume_data, f, indent=2)
                 
+            # Also append to position history
+            history_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'position-history.json')
+            
+            # Load existing history
+            history = []
+            if os.path.exists(history_file):
+                try:
+                    with open(history_file, 'r') as f:
+                        history = json.load(f)
+                except:
+                    history = []
+            
+            # Add current position to history
+            history.append(resume_data)
+            
+            # Keep only last 100 entries to prevent file from growing too large
+            if len(history) > 100:
+                history = history[-100:]
+            
+            # Save updated history
+            with open(history_file, 'w') as f:
+                json.dump(history, f, indent=2)
+                
             self.logger.info(f"Saved resume state to {resume_file}")
             
         except Exception as e:

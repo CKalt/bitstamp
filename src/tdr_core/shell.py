@@ -84,7 +84,9 @@ class CryptoShell(cmd.Cmd):
             'stop_auto_trade': 'stop_auto_trade',
             'status': 'status [long]',
             'chart': 'chart btcusd 1H 8051 alt_strategy-1.json',
-            'summary_diagnostics': 'summary_diagnostics [filename.json]'
+            'summary_diagnostics': 'summary_diagnostics [filename.json]',
+            'position_history': 'position_history',
+            'auto_resume': 'auto_resume'
         }
 
         # Register callbacks
@@ -485,6 +487,23 @@ class CryptoShell(cmd.Cmd):
             macd_threshold=0.001
         )
         
+        # Handle resume position tracking IMMEDIATELY after strategy creation
+        if hasattr(self, '_resume_entry_price') and self._resume_entry_price:
+            entry_price = self._resume_entry_price
+            if desired_position == 1:  # LONG position
+                # For LONG: position_size should be BTC amount, cost_basis = BTC * entry_price
+                self.auto_trader.position_size = amount_num
+                self.auto_trader.position_cost_basis = amount_num * entry_price
+                self.auto_trader.last_trade_price = entry_price
+                self.logger.info(f"Resume: Set LONG position tracking - {amount_num} BTC @ ${entry_price:.2f}, cost basis ${self.auto_trader.position_cost_basis:.2f}")
+            elif desired_position == -1:  # SHORT position
+                # For SHORT: position_size should be negative BTC sold, cost_basis = USD received
+                btc_sold = amount_num / entry_price
+                self.auto_trader.position_size = -btc_sold
+                self.auto_trader.position_cost_basis = amount_num  # USD amount
+                self.auto_trader.last_trade_price = entry_price
+                self.logger.info(f"Resume: Set SHORT position tracking - {btc_sold:.8f} BTC sold @ ${entry_price:.2f}, holding ${amount_num:.2f} USD")
+        
         # Log the auto_trade command to diagnostics
         if hasattr(self.auto_trader, 'diagnostic_logger'):
             self.auto_trader.diagnostic_logger.log_event("AUTO_TRADE_COMMAND", {
@@ -826,22 +845,8 @@ class CryptoShell(cmd.Cmd):
             # Execute auto_trade
             self.do_auto_trade(auto_trade_cmd)
             
-            # After auto_trade completes, update the position tracking
-            if self.auto_trader and hasattr(self.auto_trader, 'position'):
-                if position_str == 'long':
-                    # For LONG: position_size should be BTC amount, cost_basis = BTC * entry_price
-                    self.auto_trader.position_size = amount
-                    self.auto_trader.position_cost_basis = amount * entry_price
-                    self.auto_trader.last_trade_price = entry_price
-                    self.logger.info(f"Resumed LONG: {amount} BTC @ ${entry_price:.2f}, cost basis ${self.auto_trader.position_cost_basis:.2f}")
-                else:
-                    # For SHORT: position_size should be negative BTC sold, cost_basis = USD received
-                    btc_sold = amount / entry_price
-                    self.auto_trader.position_size = -btc_sold
-                    self.auto_trader.position_cost_basis = amount  # USD amount
-                    self.auto_trader.last_trade_price = entry_price
-                    self.logger.info(f"Resumed SHORT: {btc_sold:.8f} BTC sold @ ${entry_price:.2f}, holding ${amount:.2f} USD")
-                    
+            # Position tracking is now handled inside do_auto_trade when _resume_entry_price is set
+            if self.auto_trader:
                 print(f"✅ Position tracking updated with entry price ${entry_price:.2f}")
                 
             # Clean up
@@ -935,6 +940,139 @@ class CryptoShell(cmd.Cmd):
                 print(f"Resume command: {data['command']}")
         except Exception as e:
             print(f"Error saving resume state: {e}")
+
+    def do_position_history(self, arg):
+        """
+        Query position history from the server.
+        Shows current position, last saved position, and recent history.
+        
+        Usage: position_history
+        """
+        if self.mode == 'server':
+            print("This command is only available in client mode")
+            return
+            
+        try:
+            response = requests.get(f"{self.server_url}/api/position_history", timeout=5)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Show current position if active
+                if data.get('current_position') and data['current_position'].get('active'):
+                    pos = data['current_position']
+                    print("\n📍 Current Active Position:")
+                    print(f"  • Position: {pos['position'].upper()}")
+                    print(f"  • Amount: {pos['amount']:.8f}")
+                    print(f"  • Entry Price: ${pos['entry_price']:.2f}")
+                    print(f"  • Current Price: ${pos['current_price']:.2f}")
+                    print(f"  • Unrealized P&L: ${pos['unrealized_pnl']:.2f}")
+                
+                # Show last saved position
+                if data.get('last_position'):
+                    last = data['last_position']
+                    print("\n💾 Last Saved Position:")
+                    print(f"  • Time: {last['timestamp']}")
+                    print(f"  • Position: {last['position']}")
+                    print(f"  • Amount: {last['amount']:.8f} {last['unit']}")
+                    print(f"  • Entry Price: ${last['entry_price']:.2f}")
+                    print(f"  • Resume Command: {last['command']}")
+                
+                # Show recent history
+                if data.get('history'):
+                    print("\n📊 Recent Position History:")
+                    for i, entry in enumerate(reversed(data['history'][-5:]), 1):
+                        print(f"\n  [{i}] {entry['timestamp']}")
+                        print(f"      {entry['position']} {entry['amount']:.8f} {entry['unit']} @ ${entry['entry_price']:.2f}")
+                        if 'unrealized_pnl' in entry:
+                            print(f"      P&L: ${entry['unrealized_pnl']:.2f}")
+            else:
+                print(f"Error: Server returned status {response.status_code}")
+                
+        except requests.exceptions.RequestException as e:
+            print(f"Error connecting to server: {e}")
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def do_auto_resume(self, arg):
+        """
+        Automatically resume trading based on the last saved position from the server.
+        This will query the server's position history and execute the resume command.
+        
+        Usage: auto_resume
+        
+        Note: This command will be ignored if auto-trading is already active.
+        """
+        if self.mode == 'server':
+            # For server mode, check local files
+            if self.auto_trader:
+                print("Auto-trader is already running. Resume command ignored.")
+                return
+                
+            try:
+                import os
+                resume_file = os.path.abspath('resume-auto-trade.json')
+                if os.path.exists(resume_file):
+                    with open(resume_file, 'r') as f:
+                        data = json.load(f)
+                    
+                    print(f"Found saved position: {data['position']} {data['amount']:.8f} {data['unit']} @ ${data['entry_price']:.2f}")
+                    print(f"Executing: {data['command']}")
+                    
+                    # Extract the command arguments
+                    parts = data['command'].split()
+                    if len(parts) >= 4 and parts[0] == 'resume_auto_trade':
+                        resume_args = ' '.join(parts[1:])
+                        self.do_resume_auto_trade(resume_args)
+                    else:
+                        print("Error: Invalid resume command format")
+                else:
+                    print("No saved position found")
+                    
+            except Exception as e:
+                print(f"Error: {e}")
+        else:
+            # Client mode - query server
+            if self.auto_trader:
+                print("Auto-trader is already running. Resume command ignored.")
+                return
+                
+            try:
+                response = requests.get(f"{self.server_url}/api/position_history", timeout=5)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # Check if auto-trader is already running on server
+                    if data.get('current_position') and data['current_position'].get('active'):
+                        print("Auto-trader is already running on server. Resume command ignored.")
+                        return
+                    
+                    # Use last saved position
+                    if data.get('last_position'):
+                        last = data['last_position']
+                        print(f"\n🔄 Auto-resuming from last position:")
+                        print(f"  • Time: {last['timestamp']}")
+                        print(f"  • Position: {last['position']} {last['amount']:.8f} {last['unit']} @ ${last['entry_price']:.2f}")
+                        print(f"  • Command: {last['command']}")
+                        
+                        # Extract the command arguments
+                        parts = last['command'].split()
+                        if len(parts) >= 4 and parts[0] == 'resume_auto_trade':
+                            resume_args = ' '.join(parts[1:])
+                            print("\nExecuting resume command...")
+                            self.do_resume_auto_trade(resume_args)
+                        else:
+                            print("Error: Invalid resume command format in saved data")
+                    else:
+                        print("No saved position found on server")
+                else:
+                    print(f"Error: Server returned status {response.status_code}")
+                    
+            except requests.exceptions.RequestException as e:
+                print(f"Error connecting to server: {e}")
+            except Exception as e:
+                print(f"Error: {e}")
 
     def do_set_trade_limit(self, arg):
         """

@@ -85,6 +85,43 @@ def auto_load_history():
         server_config['history_loaded'] = True
         server_config['history_loading'] = False
         logger.info("Historical data loaded successfully")
+        
+        # Check if auto_resume is enabled
+        if best_strategy.get('auto_resume', False):
+            logger.info("Auto-resume is enabled, checking for saved position...")
+            try:
+                # Check if auto-trader is already running
+                if shell and shell.auto_trader:
+                    logger.info("Auto-trader is already running, skipping auto-resume")
+                else:
+                    # Load last saved position
+                    resume_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'resume-auto-trade.json')
+                    if os.path.exists(resume_file):
+                        with open(resume_file, 'r') as f:
+                            resume_data = json.load(f)
+                        
+                        logger.info(f"Found saved position: {resume_data['position']} {resume_data['amount']} {resume_data['unit']} @ ${resume_data['entry_price']}")
+                        
+                        # Extract command arguments
+                        parts = resume_data['command'].split()
+                        if len(parts) >= 4 and parts[0] == 'resume_auto_trade':
+                            resume_args = ' '.join(parts[1:])
+                            logger.info(f"Executing auto-resume: {resume_args}")
+                            
+                            # Execute resume command
+                            if shell:
+                                shell.do_resume_auto_trade(resume_args)
+                                logger.info("Auto-resume completed successfully")
+                            else:
+                                logger.error("Shell not available for auto-resume")
+                        else:
+                            logger.error(f"Invalid resume command format: {resume_data.get('command')}")
+                    else:
+                        logger.info("No saved position found for auto-resume")
+            except Exception as e:
+                logger.error(f"Error during auto-resume: {e}")
+                import traceback
+                traceback.print_exc()
             
     except Exception as e:
         logger.error(f"Error loading history: {e}")
@@ -212,7 +249,8 @@ def initialize():
                 'websocket': config.get('enable_websocket', True),
                 'historical_data_loaded': False,
                 'history_loading': True,
-                'message': 'History loading will start automatically'
+                'auto_resume': best_strategy.get('auto_resume', False),
+                'message': 'History loading will start automatically' + (' with auto-resume' if best_strategy.get('auto_resume', False) else '')
             }
         }), 200
         
@@ -241,7 +279,8 @@ def get_status():
             'order_placer': 'initialized' if order_placer else 'not initialized',
             'live_trading': shell.live_trading if shell else False,
             'history_loaded': server_config.get('history_loaded', False),
-            'history_loading': server_config.get('history_loading', False)
+            'history_loading': server_config.get('history_loading', False),
+            'auto_resume': server_config.get('best_strategy', {}).get('auto_resume', False)
         }
         
         if data_manager:
@@ -404,15 +443,6 @@ def get_data(symbol):
     except Exception as e:
         logger.error(f"Error in get_data: {e}")
         return jsonify({'error': str(e)}), 500
-
-@app.route('/api/ping', methods=['GET'])
-def ping():
-    """Simple ping endpoint for health checks"""
-    return jsonify({
-        'status': 'pong',
-        'timestamp': datetime.now().isoformat(),
-        'initialized': initialization_complete
-    }), 200
 
 @app.route('/api/load_history', methods=['POST'])
 def load_history():
@@ -661,6 +691,60 @@ def get_trades():
         
     except Exception as e:
         logger.error(f"Error getting trades: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/position_history', methods=['GET'])
+def get_position_history():
+    """Get position history and last resume state"""
+    try:
+        if not initialization_complete:
+            return jsonify({'error': 'Server not initialized'}), 503
+            
+        response = {
+            'timestamp': datetime.now().isoformat(),
+            'current_position': None,
+            'last_position': None,
+            'history': []
+        }
+        
+        # Get current position if auto-trader is running
+        if shell and shell.auto_trader:
+            status = shell.auto_trader.get_status()
+            position_info = status.get('position_info', {})
+            response['current_position'] = {
+                'active': True,
+                'position': position_info.get('position', 'unknown'),
+                'amount': position_info.get('amount', 0),
+                'entry_price': position_info.get('entry_price', 0),
+                'current_price': position_info.get('current_price', 0),
+                'unrealized_pnl': position_info.get('unrealized_pnl', 0)
+            }
+        
+        # Read last saved position from resume-auto-trade.json
+        import os
+        resume_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'resume-auto-trade.json')
+        if os.path.exists(resume_file):
+            try:
+                with open(resume_file, 'r') as f:
+                    response['last_position'] = json.load(f)
+            except Exception as e:
+                logger.error(f"Error reading resume file: {e}")
+        
+        # Read position history
+        history_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'position-history.json')
+        if os.path.exists(history_file):
+            try:
+                with open(history_file, 'r') as f:
+                    history = json.load(f)
+                    # Return last 10 entries
+                    response['history'] = history[-10:] if len(history) > 10 else history
+            except Exception as e:
+                logger.error(f"Error reading history file: {e}")
+        
+        return jsonify(response), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting position history: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/shutdown', methods=['POST'])
