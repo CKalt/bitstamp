@@ -165,6 +165,17 @@ def main():
         return
     
     # DEFAULT: Run as client
+    # Setup readline for tab completion before importing client
+    try:
+        import readline
+        import rlcompleter
+        if 'libedit' in readline.__doc__:
+            readline.parse_and_bind("bind ^I rl_complete")
+        else:
+            readline.parse_and_bind("tab: complete")
+    except ImportError:
+        pass
+    
     from tdr_client import RemoteTDRClient
     import requests
     

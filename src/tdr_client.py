@@ -13,9 +13,27 @@ import time
 import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
-import readline  # For command history
 from pathlib import Path
 import shutil
+
+# Enable tab completion
+try:
+    import readline
+except ImportError:
+    # readline not available on Windows
+    pass
+else:
+    # Enable tab completion
+    readline.parse_and_bind("tab: complete")
+    # Optional: Add history file support
+    import atexit
+    histfile = os.path.expanduser("~/.tdr_history")
+    try:
+        readline.read_history_file(histfile)
+        readline.set_history_length(1000)
+    except FileNotFoundError:
+        pass
+    atexit.register(readline.write_history_file, histfile)
 
 # Configuration
 DEFAULT_SERVER_URL = "http://localhost:4000"
@@ -179,6 +197,10 @@ Initializing connection to remote server...
         self.last_status = None
         self.monitoring_thread = None
         self.stop_monitoring = threading.Event()
+        
+        # Enable command completion
+        self.use_rawinput = True
+        self.completekey = 'tab'
         self.command_interface = None
         self.initialized = False
         self.logger = logging.getLogger("TDRClient")
@@ -201,6 +223,15 @@ Initializing connection to remote server...
             else:
                 print(f"❌ Failed to initialize server at {self.server_url}")
                 print("Some commands may not work properly.")
+    
+    def emptyline(self):
+        """Do nothing on empty line"""
+        pass
+    
+    def completenames(self, text, *ignored):
+        """Override to provide command name completion"""
+        dotext = 'do_' + text
+        return [a[3:] for a in self.get_names() if a.startswith(dotext)]
     
     def load_configuration(self) -> Dict[str, Any]:
         """Load configuration from local files"""
