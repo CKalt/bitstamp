@@ -30,6 +30,16 @@ from datetime import datetime
 from flask import Flask, request
 from multiprocessing import Process, Manager
 
+# Enable tab completion
+try:
+    import readline
+except ImportError:
+    # readline not available on Windows
+    pass
+else:
+    # Enable tab completion
+    readline.parse_and_bind("tab: complete")
+
 # We'll need references to modules from our codebase:
 from tdr_core.strategies import MACrossoverStrategy, AdaptiveMultiStrategy
 from tdr_core.command_interface import CommandInterface
