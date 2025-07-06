@@ -1193,6 +1193,67 @@ class MACrossoverStrategy:
         if not getattr(self, '_in_multi_part_trade', False):
             self.save_resume_state()
 
+    def validate_position_from_trades(self):
+        """Validate and fix position tracking based on recent trades from trades.json"""
+        try:
+            import json
+            import os
+            
+            trades_file = os.path.abspath(self.trade_log_file)
+            if not os.path.exists(trades_file):
+                self.logger.warning("No trades.json file found")
+                return False
+                
+            with open(trades_file, 'r') as f:
+                trades = json.load(f)
+                
+            if not trades:
+                self.logger.warning("No trades found in trades.json")
+                return False
+                
+            # Find the most recent trade
+            last_trade = trades[-1]
+            
+            # Check if position tracking matches the last trade
+            if last_trade['type'] == 'sell':
+                # Should be SHORT
+                if self.position != -1:
+                    self.logger.warning(f"Position mismatch: system thinks {self.position} but last trade was SELL")
+                    
+                # Recalculate position tracking from last trade
+                btc_sold = float(last_trade['amount'])
+                sell_price = float(last_trade['price'])
+                
+                self.position = -1
+                self.position_size = -btc_sold
+                self.position_cost_basis = btc_sold * sell_price
+                self.last_trade_price = sell_price
+                
+                self.logger.info(f"Fixed SHORT position from last trade: {btc_sold:.8f} BTC @ ${sell_price:.2f}")
+                self.logger.info(f"Entry price: ${self.position_cost_basis / abs(self.position_size):.2f}")
+                
+            elif last_trade['type'] == 'buy':
+                # Should be LONG
+                if self.position != 1:
+                    self.logger.warning(f"Position mismatch: system thinks {self.position} but last trade was BUY")
+                    
+                # Recalculate position tracking from last trade
+                btc_bought = float(last_trade['amount'])
+                buy_price = float(last_trade['price'])
+                
+                self.position = 1
+                self.position_size = btc_bought
+                self.position_cost_basis = btc_bought * buy_price
+                self.last_trade_price = buy_price
+                
+                self.logger.info(f"Fixed LONG position from last trade: {btc_bought:.8f} BTC @ ${buy_price:.2f}")
+                
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error validating position from trades: {e}")
+            return False
+    
     def save_resume_state(self):
         """Save current position state to resume-auto-trade.json for easy restart."""
         import json

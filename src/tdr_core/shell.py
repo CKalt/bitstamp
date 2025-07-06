@@ -520,6 +520,15 @@ class CryptoShell(cmd.Cmd):
                 self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
                 self.data_manager.position = desired_position
                 self.logger.info(f"Resume: Synced position to data_manager")
+                
+            # Validate position against actual trades
+            self.logger.info("Validating position against trades.json...")
+            if self.auto_trader.validate_position_from_trades():
+                # Sync the corrected values back to data_manager
+                self.data_manager.position_size = self.auto_trader.position_size
+                self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
+                self.data_manager.position = self.auto_trader.position
+                self.logger.info("Position validated and corrected from actual trades")
         
         # Log the auto_trade command to diagnostics
         if hasattr(self.auto_trader, 'diagnostic_logger'):
@@ -1156,6 +1165,38 @@ class CryptoShell(cmd.Cmd):
         else:
             print("Command interface is not enabled")
 
+    def do_validate_position(self, arg):
+        """
+        Validate and fix position tracking based on actual trades in trades.json.
+        This will recalculate entry prices based on the most recent trade.
+        
+        Usage: validate_position
+        """
+        if not self.auto_trader:
+            print("No auto trader running")
+            return
+            
+        print("Validating position against trades.json...")
+        if self.auto_trader.validate_position_from_trades():
+            # Sync to data_manager
+            if hasattr(self.data_manager, 'position_size'):
+                self.data_manager.position_size = self.auto_trader.position_size
+                self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
+                self.data_manager.position = self.auto_trader.position
+            
+            # Show corrected position
+            status = self.auto_trader.get_status()
+            position_info = status.get('position_info', {})
+            print(f"\n✅ Position validated and corrected:")
+            print(f"  • Direction: {position_info.get('position', 'unknown').upper()}")
+            print(f"  • Entry Price: ${position_info.get('entry_price', 0):.2f}")
+            print(f"  • Amount: {position_info.get('amount', 0):.8f}")
+            
+            # Save the corrected state
+            self.auto_trader.save_resume_state()
+        else:
+            print("❌ Failed to validate position")
+    
     def do_fix_position(self, arg):
         """
         Manually fix position tracking when entry price is incorrect.
