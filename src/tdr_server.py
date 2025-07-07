@@ -53,6 +53,8 @@ def auto_load_history():
     global server_config
     try:
         server_config['history_loading'] = True
+        server_config['history_progress'] = 0
+        server_config['history_status'] = 'Starting...'
         logger.info("Auto-loading historical data...")
         
         log_file = 'btcusd.log'
@@ -66,7 +68,34 @@ def auto_load_history():
             end_date = now - timedelta(days=end_back) if end_back else None
             
             logger.info(f"Loading historical data from {log_file}")
-            df = parse_log_file(log_file, start_date=start_date, end_date=end_date)
+            
+            # Create a custom progress callback
+            import sys
+            from io import StringIO
+            
+            # Capture parse_log_file output to parse progress
+            old_stdout = sys.stdout
+            sys.stdout = mystdout = StringIO()
+            
+            try:
+                df = parse_log_file(log_file, start_date=start_date, end_date=end_date)
+                
+                # Parse the output for progress updates
+                output = mystdout.getvalue()
+                for line in output.split('\n'):
+                    if 'Progress:' in line:
+                        # Extract percentage from "Progress: 50.0% - Last date: ..."
+                        try:
+                            percent = float(line.split(':')[1].split('%')[0].strip())
+                            server_config['history_progress'] = percent
+                            server_config['history_status'] = line
+                        except:
+                            pass
+                    elif line.strip():
+                        server_config['history_status'] = line.strip()
+                        
+            finally:
+                sys.stdout = old_stdout
             
             if not df.empty:
                 # Need to process the dataframe like in main tdr.py
@@ -280,6 +309,8 @@ def get_status():
             'live_trading': shell.live_trading if shell else False,
             'history_loaded': server_config.get('history_loaded', False),
             'history_loading': server_config.get('history_loading', False),
+            'history_progress': server_config.get('history_progress', 0),
+            'history_status': server_config.get('history_status', ''),
             'auto_resume': server_config.get('best_strategy', {}).get('auto_resume', False)
         }
         
@@ -289,8 +320,8 @@ def get_status():
                 'usd_balance': data_manager.balance_usd,
                 'position': data_manager.position,
                 'position_size': data_manager.position_size,
-                'entry_price': data_manager.position_cost_basis / data_manager.position_size 
-                              if data_manager.position_size > 0 else 0
+                'entry_price': data_manager.position_cost_basis / abs(data_manager.position_size) 
+                              if data_manager.position_size != 0 else 0
             }
             status['last_price'] = data_manager.last_price.get('btcusd', 0)
         
@@ -373,8 +404,8 @@ def execute_command():
                     'btc_balance': data_manager.balance_btc,
                     'usd_balance': data_manager.balance_usd,
                     'position': data_manager.position,
-                    'entry_price': data_manager.position_cost_basis / data_manager.position_size 
-                                  if data_manager.position_size > 0 else 0
+                    'entry_price': data_manager.position_cost_basis / abs(data_manager.position_size) 
+                                  if data_manager.position_size != 0 else 0
                 }
             
             # Update global auto_trader reference if changed
@@ -518,6 +549,8 @@ def history_status():
     return jsonify({
         'history_loaded': server_config.get('history_loaded', False),
         'history_loading': server_config.get('history_loading', False),
+        'history_progress': server_config.get('history_progress', 0),
+        'history_status': server_config.get('history_status', ''),
         'history_error': server_config.get('history_error', None),
         'record_count': server_config.get('history_record_count', 0)
     }), 200
@@ -536,8 +569,8 @@ def get_config():
             'btc_balance': data_manager.balance_btc if data_manager else 0,
             'usd_balance': data_manager.balance_usd if data_manager else 0,
             'position': data_manager.position if data_manager else 0,
-            'entry_price': data_manager.position_cost_basis / data_manager.position_size 
-                          if data_manager and data_manager.position_size > 0 else 0
+            'entry_price': data_manager.position_cost_basis / abs(data_manager.position_size) 
+                          if data_manager and data_manager.position_size != 0 else 0
         } if data_manager else {}
     }
     

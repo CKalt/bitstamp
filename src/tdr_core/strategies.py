@@ -964,8 +964,18 @@ class MACrossoverStrategy:
                 self.logger.error(f"Trade failed: {result}")
                 self._log_failed_trade(trade_info)
                 return
-            # Update balances & cost basis
-            self.update_balance(trade_type, price, trade_btc)
+            
+            # Use actual fill price from order result if available
+            fill_price = price  # Default to signal price
+            if result.get("price"):
+                try:
+                    fill_price = float(result["price"])
+                    self.logger.info(f"Using actual fill price: ${fill_price:.2f} (vs signal price ${price:.2f})")
+                except:
+                    pass
+            
+            # Update balances & cost basis with actual fill price
+            self.update_balance(trade_type, fill_price, trade_btc)
 
             # (NEW) Append to trades.json right away for live trades
             try:

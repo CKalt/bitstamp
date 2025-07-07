@@ -377,6 +377,43 @@ Initializing connection to remote server...
     def print_response(self, response: Dict[str, Any]):
         """Print formatted response from server"""
         if response.get('success', True):
+            # Check if this is a status command and add server state
+            if response.get('command') == 'status' or response.get('command') == 'status long':
+                # Get current server status
+                try:
+                    status_response = requests.get(f"{self.server_url}/api/status", timeout=5)
+                    if status_response.status_code == 200:
+                        server_status = status_response.json()
+                        
+                        # Show server state header
+                        print("\n📊 Server Status:")
+                        print("━" * 50)
+                        
+                        # History loading state
+                        if server_status.get('history_loading'):
+                            progress = server_status.get('history_progress', 0)
+                            status = server_status.get('history_status', 'Loading...')
+                            print(f"⏳ History: Loading {progress:.1f}% - {status}")
+                        elif server_status.get('history_loaded'):
+                            print(f"✅ History: Loaded")
+                        else:
+                            print(f"❌ History: Not loaded")
+                            
+                        # Auto-trader state
+                        if server_status.get('auto_trader', {}).get('active'):
+                            at = server_status['auto_trader']
+                            print(f"🤖 Auto-Trader: Active ({at.get('strategy', 'Unknown')})")
+                            print(f"   Trades Today: {at.get('trades_today', 0)}")
+                        else:
+                            print(f"🔴 Auto-Trader: Not running")
+                            
+                        # Connection state
+                        print(f"🌐 WebSocket: {server_status.get('websocket', 'unknown')}")
+                        print(f"💰 Live Trading: {'Enabled' if server_status.get('live_trading') else 'Disabled'}")
+                        print("━" * 50)
+                except:
+                    pass  # Don't fail if we can't get server status
+            
             # Print command output
             output = response.get('output', '')
             if output:
@@ -546,12 +583,18 @@ Initializing connection to remote server...
             if response.status_code == 200:
                 data = response.json()
                 print("\n=== History Loading Status ===")
-                print(f"Loaded: {data['history_loaded']}")
-                print(f"Loading: {data['history_loading']}")
+                if data['history_loading']:
+                    progress = data.get('history_progress', 0)
+                    status = data.get('history_status', 'Loading...')
+                    print(f"⏳ Loading: {progress:.1f}% complete")
+                    print(f"   Status: {status}")
+                elif data['history_loaded']:
+                    print(f"✅ Loaded: {data.get('record_count', 0):,} records")
+                else:
+                    print("❌ Not loaded")
+                    
                 if data.get('history_error'):
-                    print(f"Error: {data['history_error']}")
-                if data.get('record_count'):
-                    print(f"Records: {data['record_count']:,}")
+                    print(f"❌ Error: {data['history_error']}")
             else:
                 print(f"Error: {response.text}")
         except Exception as e:
