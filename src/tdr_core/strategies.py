@@ -1102,14 +1102,24 @@ class MACrossoverStrategy:
                     # going from long to short
                     fill_btc_for_long = self.position_size
                     ratio = 1.0  # fully closing that long portion
-                    cost_removed = self.position_cost_basis
-                    self.position_cost_basis -= cost_removed
-                    self.position_size -= fill_btc_for_long
+                    
+                    # Log the transition for debugging
+                    self.logger.info(f"LONG->SHORT transition: closing {fill_btc_for_long:.8f} BTC long, "
+                                   f"opening {fill_btc - fill_btc_for_long:.8f} BTC short @ ${fill_price:.2f}")
+                    
+                    # Reset position tracking for the new SHORT position
+                    self.position_size = 0.0
+                    self.position_cost_basis = 0.0
+                    
                     # leftover portion is new short
                     leftover_btc_for_short = fill_btc - fill_btc_for_long
                     if leftover_btc_for_short > 1e-8:
-                        self.position_size -= leftover_btc_for_short
-                        self.position_cost_basis += leftover_btc_for_short * fill_price
+                        # For a SHORT position:
+                        # position_size = negative BTC amount (what we sold)
+                        # position_cost_basis = total USD received from sales
+                        self.position_size = -leftover_btc_for_short
+                        self.position_cost_basis = leftover_btc_for_short * fill_price
+                        self.logger.info(f"New SHORT position established: {leftover_btc_for_short:.8f} BTC @ ${fill_price:.2f}")
                 else:
                     # partial or full flatten only
                     ratio = fill_btc / self.position_size
@@ -1148,12 +1158,25 @@ class MACrossoverStrategy:
         # BUG FIX: Correct position flag handling - system is never neutral!
         if abs(self.position_size) < 1e-8 and abs(self.balance_btc) < 1e-8:
             # We have ~0 BTC, so we must be SHORT (holding USD)
-            self.position_size = 0.0
-            self.position_cost_basis = 0.0
             if self.balance_usd > 1000:  # Have significant USD = SHORT
                 if self.position != -1:
                     self.logger.warning(f"Position size near zero but position flag is {self.position}. Resetting to SHORT.")
                     self.position = -1  # FIX: Set to SHORT, not neutral!
+                    # For SHORT positions, we need to track the entry price properly
+                    # The position_cost_basis should be the USD received from the sale
+                    # and position_size should be negative BTC amount sold
+                    if self.last_trade_price > 0:
+                        # Calculate the BTC amount that was sold to get this USD
+                        # This is an approximation but necessary when position tracking was lost
+                        btc_sold = self.balance_usd / self.last_trade_price
+                        self.position_size = -btc_sold
+                        self.position_cost_basis = self.balance_usd
+                        self.logger.info(f"SHORT position tracking restored: sold ~{btc_sold:.8f} BTC @ ${self.last_trade_price:.2f}")
+                    else:
+                        # If we don't have last_trade_price, reset to zero but log the issue
+                        self.position_size = 0.0
+                        self.position_cost_basis = 0.0
+                        self.logger.error("Cannot restore SHORT position tracking - no last_trade_price available")
                     self.diagnostic_logger.log_position_anomaly(
                         "Position flag corrected to SHORT",
                         {
