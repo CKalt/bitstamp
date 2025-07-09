@@ -318,7 +318,7 @@ def get_status():
             # Get proper entry price from strategy if available
             if shell and shell.auto_trader and hasattr(shell.auto_trader, 'get_status'):
                 strategy_status = shell.auto_trader.get_status()
-                position_info = strategy_status.get('position', {})
+                position_info = strategy_status.get('position_info', {})
                 entry_price = position_info.get('entry_price', 0)
             else:
                 # Fallback calculation
@@ -331,7 +331,7 @@ def get_status():
                 'position_size': data_manager.position_size,
                 'entry_price': entry_price
             }
-            status['last_price'] = data_manager.last_price.get('btcusd', 0)
+            status['last_price'] = data_manager.last_price.get('btcusd', 0) if isinstance(data_manager.last_price, dict) else data_manager.last_price
         
         if shell and shell.auto_trader:
             status['auto_trader'] = {
@@ -411,7 +411,7 @@ def execute_command():
                 # Get proper entry price from strategy if available
                 if shell and shell.auto_trader and hasattr(shell.auto_trader, 'get_status'):
                     strategy_status = shell.auto_trader.get_status()
-                    position_info = strategy_status.get('position', {})
+                    position_info = strategy_status.get('position_info', {})
                     entry_price = position_info.get('entry_price', 0)
                 else:
                     # Fallback calculation
@@ -580,7 +580,7 @@ def get_config():
     # Get proper entry price from strategy if available
     if data_manager and shell and shell.auto_trader and hasattr(shell.auto_trader, 'get_status'):
         strategy_status = shell.auto_trader.get_status()
-        position_info = strategy_status.get('position', {})
+        position_info = strategy_status.get('position_info', {})
         entry_price = position_info.get('entry_price', 0)
     elif data_manager and data_manager.position_size != 0:
         # Fallback calculation
