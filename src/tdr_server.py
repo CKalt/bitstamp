@@ -115,7 +115,7 @@ def auto_load_history():
                 def progress_updater():
                     elapsed = 0
                     while not stop_updates.is_set():
-                        if server_config['history_progress'] == 0:
+                        if server_config.get('history_progress', 0) == 0:
                             # If still at 0%, show elapsed time
                             server_config['history_status'] = f'Loading historical data... ({elapsed}s elapsed)'
                         stop_updates.wait(1)  # Update every second
