@@ -69,31 +69,66 @@ def auto_load_history():
             
             logger.info(f"Loading historical data from {log_file}")
             
-            # Create a custom progress callback
+            # Create a custom progress monitoring approach
             import sys
             from io import StringIO
+            import threading
             
-            # Capture parse_log_file output to parse progress
-            old_stdout = sys.stdout
-            sys.stdout = mystdout = StringIO()
+            # Set initial progress
+            server_config['history_progress'] = 0
+            server_config['history_status'] = 'Starting to load historical data...'
             
-            try:
-                df = parse_log_file(log_file, start_date=start_date, end_date=end_date)
-                
-                # Parse the output for progress updates
-                output = mystdout.getvalue()
-                for line in output.split('\n'):
-                    if 'Progress:' in line:
-                        # Extract percentage from "Progress: 50.0% - Last date: ..."
+            # Create a thread-safe stdout capture
+            class ProgressCapture:
+                def __init__(self, original_stdout):
+                    self.original = original_stdout
+                    self.buffer = []
+                    
+                def write(self, text):
+                    self.original.write(text)  # Still write to console
+                    self.buffer.append(text)
+                    
+                    # Check for progress updates in real-time
+                    if 'Progress:' in text:
                         try:
-                            percent = float(line.split(':')[1].split('%')[0].strip())
+                            percent = float(text.split(':')[1].split('%')[0].strip())
                             server_config['history_progress'] = percent
-                            server_config['history_status'] = line
+                            server_config['history_status'] = text.strip()
+                            logger.info(f"History loading: {text.strip()}")
                         except:
                             pass
-                    elif line.strip():
-                        server_config['history_status'] = line.strip()
-                        
+                    elif text.strip() and not text.startswith('\r'):
+                        server_config['history_status'] = text.strip()
+                
+                def flush(self):
+                    self.original.flush()
+            
+            # Replace stdout with our progress capture
+            old_stdout = sys.stdout
+            sys.stdout = ProgressCapture(old_stdout)
+            
+            try:
+                logger.info("Starting parse_log_file...")
+                # Start a thread to provide periodic updates if parse_log_file is slow
+                stop_updates = threading.Event()
+                
+                def progress_updater():
+                    elapsed = 0
+                    while not stop_updates.is_set():
+                        if server_config['history_progress'] == 0:
+                            # If still at 0%, show elapsed time
+                            server_config['history_status'] = f'Loading historical data... ({elapsed}s elapsed)'
+                        stop_updates.wait(1)  # Update every second
+                        elapsed += 1
+                
+                update_thread = threading.Thread(target=progress_updater, daemon=True)
+                update_thread.start()
+                
+                df = parse_log_file(log_file, start_date=start_date, end_date=end_date)
+                
+                stop_updates.set()
+                update_thread.join(timeout=0.1)
+                logger.info(f"parse_log_file completed with {len(df) if not df.empty else 0} records")
             finally:
                 sys.stdout = old_stdout
             

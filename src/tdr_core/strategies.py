@@ -347,10 +347,13 @@ class MACrossoverStrategy:
         self.trade_log = []
 
         # Decide which trades file to use (live vs. non-live).
+        # Use absolute path in the project root directory for consistency
+        import os
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         if self.live_trading:
-            self.trade_log_file = 'trades.json'
+            self.trade_log_file = os.path.join(project_root, 'trades.json')
         else:
-            self.trade_log_file = 'non-live-trades.json'
+            self.trade_log_file = os.path.join(project_root, 'non-live-trades.json')
 
         self.last_signal_time = None
         self.last_trade_reason = None
@@ -1246,42 +1249,79 @@ class MACrossoverStrategy:
                 self.logger.warning("No trades found in trades.json")
                 return False
                 
-            # Find the most recent trade
-            last_trade = trades[-1]
+            # Find all trades for the current position (since last position reversal)
+            # Work backwards to find the position entry
+            position_trades = []
+            current_position = None
             
-            # Check if position tracking matches the last trade
+            for trade in reversed(trades):
+                if not current_position:
+                    current_position = 'LONG' if trade['type'] == 'buy' else 'SHORT'
+                    position_trades.append(trade)
+                elif (current_position == 'LONG' and trade['type'] == 'buy') or \
+                     (current_position == 'SHORT' and trade['type'] == 'sell'):
+                    # Same direction, part of current position
+                    position_trades.append(trade)
+                else:
+                    # Position reversal found, stop here
+                    break
+            
+            # Reverse to get chronological order
+            position_trades.reverse()
+            
+            if not position_trades:
+                self.logger.warning("No position trades found")
+                return False
+            
+            # Calculate average entry price for multi-part trades
+            total_btc = 0.0
+            total_cost = 0.0
+            
+            for trade in position_trades:
+                btc_amount = float(trade['amount'])
+                price = float(trade['price'])
+                total_btc += btc_amount
+                total_cost += btc_amount * price
+            
+            avg_entry_price = total_cost / total_btc if total_btc > 0 else 0
+            
+            # Check if position tracking matches the trades
+            last_trade = trades[-1]
             if last_trade['type'] == 'sell':
                 # Should be SHORT
                 if self.position != -1:
                     self.logger.warning(f"Position mismatch: system thinks {self.position} but last trade was SELL")
                     
-                # Recalculate position tracking from last trade
-                btc_sold = float(last_trade['amount'])
-                sell_price = float(last_trade['price'])
-                
+                # Set position tracking from aggregated trades
                 self.position = -1
-                self.position_size = -btc_sold
-                self.position_cost_basis = btc_sold * sell_price
-                self.last_trade_price = sell_price
+                self.position_size = -total_btc
+                self.position_cost_basis = total_cost
+                self.last_trade_price = float(last_trade['price'])
                 
-                self.logger.info(f"Fixed SHORT position from last trade: {btc_sold:.8f} BTC @ ${sell_price:.2f}")
-                self.logger.info(f"Entry price: ${self.position_cost_basis / abs(self.position_size):.2f}")
+                self.logger.info(f"Validated SHORT position from {len(position_trades)} trades:")
+                self.logger.info(f"  Total BTC sold: {total_btc:.8f}")
+                self.logger.info(f"  Average entry price: ${avg_entry_price:.2f}")
+                self.logger.info(f"  Total proceeds: ${total_cost:.2f}")
+                if len(position_trades) > 1:
+                    self.logger.info(f"  (Multi-part trade with {len(position_trades)} parts)")
                 
             elif last_trade['type'] == 'buy':
                 # Should be LONG
                 if self.position != 1:
                     self.logger.warning(f"Position mismatch: system thinks {self.position} but last trade was BUY")
                     
-                # Recalculate position tracking from last trade
-                btc_bought = float(last_trade['amount'])
-                buy_price = float(last_trade['price'])
-                
+                # Set position tracking from aggregated trades
                 self.position = 1
-                self.position_size = btc_bought
-                self.position_cost_basis = btc_bought * buy_price
-                self.last_trade_price = buy_price
+                self.position_size = total_btc
+                self.position_cost_basis = total_cost
+                self.last_trade_price = float(last_trade['price'])
                 
-                self.logger.info(f"Fixed LONG position from last trade: {btc_bought:.8f} BTC @ ${buy_price:.2f}")
+                self.logger.info(f"Validated LONG position from {len(position_trades)} trades:")
+                self.logger.info(f"  Total BTC bought: {total_btc:.8f}")
+                self.logger.info(f"  Average entry price: ${avg_entry_price:.2f}")
+                self.logger.info(f"  Total cost: ${total_cost:.2f}")
+                if len(position_trades) > 1:
+                    self.logger.info(f"  (Multi-part trade with {len(position_trades)} parts)")
                 
             return True
             

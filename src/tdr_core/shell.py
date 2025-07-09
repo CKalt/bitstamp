@@ -795,7 +795,9 @@ class CryptoShell(cmd.Cmd):
             if len(parts) == 0:
                 import json
                 import os
-                resume_file = os.path.abspath('resume-auto-trade.json')
+                # Use project root for consistency with server
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                resume_file = os.path.join(project_root, 'resume-auto-trade.json')
                 
                 if not os.path.exists(resume_file):
                     print(f"No resume file found at {resume_file}")
@@ -817,6 +819,51 @@ class CryptoShell(cmd.Cmd):
                 print(f"Last Updated:  {resume_data['timestamp']}")
                 print(f"\nCommand: {resume_data['command']}")
                 print("="*60)
+                
+                # Validate against trades.json if available
+                trades_file = os.path.join(project_root, 'trades.json')
+                if os.path.exists(trades_file):
+                    print("\nValidating against trades.json...")
+                    with open(trades_file, 'r') as f:
+                        trades = json.load(f)
+                    
+                    if trades:
+                        # Find all trades for current position
+                        position_trades = []
+                        current_position = None
+                        
+                        for trade in reversed(trades):
+                            if not current_position:
+                                current_position = 'LONG' if trade['type'] == 'buy' else 'SHORT'
+                                position_trades.append(trade)
+                            elif (current_position == 'LONG' and trade['type'] == 'buy') or \
+                                 (current_position == 'SHORT' and trade['type'] == 'sell'):
+                                position_trades.append(trade)
+                            else:
+                                break
+                        
+                        position_trades.reverse()
+                        
+                        # Calculate actual position from trades
+                        total_btc = sum(float(t['amount']) for t in position_trades)
+                        total_cost = sum(float(t['amount']) * float(t['price']) for t in position_trades)
+                        actual_entry_price = total_cost / total_btc if total_btc > 0 else 0
+                        
+                        print(f"\n✓ Found {len(position_trades)} trades for current position")
+                        print(f"✓ Actual entry price from trades: ${actual_entry_price:.2f}")
+                        
+                        # Check if entry prices match
+                        price_diff = abs(actual_entry_price - resume_data['entry_price'])
+                        if price_diff > 10:  # Allow $10 difference for rounding
+                            print(f"\n⚠️  WARNING: Entry price mismatch!")
+                            print(f"   Resume file shows: ${resume_data['entry_price']:.2f}")
+                            print(f"   Trades.json shows: ${actual_entry_price:.2f}")
+                            print(f"   Difference: ${price_diff:.2f}")
+                            
+                            use_trades = input("\nUse entry price from trades.json? (yes/no): ").strip().lower()
+                            if use_trades in ['yes', 'y']:
+                                resume_data['entry_price'] = actual_entry_price
+                                print(f"✓ Using entry price from trades.json: ${actual_entry_price:.2f}")
                 
                 # Ask for confirmation
                 response = input("\nDo you want to resume with these values? (yes/no): ").strip().lower()
