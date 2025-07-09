@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-01-08T00:01:00Z",
+  "command": "trades",
+  "source": "claude_entry_price_bug_check",
+  "args": "",
+  "result": {
+    "auto_trader": {
+      "active": true,
+      "strategy": "AdaptiveMultiStrategy"
+    },
+    "command": "trades",
+    "output": "",
+    "success": true,
+    "timestamp": "2025-07-08T19:02:26.167516"
+  },
+  "processed_at": "2025-07-08T15:02:26.119267"
+}

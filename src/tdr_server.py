@@ -315,13 +315,21 @@ def get_status():
         }
         
         if data_manager:
+            # Get proper entry price from strategy if available
+            if shell and shell.auto_trader and hasattr(shell.auto_trader, 'get_status'):
+                strategy_status = shell.auto_trader.get_status()
+                position_info = strategy_status.get('position', {})
+                entry_price = position_info.get('entry_price', 0)
+            else:
+                # Fallback calculation
+                entry_price = data_manager.position_cost_basis / abs(data_manager.position_size) if data_manager.position_size != 0 else 0
+            
             status['position'] = {
                 'btc_balance': data_manager.balance_btc,
                 'usd_balance': data_manager.balance_usd,
                 'position': data_manager.position,
                 'position_size': data_manager.position_size,
-                'entry_price': data_manager.position_cost_basis / abs(data_manager.position_size) 
-                              if data_manager.position_size != 0 else 0
+                'entry_price': entry_price
             }
             status['last_price'] = data_manager.last_price.get('btcusd', 0)
         
@@ -400,12 +408,20 @@ def execute_command():
             
             # Add state updates for relevant commands
             if any(cmd in command for cmd in ['buy', 'sell', 'status', 'position', 'auto_trade']):
+                # Get proper entry price from strategy if available
+                if shell and shell.auto_trader and hasattr(shell.auto_trader, 'get_status'):
+                    strategy_status = shell.auto_trader.get_status()
+                    position_info = strategy_status.get('position', {})
+                    entry_price = position_info.get('entry_price', 0)
+                else:
+                    # Fallback calculation
+                    entry_price = data_manager.position_cost_basis / abs(data_manager.position_size) if data_manager.position_size != 0 else 0
+                
                 result['position'] = {
                     'btc_balance': data_manager.balance_btc,
                     'usd_balance': data_manager.balance_usd,
                     'position': data_manager.position,
-                    'entry_price': data_manager.position_cost_basis / abs(data_manager.position_size) 
-                                  if data_manager.position_size != 0 else 0
+                    'entry_price': entry_price
                 }
             
             # Update global auto_trader reference if changed
@@ -561,6 +577,17 @@ def get_config():
     if not initialization_complete:
         return jsonify({'error': 'Server not initialized'}), 503
     
+    # Get proper entry price from strategy if available
+    if data_manager and shell and shell.auto_trader and hasattr(shell.auto_trader, 'get_status'):
+        strategy_status = shell.auto_trader.get_status()
+        position_info = strategy_status.get('position', {})
+        entry_price = position_info.get('entry_price', 0)
+    elif data_manager and data_manager.position_size != 0:
+        # Fallback calculation
+        entry_price = data_manager.position_cost_basis / abs(data_manager.position_size)
+    else:
+        entry_price = 0
+    
     config_data = {
         'server_config': server_config,
         'live_trading': order_placer.do_live_trades if order_placer else False,
@@ -569,8 +596,7 @@ def get_config():
             'btc_balance': data_manager.balance_btc if data_manager else 0,
             'usd_balance': data_manager.balance_usd if data_manager else 0,
             'position': data_manager.position if data_manager else 0,
-            'entry_price': data_manager.position_cost_basis / abs(data_manager.position_size) 
-                          if data_manager and data_manager.position_size != 0 else 0
+            'entry_price': entry_price
         } if data_manager else {}
     }
     

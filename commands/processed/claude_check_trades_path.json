@@ -1,0 +1,13 @@
+{
+  "timestamp": "2025-01-07T05:20:00Z",
+  "command": "logs server 20",
+  "source": "claude_check_trades_path",
+  "args": "",
+  "result": {
+    "command": "logs server 20",
+    "output": "",
+    "success": true,
+    "timestamp": "2025-07-07T05:18:13.837855"
+  },
+  "processed_at": "2025-07-07T01:18:13.819052"
+}

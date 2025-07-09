@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-01-07T05:16:00Z",
+  "command": "fix_position 108602",
+  "source": "claude_fix_position",
+  "args": "",
+  "result": {
+    "auto_trader": {
+      "active": true,
+      "strategy": "AdaptiveMultiStrategy"
+    },
+    "command": "fix_position 108602",
+    "output": "\u2705 Fixed SHORT position tracking:\n   Entry Price: $108602.00\n   BTC Sold: 1.51253824\n   USD Held: $164264.68\n   Cost Basis: $164264.68\n",
+    "position": {
+      "btc_balance": 1.52275326,
+      "entry_price": 108602.0,
+      "position": -1,
+      "usd_balance": 0
+    },
+    "success": true,
+    "timestamp": "2025-07-07T05:14:05.170779"
+  },
+  "processed_at": "2025-07-07T01:14:05.147038"
+}

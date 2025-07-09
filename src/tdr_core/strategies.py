@@ -1166,12 +1166,14 @@ class MACrossoverStrategy:
                     # The position_cost_basis should be the USD received from the sale
                     # and position_size should be negative BTC amount sold
                     if self.last_trade_price > 0:
-                        # Calculate the BTC amount that was sold to get this USD
-                        # This is an approximation but necessary when position tracking was lost
-                        btc_sold = self.balance_usd / self.last_trade_price
-                        self.position_size = -btc_sold
-                        self.position_cost_basis = self.balance_usd
-                        self.logger.info(f"SHORT position tracking restored: sold ~{btc_sold:.8f} BTC @ ${self.last_trade_price:.2f}")
+                        # For a SHORT position, we don't actually set tracking here
+                        # because we're currently LONG (have BTC). This code path
+                        # is for when position_size is near zero but we have USD,
+                        # which shouldn't happen in normal operation.
+                        # Just log the anomaly without setting incorrect values
+                        self.logger.warning(f"Position tracking anomaly: position_size near zero with USD balance")
+                        self.position_size = 0.0
+                        self.position_cost_basis = 0.0
                     else:
                         # If we don't have last_trade_price, reset to zero but log the issue
                         self.position_size = 0.0

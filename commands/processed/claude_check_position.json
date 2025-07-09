@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-01-08T00:10:00Z",
+  "command": "status",
+  "source": "claude_verify_fix",
+  "args": "",
+  "result": {
+    "auto_trader": {
+      "active": true,
+      "strategy": "AdaptiveMultiStrategy"
+    },
+    "command": "status",
+    "output": "\nPosition Details (Short View):\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n  \u2022 Direction: Short\n  \u2022 Current Price:  $109046.00\n  \u2022 Entry Price:    $108996.00\n  \u2022 Short Position (holding USD): $166415.76\n  \u2022 BTC Equivalent: 1.52680614 BTC\n  \u2022 Unrealized PnL:  $-75.67\n\n  \ud83c\udfaf Adaptive Strategy:\n  \u2022 Market Regime: TRENDING\n  \u2022 Confidence: 58.3%\n  \u2022 Active Strategy: RANGING\n  \u2022 Strategy Switches Today: 8\n  \u2022 RANGING Performance: 5 trades executed\n\n",
+    "position": {
+      "btc_balance": 1.52275326,
+      "entry_price": 108996.0,
+      "position": -1,
+      "usd_balance": 0
+    },
+    "success": true,
+    "timestamp": "2025-07-08T19:08:54.963157"
+  },
+  "processed_at": "2025-07-08T15:08:54.939296"
+}
