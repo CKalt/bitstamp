@@ -98,6 +98,7 @@ def auto_load_history():
                     self.original = original_stdout
                     self.buffer = []
                     self.last_progress = -1
+                    self.reached_100 = False
                     
                 def write(self, text):
                     self.original.write(text)  # Still write to console
@@ -110,19 +111,24 @@ def auto_load_history():
                             # Cap progress at 100% - percentages over 100 are confusing
                             percent = min(percent, 100.0)
                             server_config['history_progress'] = percent
-                            # Replace the percentage in the status text too
-                            if percent >= 100.0:
-                                server_config['history_status'] = text.split(':')[0] + ': 100.0% - ' + text.split('-', 1)[-1].strip()
-                            else:
-                                server_config['history_status'] = text.strip()
+                            # Update status with progress info
+                            server_config['history_status'] = text.strip()
+                            
                             # Only log if progress changed by at least 0.1%
                             if abs(percent - self.last_progress) >= 0.1:
                                 logger.info(f"History loading: Progress: {percent:.1f}%")
                                 self.last_progress = percent
+                            
+                            # Track when we reach 100%
+                            if percent >= 100.0:
+                                self.reached_100 = True
                         except:
                             pass
                     elif text.strip() and not text.startswith('\r'):
-                        server_config['history_status'] = text.strip()
+                        # Only update status with non-progress messages if we haven't reached 100%
+                        # This prevents "Creating DataFrame..." from overwriting the 100% status
+                        if not self.reached_100:
+                            server_config['history_status'] = text.strip()
                 
                 def flush(self):
                     self.original.flush()

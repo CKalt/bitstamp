@@ -4,6 +4,11 @@ import json
 import os
 import pandas as pd
 from datetime import datetime
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def create_metadata_file(log_file_path, metadata_file_path):
     print("Creating metadata file...")
@@ -125,12 +130,13 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     # Final progress update only if we haven't already printed 100%
     if last_progress_printed < 100.0:
         print(f"Progress: 100.0% - Last date: {last_date}")
-    print(f"\nFinished processing log file. Last date processed: {last_date}")
-    print(f"Total entries skipped: {skipped_count}")
-    print(f"Total entries processed: {processed_count}")
+    
+    # Log completion details without overwriting progress status
+    logger.info(f"Finished processing log file. Last date: {last_date}")
+    logger.info(f"Total entries skipped: {skipped_count}")
+    logger.info(f"Total entries processed: {processed_count}")
     if end_reached:
-        print(f"Reached end date: {end_date}")
-    print("Creating DataFrame...")
+        logger.info(f"Reached end date: {end_date}")
     df = pd.DataFrame(data)
 
     # Optimize data types
