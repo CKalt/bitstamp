@@ -526,17 +526,10 @@ Initializing connection to remote server...
                         
                         # History loading state
                         if server_status.get('history_loading'):
-                            overall_progress = server_status.get('history_progress', 0)
-                            file_progress = server_status.get('file_progress', 0)
-                            phase = server_status.get('current_phase', 'unknown')
                             status = server_status.get('history_status', 'Loading...')
-                            
-                            # Show both progress indicators
-                            print(f"⏳ History Loading:")
-                            print(f"   File Reading: {file_progress:.0f}% {'✓' if file_progress >= 100 else ''}")
-                            print(f"   Overall Progress: {overall_progress:.0f}%")
-                            print(f"   Status: {status}")
+                            print(f"⏳ History: {status}")
                         elif server_status.get('history_loaded'):
+                            record_count = server_status.get('position', {}).get('history_record_count', 0)
                             print(f"✅ History: Loaded")
                         else:
                             print(f"❌ History: Not loaded")
@@ -798,20 +791,15 @@ Initializing connection to remote server...
                 data = response.json()
                 print("\n=== History Loading Status ===")
                 if data['history_loading']:
-                    overall_progress = data.get('history_progress', 0)
-                    file_progress = data.get('file_progress', 0)
-                    phase = data.get('current_phase', 'unknown')
                     status = data.get('history_status', 'Loading...')
+                    phase = data.get('current_phase', 'unknown')
                     
-                    print(f"⏳ Loading in progress:")
-                    print(f"   File Reading: {file_progress:.0f}% {'✓ Complete' if file_progress >= 100 else ''}")
-                    print(f"   Overall Progress: {overall_progress:.0f}%")
-                    print(f"   Current Phase: {phase}")
-                    print(f"   Status: {status}")
+                    print(f"⏳ {status}")
+                    if phase and phase != 'unknown':
+                        phase_display = phase.replace('_', ' ').title()
+                        print(f"   Phase: {phase_display}")
                 elif data['history_loaded']:
-                    print(f"✅ Loaded: {data.get('record_count', 0):,} records")
-                    print(f"   File Reading: 100% ✓")
-                    print(f"   Overall Progress: 100% ✓")
+                    print(f"✅ Complete: {data.get('record_count', 0):,} records loaded")
                 else:
                     print("❌ Not loaded")
                     

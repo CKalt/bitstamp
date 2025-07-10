@@ -67,9 +67,7 @@ def auto_load_history():
         server_config['history_loading'] = True
     
     try:
-        server_config['history_progress'] = 0
-        server_config['file_progress'] = 0
-        server_config['history_status'] = 'Starting...'
+        server_config['history_status'] = 'Starting to load historical data...'
         server_config['current_phase'] = 'starting'
         logger.info("Auto-loading historical data...")
         
@@ -90,11 +88,9 @@ def auto_load_history():
             from io import StringIO
             import threading
             
-            # Set initial progress
-            server_config['history_progress'] = 0
-            server_config['file_progress'] = 0
-            server_config['history_status'] = 'Phase 1: Reading file...'
-            server_config['current_phase'] = 'reading_file'
+            # Set initial status
+            server_config['history_status'] = 'Starting to read historical data...'
+            server_config['current_phase'] = 'starting'
             
             # Create a thread-safe stdout capture
             class ProgressCapture:
@@ -108,37 +104,22 @@ def auto_load_history():
                     self.original.write(text)  # Still write to console
                     self.buffer.append(text)
                     
-                    # Check for progress updates in real-time
-                    if 'Progress:' in text:
-                        try:
-                            percent = float(text.split(':')[1].split('%')[0].strip())
-                            # Cap progress at 100% - percentages over 100 are confusing
-                            percent = min(percent, 100.0)
-                            
-                            # Update file reading progress
-                            server_config['file_progress'] = percent
-                            
-                            # Overall progress: file reading is 0-80% of total
-                            overall_progress = percent * 0.8
-                            server_config['history_progress'] = overall_progress
-                            
-                            # Update status with phase info
-                            date_part = text.split('-', 1)[-1].strip() if '-' in text else ''
-                            server_config['history_status'] = f"Phase 1: Reading file ({percent:.0f}%) - {date_part}"
-                            
-                            # Only log if progress changed by at least 0.1%
-                            if abs(percent - self.last_progress) >= 0.1:
-                                logger.info(f"File reading: {percent:.1f}% (Overall: {overall_progress:.0f}%)")
-                                self.last_progress = percent
-                            
-                            # Track when file reading reaches 100%
-                            if percent >= 100.0:
-                                self.reached_100 = True
-                                server_config['current_phase'] = 'creating_dataframe'
-                                server_config['history_status'] = "Phase 2: Creating DataFrame..."
-                                server_config['history_progress'] = 80  # File reading complete = 80% overall
-                        except:
-                            pass
+                    # Capture status updates
+                    if text.strip() and text.startswith('Status:'):
+                        status_msg = text.strip()
+                        server_config['history_status'] = status_msg
+                        
+                        # Update phase based on status
+                        if 'Reading historical data' in status_msg:
+                            server_config['current_phase'] = 'reading_file'
+                        elif 'Finished reading' in status_msg:
+                            server_config['current_phase'] = 'processing'
+                        elif 'Creating DataFrame' in status_msg:
+                            server_config['current_phase'] = 'creating_dataframe'
+                        elif 'DataFrame created' in status_msg:
+                            server_config['current_phase'] = 'dataframe_ready'
+                        
+                        logger.info(f"History loading: {status_msg}")
                 
                 def flush(self):
                     self.original.flush()
@@ -173,10 +154,9 @@ def auto_load_history():
                 sys.stdout = old_stdout
             
             if not df.empty:
-                # Phase 2: DataFrame processing (80-90%)
+                # Processing DataFrame
                 server_config['current_phase'] = 'processing_dataframe'
-                server_config['history_status'] = "Phase 2: Processing DataFrame..."
-                server_config['history_progress'] = 85
+                server_config['history_status'] = "Status: Processing DataFrame columns..."
                 logger.info("Processing DataFrame...")
                 
                 # Need to process the dataframe like in main tdr.py
@@ -188,10 +168,9 @@ def auto_load_history():
                 if 'volume' not in df.columns:
                     df['volume'] = df.get('amount', 0.0)
                 
-                # Phase 3: Loading into data manager (90-100%)
+                # Loading into data manager
                 server_config['current_phase'] = 'loading_data'
-                server_config['history_status'] = "Phase 3: Loading into data manager..."
-                server_config['history_progress'] = 90
+                server_config['history_status'] = "Status: Loading data into manager..."
                 logger.info("Loading data into manager...")
                 
                 data_manager.load_historical_data({'btcusd': df})
@@ -201,10 +180,8 @@ def auto_load_history():
         # Final completion
         server_config['history_loaded'] = True
         server_config['history_loading'] = False
-        server_config['history_progress'] = 100.0
-        server_config['file_progress'] = 100.0
         server_config['current_phase'] = 'complete'
-        server_config['history_status'] = f"Complete - {server_config.get('history_record_count', 0)} records loaded"
+        server_config['history_status'] = f"Status: Complete - {server_config.get('history_record_count', 0):,} records loaded"
         logger.info("Historical data loaded successfully")
         
         # Check if auto_resume is enabled
@@ -459,8 +436,6 @@ def get_status():
             'live_trading': shell.live_trading if shell else False,
             'history_loaded': server_config.get('history_loaded', False),
             'history_loading': server_config.get('history_loading', False),
-            'history_progress': server_config.get('history_progress', 0),
-            'file_progress': server_config.get('file_progress', 0),
             'current_phase': server_config.get('current_phase', 'not_started'),
             'history_status': server_config.get('history_status', ''),
             'auto_resume': server_config.get('best_strategy', {}).get('auto_resume', False)
@@ -753,8 +728,6 @@ def history_status():
     return jsonify({
         'history_loaded': server_config.get('history_loaded', False),
         'history_loading': server_config.get('history_loading', False),
-        'history_progress': server_config.get('history_progress', 0),
-        'file_progress': server_config.get('file_progress', 0),
         'current_phase': server_config.get('current_phase', 'not_started'),
         'history_status': server_config.get('history_status', ''),
         'history_error': server_config.get('history_error', None),

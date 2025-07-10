@@ -79,27 +79,22 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     processed_count = 0
     end_reached = False
     
-    # Calculate progress interval based on lines we'll actually process
+    # Calculate interval for status updates
     lines_to_process = total_lines - start_line + 1
-    # Show 10 progress updates based on lines to process, not total lines
-    progress_interval = max(lines_to_process // 10, 1)
-    next_progress_line = start_line + progress_interval
-    last_progress_printed = -1
+    # Show status updates periodically
+    status_interval = max(lines_to_process // 10, 100000)  # At least every 100k lines
+    next_status_line = start_line + status_interval
 
     with open(file_path, 'r') as file:
         for i, line in enumerate(file, 1):
             if i < start_line:
                 continue
 
-            # Check if we've reached a progress milestone
-            if i >= next_progress_line:
+            # Show status updates periodically
+            if i >= next_status_line:
                 lines_processed = i - start_line + 1
-                progress = min(lines_processed / lines_to_process * 100, 100.0)
-                # Only print if progress has actually changed
-                if progress != last_progress_printed:
-                    print(f"Progress: {progress:.1f}% - Last date: {last_date}")
-                    last_progress_printed = progress
-                next_progress_line += progress_interval
+                print(f"Status: Reading historical data - {lines_processed:,} lines processed - Last date: {last_date}")
+                next_status_line += status_interval
 
             try:
                 json_data = json.loads(line)
@@ -127,17 +122,22 @@ def parse_log_file(file_path, start_date=None, end_date=None):
             except json.JSONDecodeError:
                 continue
 
-    # Final progress update only if we haven't already printed 100%
-    if last_progress_printed < 100.0:
-        print(f"Progress: 100.0% - Last date: {last_date}")
+    # Final status update
+    print(f"Status: Finished reading {processed_count:,} trades - Last date: {last_date}")
     
-    # Log completion details without overwriting progress status
-    logger.info(f"Finished processing log file. Last date: {last_date}")
+    # Log completion details
+    logger.info(f"Finished reading log file. Last date: {last_date}")
     logger.info(f"Total entries skipped: {skipped_count}")
     logger.info(f"Total entries processed: {processed_count}")
     if end_reached:
         logger.info(f"Reached end date: {end_date}")
+    
+    # Creating DataFrame is a significant operation - signal this
+    print(f"Status: Creating DataFrame from {processed_count:,} trades...")
     df = pd.DataFrame(data)
+    
+    # Signal completion after DataFrame is created
+    print("Status: DataFrame created successfully")
 
     # Optimize data types
     df['price'] = pd.to_numeric(df['price'], downcast='float')
