@@ -168,6 +168,8 @@ def auto_load_history():
         
         server_config['history_loaded'] = True
         server_config['history_loading'] = False
+        server_config['history_progress'] = 100.0
+        server_config['history_status'] = f"Completed - {server_config.get('history_record_count', 0)} records loaded"
         logger.info("Historical data loaded successfully")
         
         # Check if auto_resume is enabled
@@ -210,7 +212,9 @@ def auto_load_history():
     except Exception as e:
         logger.error(f"Error loading history: {e}")
         server_config['history_loading'] = False
+        server_config['history_loaded'] = False
         server_config['history_error'] = str(e)
+        server_config['history_status'] = f"Error: {str(e)}"
 
 def setup_logging(verbose=False):
     """Configure server logging"""
