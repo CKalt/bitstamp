@@ -555,7 +555,11 @@ class CryptoShell(cmd.Cmd):
 
         # Only create theoretical trade if we have NO real trades
         # Check if we have actual trades first
-        has_real_trades = self.auto_trader.trades_executed > 0 or self.auto_trader.validate_position_from_trades()
+        self.logger.info(f"Checking for real trades: trades_executed={self.auto_trader.trades_executed}")
+        position_validated = self.auto_trader.validate_position_from_trades()
+        self.logger.info(f"Position validation from trades.json: {position_validated}")
+        has_real_trades = self.auto_trader.trades_executed > 0 or position_validated
+        self.logger.info(f"Has real trades: {has_real_trades}")
         
         if desired_position == 1 and hist_position == 1 and current_market_price > 0 and not has_real_trades:
             if self.auto_trader.position_size < 1e-8 and not self.auto_trader.theoretical_trade:  # No position and no theoretical trade
