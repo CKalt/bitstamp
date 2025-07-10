@@ -554,7 +554,10 @@ class CryptoShell(cmd.Cmd):
             'btcusd') or 0.0
 
         # Only create theoretical trade if we have NO real trades
-        if desired_position == 1 and hist_position == 1 and current_market_price > 0:
+        # Check if we have actual trades first
+        has_real_trades = self.auto_trader.trades_executed > 0 or self.auto_trader.validate_position_from_trades()
+        
+        if desired_position == 1 and hist_position == 1 and current_market_price > 0 and not has_real_trades:
             if self.auto_trader.position_size < 1e-8 and not self.auto_trader.theoretical_trade:  # No position and no theoretical trade
                 # Check if we already loaded from trades.json
                 if abs(self.auto_trader.position_size) < 1e-8:
@@ -636,7 +639,7 @@ class CryptoShell(cmd.Cmd):
                 self.logger.info(
                     f"Case 1: LONG matches system. Theoretical entry: {amount_num:.8f} BTC @ ${current_market_price:.2f}")
 
-            elif desired_position == -1:  # Case 3: Both short
+            elif desired_position == -1 and not has_real_trades:  # Case 3: Both short
                 short_btc = amount_num / current_market_price
                 self.auto_trader.position = -1
                 # FIX: Track short position properly

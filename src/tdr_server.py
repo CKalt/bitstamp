@@ -698,6 +698,116 @@ def history_status():
         'record_count': server_config.get('history_record_count', 0)
     }), 200
 
+@app.route('/api/fix_entry_price', methods=['POST'])
+def fix_entry_price():
+    """Recalculate and fix entry price from trades.json"""
+    if not initialization_complete:
+        return jsonify({'error': 'Server not initialized'}), 503
+    
+    try:
+        # Load trades.json
+        trades_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'trades.json')
+        if not os.path.exists(trades_file):
+            return jsonify({'error': 'trades.json not found'}), 404
+            
+        with open(trades_file, 'r') as f:
+            trades = json.load(f)
+        
+        if not trades:
+            return jsonify({'error': 'No trades found'}), 404
+        
+        # Find all trades for current position
+        position_trades = []
+        current_position = None
+        
+        for trade in reversed(trades):
+            if not current_position:
+                current_position = 'LONG' if trade['type'] == 'buy' else 'SHORT'
+                position_trades.append(trade)
+            elif (current_position == 'LONG' and trade['type'] == 'buy') or \
+                 (current_position == 'SHORT' and trade['type'] == 'sell'):
+                position_trades.append(trade)
+            else:
+                break
+        
+        position_trades.reverse()
+        
+        # Calculate correct average entry price
+        total_btc = sum(float(t['amount']) for t in position_trades)
+        total_cost = sum(float(t['amount']) * float(t.get('order_result', t).get('price', t['price'])) for t in position_trades)
+        avg_entry_price = total_cost / total_btc if total_btc > 0 else 0
+        
+        logger.info(f"Calculated correct entry price from {len(position_trades)} trades:")
+        logger.info(f"  Total BTC: {total_btc:.8f}")
+        logger.info(f"  Total Cost: ${total_cost:.2f}")
+        logger.info(f"  Average Entry Price: ${avg_entry_price:.2f}")
+        
+        # Update data_manager position tracking
+        if data_manager:
+            if current_position == 'LONG':
+                data_manager.position = 1
+                data_manager.position_size = total_btc
+                data_manager.position_cost_basis = total_cost
+                data_manager.last_trade_price = avg_entry_price
+                logger.info("Updated data_manager with correct LONG position")
+            elif current_position == 'SHORT':
+                data_manager.position = -1
+                data_manager.position_size = -total_btc
+                data_manager.position_cost_basis = total_cost
+                data_manager.last_trade_price = avg_entry_price
+                logger.info("Updated data_manager with correct SHORT position")
+        
+        # Update auto_trader if running
+        if shell and shell.auto_trader:
+            shell.auto_trader.position = data_manager.position
+            shell.auto_trader.position_size = data_manager.position_size
+            shell.auto_trader.position_cost_basis = data_manager.position_cost_basis
+            shell.auto_trader.last_trade_price = avg_entry_price
+            
+            # Clear any theoretical trade
+            if hasattr(shell.auto_trader, 'theoretical_trade'):
+                shell.auto_trader.theoretical_trade = None
+            
+            logger.info("Updated auto_trader with correct position")
+            
+            # Force save resume state with correct values
+            shell.auto_trader.save_resume_state()
+        
+        # Update best_strategy.json with correct Last_Trade_Price
+        best_strategy_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'best_strategy.json')
+        if os.path.exists(best_strategy_file):
+            with open(best_strategy_file, 'r') as f:
+                best_strategy = json.load(f)
+            
+            # Get the last actual trade price (not average)
+            last_trade = position_trades[-1] if position_trades else None
+            if last_trade:
+                last_price = float(last_trade.get('order_result', last_trade).get('price', last_trade['price']))
+                best_strategy['Last_Trade_Price'] = last_price
+                best_strategy['Last_Trade_Timestamp'] = int(datetime.strptime(last_trade['timestamp'], '%Y-%m-%d %H:%M:%S').timestamp())
+                
+                with open(best_strategy_file, 'w') as f:
+                    json.dump(best_strategy, f, indent=2)
+                
+                logger.info(f"Updated best_strategy.json with Last_Trade_Price: ${last_price:.2f}")
+        
+        # Update server config
+        if server_config and 'best_strategy' in server_config:
+            server_config['best_strategy']['Last_Trade_Price'] = avg_entry_price
+        
+        return jsonify({
+            'success': True,
+            'current_position': current_position,
+            'total_btc': total_btc,
+            'average_entry_price': avg_entry_price,
+            'trades_count': len(position_trades),
+            'message': f'Fixed entry price to ${avg_entry_price:.2f} from {len(position_trades)} trades'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fixing entry price: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/best_strategy', methods=['GET'])
 def get_best_strategy():
     """Get the server's best_strategy.json"""

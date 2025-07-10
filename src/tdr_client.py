@@ -645,6 +645,40 @@ Initializing connection to remote server...
         self.print_response(response)
         self.update_status()
     
+    def do_fix_entry_price(self, args):
+        """Fix entry price by recalculating from trades.json
+        
+        This command:
+        - Calculates the correct average entry price from actual trades
+        - Updates resume-auto-trade.json with the correct entry price
+        - Updates best_strategy.json with the correct Last_Trade_Price
+        - Fixes the position tracking in the running auto-trader
+        """
+        try:
+            print("Fixing entry price from trades.json...")
+            response = requests.post(f"{self.server_url}/api/fix_entry_price", timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                print(f"\n✅ Entry price fixed successfully!")
+                print(f"  Position: {data['current_position']}")
+                print(f"  Total BTC: {data['total_btc']:.8f}")
+                print(f"  Correct Entry Price: ${data['average_entry_price']:.2f}")
+                print(f"  Based on: {data['trades_count']} trades")
+                
+                # Sync best_strategy.json from server
+                print("\nSyncing best_strategy.json from server...")
+                self.config = self.load_configuration(sync_from_server=True)
+                
+                # Update status to show new values
+                self.update_status()
+                self.do_status("")
+            else:
+                print(f"Error: {response.text}")
+                
+        except Exception as e:
+            print(f"Error fixing entry price: {e}")
+    
     def do_trades(self, args):
         """Show recent trades from server
         Usage: trades [limit]"""
