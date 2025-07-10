@@ -522,6 +522,26 @@ Initializing connection to remote server...
         except Exception as e:
             print(f"Error: {e}")
     
+    def do_resume_auto_trade(self, args):
+        """Resume auto-trading from saved state or with manual parameters
+        
+        Usage: 
+          resume_auto_trade                              # Use saved resume-auto-trade.json
+          resume_auto_trade 1.55612586btc long 107374   # Manual LONG position
+          resume_auto_trade 167500usd short 107263      # Manual SHORT position
+        """
+        # Forward to server
+        response = self.send_command(f"resume_auto_trade {args}")
+        self.print_response(response)
+        self.update_status()
+    
+    def do_stop_auto_trade(self, args):
+        """Stop auto-trading if running"""
+        # Forward to server
+        response = self.send_command("stop_auto_trade")
+        self.print_response(response)
+        self.update_status()
+    
     def do_trades(self, args):
         """Show recent trades from server
         Usage: trades [limit]"""
