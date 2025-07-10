@@ -263,12 +263,29 @@ Initializing connection to remote server...
             print(f"Loading saved position from {resume_file}")
             with open(resume_file, 'r') as f:
                 resume_data = json.load(f)
+                # Handle both old and new resume file formats
+                position_str = resume_data.get('position', 'long').lower()
+                position_value = 1 if position_str == 'long' else -1
+                
+                # Get amounts based on position type
+                btc_amount = resume_data.get('amount', resume_data.get('btc_amount', 0))
+                usd_amount = resume_data.get('usd_amount', 0)
+                
+                # For new format, 'amount' field depends on position type
+                if 'unit' in resume_data:
+                    if resume_data['unit'] == 'btc':
+                        btc_amount = resume_data['amount']
+                        usd_amount = 0
+                    else:
+                        btc_amount = 0
+                        usd_amount = resume_data['amount']
+                
                 config['initial_position'] = {
-                    'btc_balance': resume_data.get('btc_amount', 0),
-                    'usd_balance': resume_data.get('usd_amount', 10000),
-                    'position': resume_data.get('position', 0),
-                    'position_size': resume_data.get('btc_amount', 0),
-                    'position_cost_basis': resume_data.get('entry_price', 0) * resume_data.get('btc_amount', 0)
+                    'btc_balance': btc_amount,
+                    'usd_balance': usd_amount,
+                    'position': position_value,
+                    'position_size': btc_amount if position_value == 1 else -btc_amount,
+                    'position_cost_basis': resume_data.get('entry_price', 0) * abs(btc_amount if position_value == 1 else usd_amount / resume_data.get('entry_price', 1))
                 }
         
         return config

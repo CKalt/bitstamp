@@ -254,7 +254,15 @@ def initialize():
             data_manager.position = pos.get('position', 0)
             data_manager.position_size = pos.get('position_size', 0)
             data_manager.position_cost_basis = pos.get('position_cost_basis', 0)
-            logger.info(f"Initialized position: BTC={data_manager.balance_btc}, USD={data_manager.balance_usd}")
+            
+            # Set last_trade_price from position tracking or resume data
+            if data_manager.position_size != 0:
+                data_manager.last_trade_price = data_manager.position_cost_basis / abs(data_manager.position_size)
+            else:
+                # Fallback to Last_Trade_Price from best_strategy if available
+                data_manager.last_trade_price = best_strategy.get('Last_Trade_Price', 0)
+            
+            logger.info(f"Initialized position: BTC={data_manager.balance_btc}, USD={data_manager.balance_usd}, Entry=${data_manager.last_trade_price:.2f}")
         
         # Create shell instance
         shell = CryptoShell(
