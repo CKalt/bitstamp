@@ -822,12 +822,19 @@ def fix_entry_price():
         logger.error(f"Error fixing entry price: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/best_strategy', methods=['GET'])
-def get_best_strategy():
-    """Get the server's best_strategy.json"""
+@app.route('/api/best_strategy', methods=['GET', 'POST'])
+def handle_best_strategy():
+    """Get or update the server's best_strategy.json"""
     if not initialization_complete:
         return jsonify({'error': 'Server not initialized'}), 503
     
+    if request.method == 'GET':
+        return get_best_strategy()
+    else:  # POST
+        return update_best_strategy()
+
+def get_best_strategy():
+    """Get the server's best_strategy.json"""
     try:
         best_strategy_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'best_strategy.json')
         if os.path.exists(best_strategy_file):
@@ -848,6 +855,47 @@ def get_best_strategy():
             'success': False,
             'error': str(e)
         }), 500
+
+def update_best_strategy():
+    """Update the server's best_strategy.json from client"""
+    try:
+        new_strategy = request.json
+        if not new_strategy:
+            return jsonify({'error': 'No strategy data provided'}), 400
+        
+        best_strategy_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'best_strategy.json')
+        
+        # Load current server strategy to preserve server-only fields
+        current_strategy = {}
+        if os.path.exists(best_strategy_file):
+            with open(best_strategy_file, 'r') as f:
+                current_strategy = json.load(f)
+        
+        # Preserve server-managed fields
+        server_fields = ['Last_Trade_Price', 'Last_Trade_Timestamp', 'auto_resume', 'max_trades_per_day']
+        for field in server_fields:
+            if field in current_strategy:
+                new_strategy[field] = current_strategy[field]
+        
+        # Save updated strategy
+        with open(best_strategy_file, 'w') as f:
+            json.dump(new_strategy, f, indent=2)
+        
+        # Update server config
+        if server_config:
+            server_config['best_strategy'] = new_strategy
+        
+        logger.info("Updated best_strategy.json from client")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Strategy updated successfully',
+            'preserved_fields': {field: new_strategy.get(field) for field in server_fields if field in new_strategy}
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error updating strategy: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/config', methods=['GET'])
 def get_config():

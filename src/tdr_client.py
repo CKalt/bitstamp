@@ -265,54 +265,110 @@ Initializing connection to remote server...
                             
                             # Check if they differ in key fields
                             if local_strategy:
-                                # Key fields to compare (excluding auto_resume which should be preserved)
-                                key_fields = ['Short_Window', 'Long_Window', 'do_live_trades', 'Last_Trade_Price']
-                                differences = []
-                                for field in key_fields:
+                                # Categorize fields by who updates them
+                                server_updated_fields = ['Last_Trade_Price', 'Last_Trade_Timestamp', 'Last_Signal_Action', 
+                                                       'Last_Signal_Timestamp', 'auto_resume', 'max_trades_per_day']
+                                strategy_fields = ['Short_Window', 'Long_Window', 'Strategy', 'regime_switch_threshold',
+                                                 'signal_confirmation_bars', 'min_trade_gap_minutes', 'emergency_loss_threshold']
+                                
+                                server_diffs = []
+                                strategy_diffs = []
+                                
+                                # Check server-updated fields (auto-sync these)
+                                for field in server_updated_fields:
                                     if local_strategy.get(field) != server_strategy.get(field):
-                                        differences.append(f"  {field}: local={local_strategy.get(field)} vs server={server_strategy.get(field)}")
+                                        server_diffs.append((field, local_strategy.get(field), server_strategy.get(field)))
                                 
-                                # Check auto_resume separately
-                                if local_strategy.get('auto_resume') != server_strategy.get('auto_resume'):
-                                    differences.append(f"  auto_resume: local={local_strategy.get('auto_resume')} vs server={server_strategy.get('auto_resume')} (server value will be preserved)")
+                                # Check strategy fields (require confirmation)
+                                for field in strategy_fields:
+                                    if local_strategy.get(field) != server_strategy.get(field):
+                                        strategy_diffs.append((field, local_strategy.get(field), server_strategy.get(field)))
                                 
-                                if differences:
-                                    print("\n📋 Server has different best_strategy.json:")
-                                    print('\n'.join(differences))
-                                    response = input("\nUse server's strategy? (yes/no/backup) [yes]: ").strip().lower()
+                                # Auto-sync server updates without prompting
+                                if server_diffs and not strategy_diffs:
+                                    print("\n📥 Auto-syncing server updates...")
+                                    for field, local_val, server_val in server_diffs:
+                                        local_strategy[field] = server_val
+                                        print(f"  ✅ {field}: {local_val} → {server_val}")
                                     
-                                    if response in ['', 'yes', 'y']:
-                                        # Backup local and use server's
+                                    with open(self.config_file, 'w') as f:
+                                        json.dump(local_strategy, f, indent=2)
+                                    config['best_strategy'] = local_strategy
+                                    
+                                # If strategy parameters differ, ask user
+                                elif strategy_diffs:
+                                    print("\n⚠️  Strategy parameters differ between client and server:")
+                                    for field, local_val, server_val in strategy_diffs:
+                                        print(f"  {field}: local={local_val} vs server={server_val}")
+                                    
+                                    if server_diffs:
+                                        print("\n📋 Server also has updates:")
+                                        for field, local_val, server_val in server_diffs:
+                                            print(f"  {field}: {server_val} (will be applied)")
+                                    
+                                    response = input("\nUse server's strategy parameters? (yes/no/push) [no]: ").strip().lower()
+                                    
+                                    if response in ['yes', 'y']:
+                                        # Use server's strategy
                                         backup_path = f"best_strategy.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
                                         shutil.copy(self.config_file, backup_path)
                                         print(f"✅ Backed up local strategy to {backup_path}")
-                                        
-                                        # Merge strategies, preserving important server fields
-                                        merged_strategy = local_strategy.copy()
-                                        merged_strategy.update(server_strategy)
-                                        
-                                        # Always preserve these server-side fields
-                                        server_only_fields = ['auto_resume', 'max_trades_per_day']
-                                        for field in server_only_fields:
-                                            if field in server_strategy:
-                                                merged_strategy[field] = server_strategy[field]
                                         
                                         with open(self.config_file, 'w') as f:
-                                            json.dump(merged_strategy, f, indent=2)
-                                        print("✅ Using server's best_strategy.json (with preserved server settings)")
-                                        config['best_strategy'] = merged_strategy
-                                    elif response == 'backup':
-                                        # Just backup without overwriting
-                                        backup_path = f"best_strategy.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-                                        shutil.copy(self.config_file, backup_path)
-                                        print(f"✅ Backed up local strategy to {backup_path}")
-                                        config['best_strategy'] = local_strategy
+                                            json.dump(server_strategy, f, indent=2)
+                                        print("✅ Using server's strategy parameters")
+                                        config['best_strategy'] = server_strategy
+                                        
+                                    elif response == 'push':
+                                        # Push local strategy to server
+                                        print("📤 Pushing local strategy to server...")
+                                        try:
+                                            push_response = requests.post(
+                                                f"{self.server_url}/api/best_strategy",
+                                                json=local_strategy,
+                                                timeout=10
+                                            )
+                                            if push_response.status_code == 200:
+                                                result = push_response.json()
+                                                print("✅ Strategy pushed to server successfully")
+                                                if result.get('preserved_fields'):
+                                                    print("   Server preserved fields:")
+                                                    for field, value in result['preserved_fields'].items():
+                                                        print(f"   - {field}: {value}")
+                                                # Update local with preserved server fields
+                                                for field, _, server_val in server_diffs:
+                                                    local_strategy[field] = server_val
+                                                with open(self.config_file, 'w') as f:
+                                                    json.dump(local_strategy, f, indent=2)
+                                                config['best_strategy'] = local_strategy
+                                            else:
+                                                print(f"❌ Failed to push strategy: {push_response.text}")
+                                                # Still sync server updates locally
+                                                for field, _, server_val in server_diffs:
+                                                    local_strategy[field] = server_val
+                                                with open(self.config_file, 'w') as f:
+                                                    json.dump(local_strategy, f, indent=2)
+                                                config['best_strategy'] = local_strategy
+                                        except Exception as e:
+                                            print(f"❌ Error pushing strategy: {e}")
+                                            # Still sync server updates locally
+                                            for field, _, server_val in server_diffs:
+                                                local_strategy[field] = server_val
+                                            with open(self.config_file, 'w') as f:
+                                                json.dump(local_strategy, f, indent=2)
+                                            config['best_strategy'] = local_strategy
+                                        
                                     else:
-                                        # Use local
-                                        print("✅ Using local best_strategy.json")
+                                        # Keep local strategy but sync server updates
+                                        for field, _, server_val in server_diffs:
+                                            local_strategy[field] = server_val
+                                        with open(self.config_file, 'w') as f:
+                                            json.dump(local_strategy, f, indent=2)
                                         config['best_strategy'] = local_strategy
+                                        print("✅ Keeping local strategy parameters (server updates applied)")
+                                
                                 else:
-                                    # No differences, use local
+                                    # No differences
                                     config['best_strategy'] = local_strategy
                             else:
                                 # No local file, use server's
