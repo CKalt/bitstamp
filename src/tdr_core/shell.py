@@ -800,6 +800,12 @@ class CryptoShell(cmd.Cmd):
         self.logger.info(f"[RESUME_DEBUG] Starting resume_auto_trade with arg: '{arg}'")
         print(f"[DEBUG] resume_auto_trade called with: '{arg}'")
         
+        # Detect if we're running in server mode (no interactive terminal)
+        is_server_mode = not hasattr(self, 'use_rawinput') or not self.use_rawinput
+        if is_server_mode:
+            print("[DEBUG] Running in server mode - will skip all prompts")
+            self.logger.info("[RESUME_DEBUG] Server mode detected")
+        
         try:
             parts = arg.strip().split() if arg.strip() else []
             self.logger.info(f"[RESUME_DEBUG] Parsed {len(parts)} parts")

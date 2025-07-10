@@ -267,6 +267,10 @@ def initialize():
             max_trades_per_day=best_strategy.get('max_trades_per_day', 5)
         )
         
+        # CRITICAL: Disable interactive mode for server
+        shell.use_rawinput = False
+        logger.info("Shell created in non-interactive mode (use_rawinput=False)")
+        
         # Apply strategy configuration
         shell.config = best_strategy
         
