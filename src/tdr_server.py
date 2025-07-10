@@ -101,10 +101,10 @@ def auto_load_history():
                     self.reached_100 = False
                     
                 def write(self, text):
-                    self.original.write(text)  # Still write to console
+                    self.original.write(text)  # Write to console once
                     self.buffer.append(text)
                     
-                    # Capture status updates
+                    # Capture status updates silently (no extra logging)
                     if text.strip() and text.startswith('Status:'):
                         status_msg = text.strip()
                         server_config['history_status'] = status_msg
@@ -118,8 +118,6 @@ def auto_load_history():
                             server_config['current_phase'] = 'creating_dataframe'
                         elif 'DataFrame created' in status_msg:
                             server_config['current_phase'] = 'dataframe_ready'
-                        
-                        logger.info(f"History loading: {status_msg}")
                 
                 def flush(self):
                     self.original.flush()

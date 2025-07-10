@@ -81,8 +81,8 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     
     # Calculate interval for status updates
     lines_to_process = total_lines - start_line + 1
-    # Show status updates periodically
-    status_interval = max(lines_to_process // 10, 100000)  # At least every 100k lines
+    # Show status updates less frequently to reduce spam
+    status_interval = max(lines_to_process // 5, 500000)  # Every 20% or 500k lines, whichever is larger
     next_status_line = start_line + status_interval
 
     with open(file_path, 'r') as file:
