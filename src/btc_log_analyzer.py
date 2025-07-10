@@ -124,7 +124,7 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     print(f"Total entries processed: {processed_count}")
     if end_reached:
         print(f"Reached end date: {end_date}")
-    print("Creating DataFrame...")
+    # print("Creating DataFrame...")  # Commented out to reduce duplicate output
     df = pd.DataFrame(data)
 
     # Optimize data types

@@ -47,12 +47,26 @@ stop_event = threading.Event()
 logger = None
 server_config = {}
 initialization_complete = False
+history_loading_lock = threading.Lock()
 
 def auto_load_history():
     """Automatically load history after initialization"""
     global server_config
-    try:
+    
+    # Use lock to prevent duplicate loading
+    with history_loading_lock:
+        # Check if already loading or loaded
+        if server_config.get('history_loading', False):
+            logger.info("History already loading, skipping duplicate load")
+            return
+        if server_config.get('history_loaded', False):
+            logger.info("History already loaded, skipping duplicate load")
+            return
+        
+        # Set loading flag inside the lock to prevent race conditions
         server_config['history_loading'] = True
+    
+    try:
         server_config['history_progress'] = 0
         server_config['history_status'] = 'Starting...'
         logger.info("Auto-loading historical data...")
