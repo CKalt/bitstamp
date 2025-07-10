@@ -429,10 +429,22 @@ def execute_command():
                             'history_loaded': False
                         }), 400
             
+            # Special debug logging for resume_auto_trade
+            if 'resume_auto_trade' in command:
+                logger.info(f"[RESUME_DEBUG] About to execute resume_auto_trade via shell.onecmd")
+                logger.info(f"[RESUME_DEBUG] Shell object exists: {shell is not None}")
+                logger.info(f"[RESUME_DEBUG] Command: '{command}'")
+            
             with redirect_stdout(output_buffer):
+                logger.info(f"[RESUME_DEBUG] Calling shell.onecmd('{command}')")
                 shell.onecmd(command)
+                logger.info(f"[RESUME_DEBUG] shell.onecmd completed")
             
             output = output_buffer.getvalue()
+            
+            if 'resume_auto_trade' in command:
+                logger.info(f"[RESUME_DEBUG] Output captured: {len(output)} chars")
+                logger.info(f"[RESUME_DEBUG] Output preview: {output[:200]}...")
             
             result = {
                 'command': command,

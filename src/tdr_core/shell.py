@@ -797,11 +797,18 @@ class CryptoShell(cmd.Cmd):
           
         If no arguments provided, reads from resume-auto-trade.json and asks for confirmation.
         """
+        self.logger.info(f"[RESUME_DEBUG] Starting resume_auto_trade with arg: '{arg}'")
+        print(f"[DEBUG] resume_auto_trade called with: '{arg}'")
+        
         try:
             parts = arg.strip().split() if arg.strip() else []
+            self.logger.info(f"[RESUME_DEBUG] Parsed {len(parts)} parts")
+            print(f"[DEBUG] Parsed {len(parts)} arguments")
             
             # If no arguments, try to load from resume file
             if len(parts) == 0:
+                print("[DEBUG] No arguments provided, loading from resume file...")
+                self.logger.info("[RESUME_DEBUG] No args, loading from resume file")
                 import json
                 import os
                 # Use project root for consistency with server
@@ -811,11 +818,18 @@ class CryptoShell(cmd.Cmd):
                 if not os.path.exists(resume_file):
                     print(f"No resume file found at {resume_file}")
                     print("Please provide manual parameters or ensure auto-trading has saved state.")
+                    self.logger.info(f"[RESUME_DEBUG] No resume file at {resume_file}")
                     return
                     
+                print(f"[DEBUG] Loading resume file from {resume_file}")
+                self.logger.info(f"[RESUME_DEBUG] Loading resume file")
+                
                 # Load and display resume data
                 with open(resume_file, 'r') as f:
                     resume_data = json.load(f)
+                
+                self.logger.info(f"[RESUME_DEBUG] Resume data loaded: {resume_data}")
+                print(f"[DEBUG] Resume data loaded successfully")
                 
                 print("\n" + "="*60)
                 print("RESUME AUTO-TRADE FROM SAVED STATE")
@@ -831,10 +845,19 @@ class CryptoShell(cmd.Cmd):
                 
                 # Validate against trades.json if available
                 trades_file = os.path.join(project_root, 'trades.json')
+                print(f"[DEBUG] Checking for trades file at {trades_file}")
+                self.logger.info(f"[RESUME_DEBUG] Checking trades file")
+                
                 if os.path.exists(trades_file):
                     print("\nValidating against trades.json...")
+                    print(f"[DEBUG] Opening trades file...")
+                    self.logger.info(f"[RESUME_DEBUG] Reading trades.json")
+                    
                     with open(trades_file, 'r') as f:
                         trades = json.load(f)
+                    
+                    print(f"[DEBUG] Loaded {len(trades)} trades")
+                    self.logger.info(f"[RESUME_DEBUG] Found {len(trades)} trades")
                     
                     if trades:
                         # Find all trades for current position
@@ -868,34 +891,22 @@ class CryptoShell(cmd.Cmd):
                             print(f"   Resume file shows: ${resume_data['entry_price']:.2f}")
                             print(f"   Trades.json shows: ${actual_entry_price:.2f}")
                             print(f"   Difference: ${price_diff:.2f}")
-                            
-                            # Auto-confirm if not in interactive mode (server)
-                            if not sys.stdin.isatty():
-                                print("\nAuto-using entry price from trades.json (server mode)")
-                                use_trades = 'yes'
-                            else:
-                                use_trades = input("\nUse entry price from trades.json? (yes/no): ").strip().lower()
-                            
-                            if use_trades in ['yes', 'y']:
-                                resume_data['entry_price'] = actual_entry_price
-                                print(f"✓ Using entry price from trades.json: ${actual_entry_price:.2f}")
+                            print(f"   ✓ Auto-using trades.json price: ${actual_entry_price:.2f}")
+                            resume_data['entry_price'] = actual_entry_price
                 
-                # Ask for confirmation
-                if not sys.stdin.isatty():
-                    print("\nAuto-confirming resume (server mode)")
-                    response = 'yes'
-                else:
-                    response = input("\nDo you want to resume with these values? (yes/no): ").strip().lower()
-                
-                if response not in ['yes', 'y']:
-                    print("Resume cancelled.")
-                    return
+                # Auto-proceed without confirmation to avoid timeout
+                print("\n✓ Proceeding with resume using above values...")
+                print(f"[DEBUG] About to construct command parts")
+                self.logger.info(f"[RESUME_DEBUG] Constructing command")
                 
                 # Execute the saved command
                 amount_str = f"{resume_data['amount']:.8f}{resume_data['unit']}"
                 position_str = resume_data['position'].lower()
                 entry_price_str = str(int(resume_data['entry_price']))
                 parts = [amount_str, position_str, entry_price_str]
+                
+                print(f"[DEBUG] Command parts: {parts}")
+                self.logger.info(f"[RESUME_DEBUG] Command parts: {parts}")
             
             elif len(parts) != 3:
                 print("Usage: resume_auto_trade [<amount><unit> <position> <entry_price>]")
@@ -931,12 +942,18 @@ class CryptoShell(cmd.Cmd):
             # Call auto_trade with special resume flag
             auto_trade_cmd = f"{amount_str} {position_str}"
             print(f"Resuming auto-trade: {auto_trade_cmd} with entry price ${entry_price:.2f}")
+            print(f"[DEBUG] About to call do_auto_trade with: '{auto_trade_cmd}'")
+            self.logger.info(f"[RESUME_DEBUG] Calling do_auto_trade: '{auto_trade_cmd}'")
             
             # Store the entry price for the auto_trade to use
             self._resume_entry_price = entry_price
+            self.logger.info(f"[RESUME_DEBUG] Set _resume_entry_price = {entry_price}")
             
             # Execute auto_trade
+            print(f"[DEBUG] Calling do_auto_trade...")
             self.do_auto_trade(auto_trade_cmd)
+            print(f"[DEBUG] do_auto_trade completed")
+            self.logger.info(f"[RESUME_DEBUG] do_auto_trade completed")
             
             # Position tracking is now handled inside do_auto_trade when _resume_entry_price is set
             if self.auto_trader:
@@ -948,8 +965,10 @@ class CryptoShell(cmd.Cmd):
                 
         except Exception as e:
             print(f"Error in resume_auto_trade: {e}")
+            self.logger.error(f"[RESUME_DEBUG] Exception in resume_auto_trade: {e}")
             import traceback
             traceback.print_exc()
+            self.logger.error(f"[RESUME_DEBUG] Traceback: {traceback.format_exc()}")
 
     def do_fix_position_tracking(self, arg):
         """
