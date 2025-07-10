@@ -265,134 +265,87 @@ Initializing connection to remote server...
                             
                             # Check if they differ in key fields
                             if local_strategy:
-                                # Categorize fields by who updates them
-                                server_updated_fields = ['Last_Trade_Price', 'Last_Trade_Timestamp', 'Last_Signal_Action', 
-                                                       'Last_Signal_Timestamp', 'auto_resume', 'max_trades_per_day']
-                                strategy_fields = ['Short_Window', 'Long_Window', 'Strategy', 'regime_switch_threshold',
-                                                 'signal_confirmation_bars', 'min_trade_gap_minutes', 'emergency_loss_threshold']
+                                # Categorize fields by priority
+                                server_priority_fields = ['Last_Trade_Price', 'Last_Trade_Timestamp', 'Last_Signal_Action', 
+                                                         'Last_Signal_Timestamp']  # Server owns these
+                                client_priority_fields = ['auto_resume', 'max_trades_per_day', 'Short_Window', 'Long_Window', 
+                                                        'Strategy', 'regime_switch_threshold', 'signal_confirmation_bars', 
+                                                        'min_trade_gap_minutes', 'emergency_loss_threshold', 'do_live_trades',
+                                                        'auto_align_position', 'emergency_override_enabled']  # Client owns these
                                 
-                                server_diffs = []
-                                strategy_diffs = []
+                                # Find differences
+                                from_server = []  # Fields to update from server
+                                to_server = []    # Fields to push to server
                                 
-                                # Check server-updated fields (auto-sync these)
-                                for field in server_updated_fields:
-                                    # Don't sync null values from client to server for critical fields
-                                    if field in ['auto_resume', 'max_trades_per_day'] and local_strategy.get(field) is None:
-                                        continue
+                                # Check server-priority fields (always take server's value)
+                                for field in server_priority_fields:
                                     if local_strategy.get(field) != server_strategy.get(field):
-                                        server_diffs.append((field, local_strategy.get(field), server_strategy.get(field)))
+                                        from_server.append((field, local_strategy.get(field), server_strategy.get(field)))
                                 
-                                # Check strategy fields (require confirmation)
-                                for field in strategy_fields:
-                                    if local_strategy.get(field) != server_strategy.get(field):
-                                        strategy_diffs.append((field, local_strategy.get(field), server_strategy.get(field)))
+                                # Check client-priority fields (push non-null client values to server)
+                                for field in client_priority_fields:
+                                    local_val = local_strategy.get(field)
+                                    server_val = server_strategy.get(field)
+                                    if local_val != server_val:
+                                        # If server has null and client has value, push to server
+                                        if server_val is None and local_val is not None:
+                                            to_server.append((field, server_val, local_val))
+                                        # If both have values but differ, ask user
+                                        elif local_val is not None and server_val is not None:
+                                            to_server.append((field, server_val, local_val))
                                 
-                                # Auto-sync server updates without prompting
-                                if server_diffs and not strategy_diffs:
-                                    # Only show sync message if we're actually syncing something
-                                    fields_to_sync = []
-                                    for field, local_val, server_val in server_diffs:
-                                        # Skip null values for critical fields
-                                        if field in ['auto_resume', 'max_trades_per_day'] and server_val is None:
-                                            continue
-                                        fields_to_sync.append((field, local_val, server_val))
+                                # Execute two-way sync
+                                if from_server or to_server:
+                                    print("\n🔄 Syncing best_strategy.json...")
                                     
-                                    if fields_to_sync:
-                                        print("\n📥 Auto-syncing server updates...")
-                                        for field, local_val, server_val in fields_to_sync:
+                                    # First, apply server priority fields (no confirmation needed)
+                                    if from_server:
+                                        print("\n📥 Updating from server:")
+                                        for field, local_val, server_val in from_server:
                                             local_strategy[field] = server_val
                                             print(f"  ✅ {field}: {local_val} → {server_val}")
                                     
-                                    # Check if server needs important fields updated
-                                    server_needs_update = []
-                                    if server_strategy.get('auto_resume') is None and local_strategy.get('auto_resume') is True:
-                                        server_needs_update.append('auto_resume')
-                                    if server_strategy.get('max_trades_per_day') is None and local_strategy.get('max_trades_per_day') is not None:
-                                        server_needs_update.append('max_trades_per_day')
+                                    # Then handle client priority fields that need to go to server
+                                    if to_server:
+                                        print("\n📤 Client has updates for server:")
+                                        for field, server_val, local_val in to_server:
+                                            if server_val is None:
+                                                print(f"  • {field}: server=null → client={local_val}")
+                                            else:
+                                                print(f"  • {field}: server={server_val} → client={local_val}")
+                                        
+                                        response = input("\nPush these client values to server? (yes/no) [yes]: ").strip().lower()
+                                        
+                                        if response in ['', 'yes', 'y']:
+                                            # Push to server
+                                            print("📤 Pushing to server...")
+                                            # Apply client values to the strategy we'll send
+                                            push_strategy = server_strategy.copy()
+                                            for field, _, local_val in to_server:
+                                                push_strategy[field] = local_val
+                                            
+                                            try:
+                                                push_response = requests.post(
+                                                    f"{self.server_url}/api/best_strategy",
+                                                    json=push_strategy,
+                                                    timeout=10
+                                                )
+                                                if push_response.status_code == 200:
+                                                    print("✅ Successfully synced to server")
+                                                    # Update our local copy with the merged result
+                                                    config['best_strategy'] = local_strategy
+                                                else:
+                                                    print(f"❌ Failed to push: {push_response.text}")
+                                            except Exception as e:
+                                                print(f"❌ Error pushing: {e}")
+                                        else:
+                                            print("⏭️  Skipping server update")
                                     
-                                    if server_needs_update:
-                                        print(f"\n💡 Tip: Server's best_strategy.json needs updating: {', '.join(server_needs_update)}")
-                                        print("   Run 'push' when prompted or manually update on server")
-                                    
+                                    # Save the updated local strategy
                                     with open(self.config_file, 'w') as f:
                                         json.dump(local_strategy, f, indent=2)
                                     config['best_strategy'] = local_strategy
                                     
-                                # If strategy parameters differ, ask user
-                                elif strategy_diffs:
-                                    print("\n⚠️  Strategy parameters differ between client and server:")
-                                    for field, local_val, server_val in strategy_diffs:
-                                        print(f"  {field}: local={local_val} vs server={server_val}")
-                                    
-                                    if server_diffs:
-                                        print("\n📋 Server also has updates:")
-                                        for field, local_val, server_val in server_diffs:
-                                            print(f"  {field}: {server_val} (will be applied)")
-                                    
-                                    response = input("\nUse server's strategy parameters? (yes/no/push) [no]: ").strip().lower()
-                                    
-                                    if response in ['yes', 'y']:
-                                        # Use server's strategy
-                                        backup_path = f"best_strategy.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-                                        shutil.copy(self.config_file, backup_path)
-                                        print(f"✅ Backed up local strategy to {backup_path}")
-                                        
-                                        with open(self.config_file, 'w') as f:
-                                            json.dump(server_strategy, f, indent=2)
-                                        print("✅ Using server's strategy parameters")
-                                        config['best_strategy'] = server_strategy
-                                        
-                                    elif response == 'push':
-                                        # Push local strategy to server
-                                        print("📤 Pushing local strategy to server...")
-                                        try:
-                                            push_response = requests.post(
-                                                f"{self.server_url}/api/best_strategy",
-                                                json=local_strategy,
-                                                timeout=10
-                                            )
-                                            if push_response.status_code == 200:
-                                                result = push_response.json()
-                                                print("✅ Strategy pushed to server successfully")
-                                                if result.get('preserved_fields'):
-                                                    print("   Server preserved fields:")
-                                                    for field, value in result['preserved_fields'].items():
-                                                        print(f"   - {field}: {value}")
-                                                # Update local with preserved server fields
-                                                for field, _, server_val in server_diffs:
-                                                    local_strategy[field] = server_val
-                                                with open(self.config_file, 'w') as f:
-                                                    json.dump(local_strategy, f, indent=2)
-                                                config['best_strategy'] = local_strategy
-                                            else:
-                                                print(f"❌ Failed to push strategy: {push_response.text}")
-                                                # Still sync server updates locally
-                                                for field, _, server_val in server_diffs:
-                                                    local_strategy[field] = server_val
-                                                with open(self.config_file, 'w') as f:
-                                                    json.dump(local_strategy, f, indent=2)
-                                                config['best_strategy'] = local_strategy
-                                        except Exception as e:
-                                            print(f"❌ Error pushing strategy: {e}")
-                                            # Still sync server updates locally
-                                            for field, _, server_val in server_diffs:
-                                                local_strategy[field] = server_val
-                                            with open(self.config_file, 'w') as f:
-                                                json.dump(local_strategy, f, indent=2)
-                                            config['best_strategy'] = local_strategy
-                                        
-                                    else:
-                                        # Keep local strategy but sync server updates
-                                        for field, _, server_val in server_diffs:
-                                            # Never sync null values for critical fields
-                                            if field in ['auto_resume', 'max_trades_per_day'] and server_val is None:
-                                                continue
-                                            local_strategy[field] = server_val
-                                        with open(self.config_file, 'w') as f:
-                                            json.dump(local_strategy, f, indent=2)
-                                        config['best_strategy'] = local_strategy
-                                        print("✅ Keeping local strategy parameters (server updates applied)")
-                                
                                 else:
                                     # No differences
                                     config['best_strategy'] = local_strategy
