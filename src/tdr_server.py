@@ -106,9 +106,15 @@ def auto_load_history():
                     if 'Progress:' in text:
                         try:
                             percent = float(text.split(':')[1].split('%')[0].strip())
+                            # Cap progress at 100% - percentages over 100 are confusing
+                            percent = min(percent, 100.0)
                             server_config['history_progress'] = percent
-                            server_config['history_status'] = text.strip()
-                            logger.info(f"History loading: {text.strip()}")
+                            # Replace the percentage in the status text too
+                            if percent >= 100.0:
+                                server_config['history_status'] = text.split(':')[0] + ': 100.0% - ' + text.split('-', 1)[-1].strip()
+                            else:
+                                server_config['history_status'] = text.strip()
+                            logger.info(f"History loading: Progress: {percent:.1f}%")
                         except:
                             pass
                     elif text.strip() and not text.startswith('\r'):
