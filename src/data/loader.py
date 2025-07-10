@@ -82,8 +82,12 @@ def parse_log_file(file_path, start_date=None, end_date=None):
                 continue
 
             if i % progress_interval == 0:  # Show progress every 10%
+                # Calculate progress based on lines to process, not total file lines
+                lines_to_process = total_lines - start_line + 1
+                lines_processed = i - start_line + 1
+                progress = min(lines_processed / lines_to_process * 100, 100.0)
                 print(
-                    f"Progress: {i/total_lines*100:.1f}% - Last date: {last_date}")
+                    f"Progress: {progress:.1f}% - Last date: {last_date}")
 
             try:
                 json_data = json.loads(line)
