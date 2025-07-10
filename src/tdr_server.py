@@ -255,12 +255,56 @@ def initialize():
             data_manager.position_size = pos.get('position_size', 0)
             data_manager.position_cost_basis = pos.get('position_cost_basis', 0)
             
-            # Set last_trade_price from position tracking or resume data
+            # Set last_trade_price from position tracking
             if data_manager.position_size != 0:
                 data_manager.last_trade_price = data_manager.position_cost_basis / abs(data_manager.position_size)
             else:
                 # Fallback to Last_Trade_Price from best_strategy if available
                 data_manager.last_trade_price = best_strategy.get('Last_Trade_Price', 0)
+            
+            # Validate against trades.json if available
+            try:
+                trades_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'trades.json')
+                if os.path.exists(trades_file):
+                    with open(trades_file, 'r') as f:
+                        trades = json.load(f)
+                    
+                    if trades:
+                        # Find all trades for current position
+                        position_trades = []
+                        current_position = None
+                        
+                        for trade in reversed(trades):
+                            if not current_position:
+                                current_position = 'LONG' if trade['type'] == 'buy' else 'SHORT'
+                                position_trades.append(trade)
+                            elif (current_position == 'LONG' and trade['type'] == 'buy') or \
+                                 (current_position == 'SHORT' and trade['type'] == 'sell'):
+                                position_trades.append(trade)
+                            else:
+                                break
+                        
+                        if position_trades:
+                            position_trades.reverse()
+                            # Calculate actual entry price from trades
+                            total_btc = sum(float(t['amount']) for t in position_trades)
+                            total_cost = sum(float(t['amount']) * float(t['price']) for t in position_trades)
+                            actual_entry_price = total_cost / total_btc if total_btc > 0 else 0
+                            
+                            if actual_entry_price > 0:
+                                # Update position tracking with correct values
+                                if current_position == 'LONG' and data_manager.position == 1:
+                                    data_manager.position_size = total_btc
+                                    data_manager.position_cost_basis = total_cost
+                                    data_manager.last_trade_price = actual_entry_price
+                                    logger.info(f"Validated LONG position from trades.json: {total_btc:.8f} BTC @ ${actual_entry_price:.2f}")
+                                elif current_position == 'SHORT' and data_manager.position == -1:
+                                    data_manager.position_size = -total_btc
+                                    data_manager.position_cost_basis = total_cost
+                                    data_manager.last_trade_price = actual_entry_price
+                                    logger.info(f"Validated SHORT position from trades.json: {total_btc:.8f} BTC sold @ ${actual_entry_price:.2f}")
+            except Exception as e:
+                logger.warning(f"Could not validate position from trades.json: {e}")
             
             logger.info(f"Initialized position: BTC={data_manager.balance_btc}, USD={data_manager.balance_usd}, Entry=${data_manager.last_trade_price:.2f}")
         
@@ -653,6 +697,33 @@ def history_status():
         'history_error': server_config.get('history_error', None),
         'record_count': server_config.get('history_record_count', 0)
     }), 200
+
+@app.route('/api/best_strategy', methods=['GET'])
+def get_best_strategy():
+    """Get the server's best_strategy.json"""
+    if not initialization_complete:
+        return jsonify({'error': 'Server not initialized'}), 503
+    
+    try:
+        best_strategy_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'best_strategy.json')
+        if os.path.exists(best_strategy_file):
+            with open(best_strategy_file, 'r') as f:
+                strategy = json.load(f)
+            return jsonify({
+                'success': True,
+                'best_strategy': strategy,
+                'source': 'server'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'best_strategy.json not found on server'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/api/config', methods=['GET'])
 def get_config():

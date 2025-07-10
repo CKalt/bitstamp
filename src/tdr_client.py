@@ -233,20 +233,88 @@ Initializing connection to remote server...
         dotext = 'do_' + text
         return [a[3:] for a in self.get_names() if a.startswith(dotext)]
     
-    def load_configuration(self) -> Dict[str, Any]:
-        """Load configuration from local files"""
+    def load_configuration(self, sync_from_server=True) -> Dict[str, Any]:
+        """Load configuration from local files
+        
+        Args:
+            sync_from_server: If True, offers to sync from server for non-backtesting operations
+        """
         config = {
             'best_strategy': {},
             'verbose': self.verbose,
             'enable_websocket': True
         }
         
-        # Load best_strategy.json
-        if os.path.exists(self.config_file):
+        # Check if we should sync from server (skip for backtesting)
+        is_backtest = hasattr(self, 'args') and hasattr(self.args, 'backtest') and self.args.backtest
+        if sync_from_server and not is_backtest and self.test_connection():
+            try:
+                # Check if server is initialized first
+                if self.check_server_initialized():
+                    response = requests.get(f"{self.server_url}/api/best_strategy", timeout=5)
+                    if response.status_code == 200:
+                        server_data = response.json()
+                        if server_data.get('success') and server_data.get('best_strategy'):
+                            server_strategy = server_data['best_strategy']
+                            
+                            # Compare with local if it exists
+                            local_strategy = None
+                            if os.path.exists(self.config_file):
+                                with open(self.config_file, 'r') as f:
+                                    local_strategy = json.load(f)
+                            
+                            # Check if they differ in key fields
+                            if local_strategy:
+                                key_fields = ['Short_Window', 'Long_Window', 'do_live_trades', 'auto_resume']
+                                differences = []
+                                for field in key_fields:
+                                    if local_strategy.get(field) != server_strategy.get(field):
+                                        differences.append(f"  {field}: local={local_strategy.get(field)} vs server={server_strategy.get(field)}")
+                                
+                                if differences:
+                                    print("\n📋 Server has different best_strategy.json:")
+                                    print('\n'.join(differences))
+                                    response = input("\nUse server's strategy? (yes/no/backup) [yes]: ").strip().lower()
+                                    
+                                    if response in ['', 'yes', 'y']:
+                                        # Backup local and use server's
+                                        backup_path = f"best_strategy.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                                        shutil.copy(self.config_file, backup_path)
+                                        print(f"✅ Backed up local strategy to {backup_path}")
+                                        
+                                        with open(self.config_file, 'w') as f:
+                                            json.dump(server_strategy, f, indent=2)
+                                        print("✅ Using server's best_strategy.json")
+                                        config['best_strategy'] = server_strategy
+                                    elif response == 'backup':
+                                        # Just backup without overwriting
+                                        backup_path = f"best_strategy.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                                        shutil.copy(self.config_file, backup_path)
+                                        print(f"✅ Backed up local strategy to {backup_path}")
+                                        config['best_strategy'] = local_strategy
+                                    else:
+                                        # Use local
+                                        print("✅ Using local best_strategy.json")
+                                        config['best_strategy'] = local_strategy
+                                else:
+                                    # No differences, use local
+                                    config['best_strategy'] = local_strategy
+                            else:
+                                # No local file, use server's
+                                with open(self.config_file, 'w') as f:
+                                    json.dump(server_strategy, f, indent=2)
+                                print("✅ Downloaded best_strategy.json from server")
+                                config['best_strategy'] = server_strategy
+                                
+            except Exception as e:
+                logger.debug(f"Could not sync strategy from server: {e}")
+        
+        # If we didn't load from server sync, load from local file
+        if not config['best_strategy'] and os.path.exists(self.config_file):
             print(f"Loading configuration from {self.config_file}")
             with open(self.config_file, 'r') as f:
                 config['best_strategy'] = json.load(f)
-        else:
+        elif not config['best_strategy']:
             print(f"Warning: {self.config_file} not found, using defaults")
             config['best_strategy'] = {
                 'Strategy': 'MA',
