@@ -499,7 +499,8 @@ class CryptoShell(cmd.Cmd):
         
         # ALWAYS validate position against trades.json first
         self.logger.info("Loading position from trades.json...")
-        if self.auto_trader.validate_position_from_trades():
+        trades_loaded = self.auto_trader.validate_position_from_trades()
+        if trades_loaded:
             # Use the values from trades.json
             self.logger.info(f"Position loaded from trades.json: {self.auto_trader.position_size:.8f} BTC, entry ${self.auto_trader.position_cost_basis / abs(self.auto_trader.position_size) if self.auto_trader.position_size != 0 else 0:.2f}")
             
@@ -511,6 +512,10 @@ class CryptoShell(cmd.Cmd):
                 
             # Clear any theoretical trade since we have real trades
             self.auto_trader.theoretical_trade = None
+            
+            # Mark that we have trades so we don't create theoretical ones later
+            if self.auto_trader.position_size != 0:
+                self.auto_trader.trades_executed = len(self.auto_trader.trades) if hasattr(self.auto_trader, 'trades') else 1
             
         elif hasattr(self, '_resume_entry_price') and self._resume_entry_price:
             # Only use manual entry price if no trades.json data
@@ -556,10 +561,9 @@ class CryptoShell(cmd.Cmd):
         # Only create theoretical trade if we have NO real trades
         # Check if we have actual trades first
         self.logger.info(f"Checking for real trades: trades_executed={self.auto_trader.trades_executed}")
-        position_validated = self.auto_trader.validate_position_from_trades()
-        self.logger.info(f"Position validation from trades.json: {position_validated}")
-        has_real_trades = self.auto_trader.trades_executed > 0 or position_validated
-        self.logger.info(f"Has real trades: {has_real_trades}")
+        # Don't re-validate if we already did it above
+        has_real_trades = self.auto_trader.trades_executed > 0 or (self.auto_trader.position_size != 0 and self.auto_trader.position_cost_basis > 0)
+        self.logger.info(f"Has real trades: {has_real_trades} (position_size={self.auto_trader.position_size}, cost_basis={self.auto_trader.position_cost_basis})")
         
         if desired_position == 1 and hist_position == 1 and current_market_price > 0 and not has_real_trades:
             if self.auto_trader.position_size < 1e-8 and not self.auto_trader.theoretical_trade:  # No position and no theoretical trade
