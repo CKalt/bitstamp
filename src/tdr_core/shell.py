@@ -497,9 +497,16 @@ class CryptoShell(cmd.Cmd):
             macd_threshold=0.001
         )
         
-        # ALWAYS validate position against trades.json first
-        self.logger.info("Loading position from trades.json...")
-        trades_loaded = self.auto_trader.validate_position_from_trades()
+        # Check if we have explicit resume parameters first
+        if hasattr(self, '_resume_entry_price') and self._resume_entry_price:
+            # User provided explicit position parameters - use those
+            self.logger.info("Using explicit resume parameters instead of trades.json")
+            trades_loaded = False
+        else:
+            # No explicit parameters - validate position against trades.json
+            self.logger.info("Loading position from trades.json...")
+            trades_loaded = self.auto_trader.validate_position_from_trades()
+        
         if trades_loaded:
             # Use the values from trades.json
             self.logger.info(f"Position loaded from trades.json: {self.auto_trader.position_size:.8f} BTC, entry ${self.auto_trader.position_cost_basis / abs(self.auto_trader.position_size) if self.auto_trader.position_size != 0 else 0:.2f}")
@@ -517,8 +524,9 @@ class CryptoShell(cmd.Cmd):
             if self.auto_trader.position_size != 0:
                 self.auto_trader.trades_executed = len(self.auto_trader.trades) if hasattr(self.auto_trader, 'trades') else 1
             
-        elif hasattr(self, '_resume_entry_price') and self._resume_entry_price:
-            # Only use manual entry price if no trades.json data
+        
+        if hasattr(self, '_resume_entry_price') and self._resume_entry_price and not trades_loaded:
+            # Use manual entry price when explicitly provided
             entry_price = self._resume_entry_price
             if desired_position == 1:  # LONG position
                 self.auto_trader.position_size = amount_num
