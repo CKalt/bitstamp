@@ -497,38 +497,41 @@ class CryptoShell(cmd.Cmd):
             macd_threshold=0.001
         )
         
-        # Handle resume position tracking IMMEDIATELY after strategy creation
-        if hasattr(self, '_resume_entry_price') and self._resume_entry_price:
+        # ALWAYS validate position against trades.json first
+        self.logger.info("Loading position from trades.json...")
+        if self.auto_trader.validate_position_from_trades():
+            # Use the values from trades.json
+            self.logger.info(f"Position loaded from trades.json: {self.auto_trader.position_size:.8f} BTC, entry ${self.auto_trader.position_cost_basis / abs(self.auto_trader.position_size) if self.auto_trader.position_size != 0 else 0:.2f}")
+            
+            # Sync to data_manager
+            if hasattr(self.data_manager, 'position_size'):
+                self.data_manager.position_size = self.auto_trader.position_size
+                self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
+                self.data_manager.position = self.auto_trader.position
+                
+            # Clear any theoretical trade since we have real trades
+            self.auto_trader.theoretical_trade = None
+            
+        elif hasattr(self, '_resume_entry_price') and self._resume_entry_price:
+            # Only use manual entry price if no trades.json data
             entry_price = self._resume_entry_price
             if desired_position == 1:  # LONG position
-                # For LONG: position_size should be BTC amount, cost_basis = BTC * entry_price
                 self.auto_trader.position_size = amount_num
                 self.auto_trader.position_cost_basis = amount_num * entry_price
                 self.auto_trader.last_trade_price = entry_price
-                self.logger.info(f"Resume: Set LONG position tracking - {amount_num} BTC @ ${entry_price:.2f}, cost basis ${self.auto_trader.position_cost_basis:.2f}")
+                self.logger.info(f"Resume: Set LONG position tracking - {amount_num} BTC @ ${entry_price:.2f}")
             elif desired_position == -1:  # SHORT position
-                # For SHORT: position_size should be negative BTC sold, cost_basis = USD received
                 btc_sold = amount_num / entry_price
                 self.auto_trader.position_size = -btc_sold
-                self.auto_trader.position_cost_basis = amount_num  # USD amount
+                self.auto_trader.position_cost_basis = amount_num
                 self.auto_trader.last_trade_price = entry_price
-                self.logger.info(f"Resume: Set SHORT position tracking - {btc_sold:.8f} BTC sold @ ${entry_price:.2f}, holding ${amount_num:.2f} USD")
+                self.logger.info(f"Resume: Set SHORT position tracking - {btc_sold:.8f} BTC @ ${entry_price:.2f}")
                 
-            # Sync to data_manager for consistent display
+            # Sync to data_manager
             if hasattr(self.data_manager, 'position_size'):
                 self.data_manager.position_size = self.auto_trader.position_size
                 self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
                 self.data_manager.position = desired_position
-                self.logger.info(f"Resume: Synced position to data_manager")
-                
-            # Validate position against actual trades
-            self.logger.info("Validating position against trades.json...")
-            if self.auto_trader.validate_position_from_trades():
-                # Sync the corrected values back to data_manager
-                self.data_manager.position_size = self.auto_trader.position_size
-                self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
-                self.data_manager.position = self.auto_trader.position
-                self.logger.info("Position validated and corrected from actual trades")
         
         # Log the auto_trade command to diagnostics
         if hasattr(self.auto_trader, 'diagnostic_logger'):
@@ -550,39 +553,45 @@ class CryptoShell(cmd.Cmd):
         current_market_price = self.data_manager.get_current_price(
             'btcusd') or 0.0
 
-        # If the user starts "long" and hist_position is also long => theoretical
+        # Only create theoretical trade if we have NO real trades
         if desired_position == 1 and hist_position == 1 and current_market_price > 0:
-            if self.auto_trader.position_size < 1e-8:  # i.e. 0.0
-                self.auto_trader.position_size = amount_num
-                self.auto_trader.position_cost_basis = amount_num * current_market_price
-                self.logger.info(
-                    f"(auto_trade) Setting cost basis to {self.auto_trader.position_cost_basis:.2f} "
-                    f"for an initial LONG of {amount_num} BTC at ${current_market_price:.2f}."
-                )
-                self.auto_trader.theoretical_trade = {
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'direction': 'long',
-                    'amount': amount_num,
-                    'theoretical': True
-                }
+            if self.auto_trader.position_size < 1e-8 and not self.auto_trader.theoretical_trade:  # No position and no theoretical trade
+                # Check if we already loaded from trades.json
+                if abs(self.auto_trader.position_size) < 1e-8:
+                    # No real trades found, create theoretical
+                    effective_entry_price = self._resume_entry_price if hasattr(self, '_resume_entry_price') and self._resume_entry_price else current_market_price
+                    self.auto_trader.position_size = amount_num
+                    self.auto_trader.position_cost_basis = amount_num * effective_entry_price
+                    self.logger.info(
+                        f"(auto_trade) No trades.json data found. Creating theoretical position at ${effective_entry_price:.2f}"
+                    )
+                    self.auto_trader.theoretical_trade = {
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'direction': 'long',
+                        'amount': amount_num,
+                        'entry_price': effective_entry_price,
+                        'theoretical': True
+                    }
 
                 # Log theoretical trade
                 self.auto_trader.diagnostic_logger.log_event("THEORETICAL_TRADE", {
                     "reason": "User position matches system recommendation",
                     "position": "LONG",
                     "amount_btc": amount_num,
-                    "entry_price": current_market_price,
+                    "entry_price": effective_entry_price,
                     "cost_basis": self.auto_trader.position_cost_basis,
                     "note": "No actual trade needed - positions aligned"
                 })
 
         # If the user starts "short" and hist_position is also short => theoretical
         if desired_position == -1 and hist_position == -1 and current_market_price > 0:
-            short_btc = amount_num / current_market_price
+            # Use resume entry price if available, otherwise current market price
+            effective_entry_price = self._resume_entry_price if hasattr(self, '_resume_entry_price') and self._resume_entry_price else current_market_price
+            short_btc = amount_num / effective_entry_price
             if self.auto_trader.position_size > -1e-8 and short_btc > 0:
                 self.auto_trader.position_size = -short_btc  # Should be -1.67
                 # FIX: Cost basis should be BTC amount * price for proper entry price calculation
-                self.auto_trader.position_cost_basis = short_btc * current_market_price
+                self.auto_trader.position_cost_basis = short_btc * effective_entry_price
                 self.logger.info(
                     f"(auto_trade) Setting position_size to {self.auto_trader.position_size:.6f} BTC and "
                     f"cost basis to {self.auto_trader.position_cost_basis:.2f} "
@@ -860,13 +869,24 @@ class CryptoShell(cmd.Cmd):
                             print(f"   Trades.json shows: ${actual_entry_price:.2f}")
                             print(f"   Difference: ${price_diff:.2f}")
                             
-                            use_trades = input("\nUse entry price from trades.json? (yes/no): ").strip().lower()
+                            # Auto-confirm if not in interactive mode (server)
+                            if not sys.stdin.isatty():
+                                print("\nAuto-using entry price from trades.json (server mode)")
+                                use_trades = 'yes'
+                            else:
+                                use_trades = input("\nUse entry price from trades.json? (yes/no): ").strip().lower()
+                            
                             if use_trades in ['yes', 'y']:
                                 resume_data['entry_price'] = actual_entry_price
                                 print(f"✓ Using entry price from trades.json: ${actual_entry_price:.2f}")
                 
                 # Ask for confirmation
-                response = input("\nDo you want to resume with these values? (yes/no): ").strip().lower()
+                if not sys.stdin.isatty():
+                    print("\nAuto-confirming resume (server mode)")
+                    response = 'yes'
+                else:
+                    response = input("\nDo you want to resume with these values? (yes/no): ").strip().lower()
+                
                 if response not in ['yes', 'y']:
                     print("Resume cancelled.")
                     return
