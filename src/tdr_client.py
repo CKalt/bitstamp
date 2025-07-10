@@ -276,6 +276,9 @@ Initializing connection to remote server...
                                 
                                 # Check server-updated fields (auto-sync these)
                                 for field in server_updated_fields:
+                                    # Don't sync null values from client to server for critical fields
+                                    if field in ['auto_resume', 'max_trades_per_day'] and local_strategy.get(field) is None:
+                                        continue
                                     if local_strategy.get(field) != server_strategy.get(field):
                                         server_diffs.append((field, local_strategy.get(field), server_strategy.get(field)))
                                 
@@ -288,6 +291,10 @@ Initializing connection to remote server...
                                 if server_diffs and not strategy_diffs:
                                     print("\n📥 Auto-syncing server updates...")
                                     for field, local_val, server_val in server_diffs:
+                                        # Never sync null values for critical fields
+                                        if field in ['auto_resume', 'max_trades_per_day'] and server_val is None:
+                                            print(f"  ⚠️  Skipping {field}: server has null value")
+                                            continue
                                         local_strategy[field] = server_val
                                         print(f"  ✅ {field}: {local_val} → {server_val}")
                                     
@@ -361,6 +368,9 @@ Initializing connection to remote server...
                                     else:
                                         # Keep local strategy but sync server updates
                                         for field, _, server_val in server_diffs:
+                                            # Never sync null values for critical fields
+                                            if field in ['auto_resume', 'max_trades_per_day'] and server_val is None:
+                                                continue
                                             local_strategy[field] = server_val
                                         with open(self.config_file, 'w') as f:
                                             json.dump(local_strategy, f, indent=2)
