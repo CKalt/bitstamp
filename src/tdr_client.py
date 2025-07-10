@@ -265,11 +265,16 @@ Initializing connection to remote server...
                             
                             # Check if they differ in key fields
                             if local_strategy:
-                                key_fields = ['Short_Window', 'Long_Window', 'do_live_trades', 'auto_resume']
+                                # Key fields to compare (excluding auto_resume which should be preserved)
+                                key_fields = ['Short_Window', 'Long_Window', 'do_live_trades', 'Last_Trade_Price']
                                 differences = []
                                 for field in key_fields:
                                     if local_strategy.get(field) != server_strategy.get(field):
                                         differences.append(f"  {field}: local={local_strategy.get(field)} vs server={server_strategy.get(field)}")
+                                
+                                # Check auto_resume separately
+                                if local_strategy.get('auto_resume') != server_strategy.get('auto_resume'):
+                                    differences.append(f"  auto_resume: local={local_strategy.get('auto_resume')} vs server={server_strategy.get('auto_resume')} (server value will be preserved)")
                                 
                                 if differences:
                                     print("\n📋 Server has different best_strategy.json:")
@@ -282,10 +287,20 @@ Initializing connection to remote server...
                                         shutil.copy(self.config_file, backup_path)
                                         print(f"✅ Backed up local strategy to {backup_path}")
                                         
+                                        # Merge strategies, preserving important server fields
+                                        merged_strategy = local_strategy.copy()
+                                        merged_strategy.update(server_strategy)
+                                        
+                                        # Always preserve these server-side fields
+                                        server_only_fields = ['auto_resume', 'max_trades_per_day']
+                                        for field in server_only_fields:
+                                            if field in server_strategy:
+                                                merged_strategy[field] = server_strategy[field]
+                                        
                                         with open(self.config_file, 'w') as f:
-                                            json.dump(server_strategy, f, indent=2)
-                                        print("✅ Using server's best_strategy.json")
-                                        config['best_strategy'] = server_strategy
+                                            json.dump(merged_strategy, f, indent=2)
+                                        print("✅ Using server's best_strategy.json (with preserved server settings)")
+                                        config['best_strategy'] = merged_strategy
                                     elif response == 'backup':
                                         # Just backup without overwriting
                                         backup_path = f"best_strategy.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
