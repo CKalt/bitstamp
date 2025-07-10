@@ -168,6 +168,12 @@ def auto_load_history():
         # Check if auto_resume is enabled
         if best_strategy.get('auto_resume', False):
             logger.info("Auto-resume is enabled, checking for saved position...")
+            
+            # Debug: Log data_manager position state before auto-resume
+            if hasattr(data_manager, 'position_size'):
+                logger.info(f"[POSITION_DEBUG] data_manager state BEFORE auto-resume: position={getattr(data_manager, 'position', 'UNDEFINED')}, size={getattr(data_manager, 'position_size', 'UNDEFINED')}, cost_basis={getattr(data_manager, 'position_cost_basis', 'UNDEFINED')}")
+            else:
+                logger.info(f"[POSITION_DEBUG] data_manager has NO position tracking attributes before auto-resume")
             try:
                 # Check if auto-trader is already running
                 if shell and shell.auto_trader:
@@ -191,6 +197,16 @@ def auto_load_history():
                             if shell:
                                 shell.do_resume_auto_trade(resume_args)
                                 logger.info("Auto-resume completed successfully")
+                                
+                                # Debug: Log position state after auto-resume
+                                if shell.auto_trader:
+                                    logger.info(f"[POSITION_DEBUG] auto_trader state AFTER auto-resume: position={shell.auto_trader.position}, size={shell.auto_trader.position_size}, cost_basis={shell.auto_trader.position_cost_basis}")
+                                    if shell.auto_trader.position_size != 0:
+                                        entry_price = shell.auto_trader.position_cost_basis / abs(shell.auto_trader.position_size)
+                                        logger.info(f"[POSITION_DEBUG] Calculated entry price: ${entry_price:.2f}")
+                                
+                                if hasattr(data_manager, 'position_size'):
+                                    logger.info(f"[POSITION_DEBUG] data_manager state AFTER auto-resume: position={getattr(data_manager, 'position', 'UNDEFINED')}, size={getattr(data_manager, 'position_size', 'UNDEFINED')}, cost_basis={getattr(data_manager, 'position_cost_basis', 'UNDEFINED')}")
                             else:
                                 logger.error("Shell not available for auto-resume")
                         else:
@@ -271,6 +287,13 @@ def initialize():
             data_manager.position = pos.get('position', 0)
             data_manager.position_size = pos.get('position_size', 0)
             data_manager.position_cost_basis = pos.get('position_cost_basis', 0)
+            logger.info(f"[POSITION_DEBUG] Initialized data_manager position from config: position={data_manager.position}, size={data_manager.position_size}, cost_basis={data_manager.position_cost_basis}")
+        else:
+            # Initialize default position tracking attributes
+            data_manager.position = 0
+            data_manager.position_size = 0
+            data_manager.position_cost_basis = 0
+            logger.info(f"[POSITION_DEBUG] Initialized data_manager with default position values")
             
             # Set last_trade_price from position tracking
             if data_manager.position_size != 0:

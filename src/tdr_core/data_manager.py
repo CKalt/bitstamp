@@ -35,6 +35,14 @@ class CryptoDataManager:
 
         # For staleness detection: track last trade time
         self.last_trade_time = {symbol: None for symbol in symbols}
+        
+        # Initialize position tracking attributes
+        self.position = 0
+        self.position_size = 0.0
+        self.position_cost_basis = 0.0
+        self.balance_btc = 0.0
+        self.balance_usd = 10000.0
+        self.last_trade_price = None
 
     def load_historical_data(self, data_dict):
         """

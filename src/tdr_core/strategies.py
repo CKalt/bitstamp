@@ -391,8 +391,12 @@ class MACrossoverStrategy:
         self.trades_this_hour = []
 
         # Cost basis logic
-        self.position_cost_basis = 0.0
-        self.position_size = 0.0
+        self._position_cost_basis = 0.0
+        self._position_size = 0.0
+        self._debug_position_tracking = True  # Enable position tracking debug
+        
+        # Track position changes
+        self._last_position_log = {'size': 0.0, 'cost_basis': 0.0}
 
         # For storing an initial theoretical trade if hist_position matches user request
         self.theoretical_trade = None
@@ -415,6 +419,40 @@ class MACrossoverStrategy:
         self.min_balance_usd = self.balance_usd
         self.max_balance_btc = self.balance_btc
         self.min_balance_btc = self.balance_btc
+    
+    @property
+    def position_cost_basis(self):
+        return self._position_cost_basis
+    
+    @position_cost_basis.setter
+    def position_cost_basis(self, value):
+        if value != self._position_cost_basis:
+            old_value = self._position_cost_basis
+            self._position_cost_basis = value
+            if self._debug_position_tracking:
+                import traceback
+                stack = traceback.extract_stack()
+                caller = stack[-2] if len(stack) >= 2 else None
+                self.logger.warning(f"[POSITION_DEBUG] position_cost_basis changed from ${old_value:.2f} to ${value:.2f}")
+                if caller:
+                    self.logger.warning(f"[POSITION_DEBUG]   Changed by: {caller.filename}:{caller.lineno} in {caller.name}()")
+                    
+    @property
+    def position_size(self):
+        return self._position_size
+    
+    @position_size.setter
+    def position_size(self, value):
+        if value != self._position_size:
+            old_value = self._position_size
+            self._position_size = value
+            if self._debug_position_tracking:
+                import traceback
+                stack = traceback.extract_stack()
+                caller = stack[-2] if len(stack) >= 2 else None
+                self.logger.warning(f"[POSITION_DEBUG] position_size changed from {old_value:.8f} to {value:.8f}")
+                if caller:
+                    self.logger.warning(f"[POSITION_DEBUG]   Changed by: {caller.filename}:{caller.lineno} in {caller.name}()")
 
     def _clean_up_hourly_trades(self):
         one_hour_ago = datetime.utcnow() - timedelta(hours=1)
@@ -467,6 +505,9 @@ class MACrossoverStrategy:
         """
         evaluation_count = 0
         last_evaluation_log = datetime.now()
+        
+        # Log initial position state
+        self.logger.info(f"[POSITION_DEBUG] Strategy loop starting with position: size={self.position_size}, cost_basis={self.position_cost_basis}")
         
         while self.running:
             evaluation_count += 1
@@ -1236,6 +1277,8 @@ class MACrossoverStrategy:
 
     def validate_position_from_trades(self):
         """Validate and fix position tracking based on recent trades from trades.json"""
+        self.logger.info(f"[POSITION_DEBUG] Starting validate_position_from_trades")
+        self.logger.info(f"[POSITION_DEBUG] Current position before: size={self.position_size}, cost_basis={self.position_cost_basis}")
         try:
             import json
             import os
@@ -1301,6 +1344,7 @@ class MACrossoverStrategy:
                 self.position_cost_basis = total_cost
                 self.last_trade_price = float(last_trade['price'])
                 
+                self.logger.info(f"[POSITION_DEBUG] Setting SHORT position: size={self.position_size}, cost_basis={self.position_cost_basis}")
                 self.logger.info(f"Validated SHORT position from {len(position_trades)} trades:")
                 self.logger.info(f"  Total BTC sold: {total_btc:.8f}")
                 self.logger.info(f"  Average entry price: ${avg_entry_price:.2f}")
@@ -1319,6 +1363,7 @@ class MACrossoverStrategy:
                 self.position_cost_basis = total_cost
                 self.last_trade_price = float(last_trade['price'])
                 
+                self.logger.info(f"[POSITION_DEBUG] Setting LONG position: size={self.position_size}, cost_basis={self.position_cost_basis}")
                 self.logger.info(f"Validated LONG position from {len(position_trades)} trades:")
                 self.logger.info(f"  Total BTC bought: {total_btc:.8f}")
                 self.logger.info(f"  Average entry price: ${avg_entry_price:.2f}")
@@ -1646,10 +1691,14 @@ class MACrossoverStrategy:
                                     position_info['entry_price'] = actual_short_entry
                                     position_info['unrealized_pnl'] = (actual_short_entry - cp) * btc_sold
                                     
-                                    # Fix the position tracking for future calculations
-                                    self.position_size = -btc_sold
-                                    self.position_cost_basis = self.balance_usd
-                                    self.last_trade_price = actual_short_entry
+                                    # Only fix position tracking if it's not already set correctly
+                                    if abs(self.position_size) < 1e-8 or self.position_cost_basis == 0:
+                                        self.logger.warning(f"[POSITION_DEBUG] get_status() is fixing uninitialized SHORT position tracking: size={-btc_sold}, cost_basis={self.balance_usd}")
+                                        self.position_size = -btc_sold
+                                        self.position_cost_basis = self.balance_usd
+                                        self.last_trade_price = actual_short_entry
+                                    else:
+                                        self.logger.info(f"[POSITION_DEBUG] get_status() skipping position fix - already set correctly: size={self.position_size}, cost_basis={self.position_cost_basis}")
                                 else:
                                     position_info['entry_price'] = self.last_trade_price or 0.0
                                     position_info['unrealized_pnl'] = 0.0

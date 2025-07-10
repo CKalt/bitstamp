@@ -513,6 +513,7 @@ class CryptoShell(cmd.Cmd):
             
             # Sync to data_manager
             if hasattr(self.data_manager, 'position_size'):
+                self.logger.info(f"[POSITION_DEBUG] Syncing trades.json position to data_manager: position={self.auto_trader.position}, size={self.auto_trader.position_size}, cost_basis={self.auto_trader.position_cost_basis}")
                 self.data_manager.position_size = self.auto_trader.position_size
                 self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
                 self.data_manager.position = self.auto_trader.position
@@ -543,6 +544,7 @@ class CryptoShell(cmd.Cmd):
                 
             # Sync to data_manager
             if hasattr(self.data_manager, 'position_size'):
+                self.logger.info(f"[POSITION_DEBUG] Syncing manual resume position to data_manager: position={desired_position}, size={self.auto_trader.position_size}, cost_basis={self.auto_trader.position_cost_basis}")
                 self.data_manager.position_size = self.auto_trader.position_size
                 self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
                 self.data_manager.position = desired_position
