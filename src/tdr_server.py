@@ -419,6 +419,30 @@ def execute_command():
             if any(cmd in command for cmd in history_required_commands):
                 if not server_config.get('history_loaded', False):
                     if server_config.get('history_loading', False):
+                        # Special handling for resume_auto_trade - enable auto_resume instead of blocking
+                        if 'resume_auto_trade' in command and server_config.get('best_strategy'):
+                            if not server_config['best_strategy'].get('auto_resume', False):
+                                server_config['best_strategy']['auto_resume'] = True
+                                logger.info("Enabled auto_resume - will resume automatically when history loads")
+                                return jsonify({
+                                    'command': command,
+                                    'success': True,
+                                    'message': 'Auto-resume enabled. Trading will start automatically when history finishes loading.',
+                                    'auto_resume': True,
+                                    'history_loading': True,
+                                    'history_progress': server_config.get('history_progress', 0)
+                                }), 200
+                            else:
+                                return jsonify({
+                                    'command': command,
+                                    'success': True,
+                                    'message': 'Auto-resume already enabled. Trading will start automatically when history finishes loading.',
+                                    'auto_resume': True,
+                                    'history_loading': True,
+                                    'history_progress': server_config.get('history_progress', 0)
+                                }), 200
+                        
+                        # For other commands, still block
                         return jsonify({
                             'command': command,
                             'success': False,

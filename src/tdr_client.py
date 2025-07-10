@@ -414,6 +414,13 @@ Initializing connection to remote server...
                 except:
                     pass  # Don't fail if we can't get server status
             
+            # Print special message for auto-resume response
+            if response.get('auto_resume') and response.get('message'):
+                print(f"\n✅ {response['message']}")
+                if response.get('history_progress') is not None:
+                    print(f"⏳ History loading progress: {response['history_progress']:.1f}%")
+                return
+            
             # Print command output
             output = response.get('output', '')
             if output:
