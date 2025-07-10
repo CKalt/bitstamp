@@ -73,21 +73,25 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     skipped_count = start_line - 1
     processed_count = 0
     end_reached = False
-    # Only show 10 progress updates
-    progress_interval = max(total_lines // 10, 1)
+    
+    # Calculate progress interval based on lines we'll actually process
+    lines_to_process = total_lines - start_line + 1
+    # Show 10 progress updates based on lines to process, not total lines
+    progress_interval = max(lines_to_process // 10, 1)
+    next_progress_line = start_line + progress_interval
 
     with open(file_path, 'r') as file:
         for i, line in enumerate(file, 1):
             if i < start_line:
                 continue
 
-            if i % progress_interval == 0:  # Show progress every 10%
-                # Calculate progress based on lines to process, not total file lines
-                lines_to_process = total_lines - start_line + 1
+            # Check if we've reached a progress milestone
+            if i >= next_progress_line:
                 lines_processed = i - start_line + 1
                 progress = min(lines_processed / lines_to_process * 100, 100.0)
                 print(
                     f"Progress: {progress:.1f}% - Last date: {last_date}")
+                next_progress_line += progress_interval
 
             try:
                 json_data = json.loads(line)
@@ -115,6 +119,8 @@ def parse_log_file(file_path, start_date=None, end_date=None):
             except json.JSONDecodeError:
                 continue
 
+    # Final progress update
+    print(f"Progress: 100.0% - Last date: {last_date}")
     print(f"\nFinished processing log file. Last date processed: {last_date}")
     print(f"Total entries skipped: {skipped_count}")
     print(f"Total entries processed: {processed_count}")

@@ -97,6 +97,7 @@ def auto_load_history():
                 def __init__(self, original_stdout):
                     self.original = original_stdout
                     self.buffer = []
+                    self.last_progress = -1
                     
                 def write(self, text):
                     self.original.write(text)  # Still write to console
@@ -114,7 +115,10 @@ def auto_load_history():
                                 server_config['history_status'] = text.split(':')[0] + ': 100.0% - ' + text.split('-', 1)[-1].strip()
                             else:
                                 server_config['history_status'] = text.strip()
-                            logger.info(f"History loading: Progress: {percent:.1f}%")
+                            # Only log if progress changed by at least 0.1%
+                            if abs(percent - self.last_progress) >= 0.1:
+                                logger.info(f"History loading: Progress: {percent:.1f}%")
+                                self.last_progress = percent
                         except:
                             pass
                     elif text.strip() and not text.startswith('\r'):
