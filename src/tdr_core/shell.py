@@ -974,7 +974,9 @@ class CryptoShell(cmd.Cmd):
             
             # Position tracking is now handled inside do_auto_trade when _resume_entry_price is set
             if self.auto_trader:
-                print(f"✅ Position tracking updated with entry price ${entry_price:.2f}")
+                # Get actual entry price from the auto trader
+                actual_entry = self.auto_trader.position_cost_basis / abs(self.auto_trader.position_size) if self.auto_trader.position_size != 0 else 0
+                print(f"✅ Auto-trading resumed with actual entry price ${actual_entry:.2f}")
                 
             # Clean up
             if hasattr(self, '_resume_entry_price'):

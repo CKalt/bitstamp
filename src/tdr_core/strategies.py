@@ -887,8 +887,10 @@ class MACrossoverStrategy:
                         "fill_price": price
                     }
                 )
-                self.position_cost_basis = self.position_size * price
-                self.logger.info(f"Corrected position cost basis to ${self.position_cost_basis:.2f}")
+                # Use the actual cost added, not position_size * last_price
+                self.position_cost_basis = actual_cost_added
+                avg_price = actual_cost_added / total_btc_bought if total_btc_bought > 0 else price
+                self.logger.info(f"Corrected position cost basis to ${self.position_cost_basis:.2f} (avg price: ${avg_price:.2f})")
         
         # Log final position state and multi-part summary
         self.logger.info(f"Three-part buy complete: {self.position_size:.8f} BTC, cost basis: ${self.position_cost_basis:.2f}")
