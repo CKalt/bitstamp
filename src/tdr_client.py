@@ -814,16 +814,7 @@ Initializing connection to remote server...
         except Exception as e:
             print(f"Error starting auto trade: {e}")
     
-    def do_stop_auto(self, arg):
-        """Stop auto trading"""
-        try:
-            response = requests.post(f"{self.server_url}/api/strategy/stop", timeout=REQUEST_TIMEOUT)
-            if response.status_code == 200:
-                self.print_response(response.json())
-            else:
-                print(f"Error: {response.text}")
-        except Exception as e:
-            print(f"Error stopping auto trade: {e}")
+    # Removed duplicate do_stop_auto - use do_stop_auto_trade instead
     
     def do_diagnostics(self, arg):
         """Get strategy diagnostics"""
