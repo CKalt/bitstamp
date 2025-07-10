@@ -447,6 +447,17 @@ Initializing connection to remote server...
             if 'position' in response:
                 pos = response['position']
                 print(f"\nPosition Update:")
+                
+                # Determine and show position direction
+                if 'position' in pos:
+                    position_val = pos['position']
+                    if position_val == 1:
+                        print(f"  Direction: LONG")
+                    elif position_val == -1:
+                        print(f"  Direction: SHORT")
+                    else:
+                        print(f"  Direction: NEUTRAL (Error - should not happen)")
+                
                 print(f"  BTC: {pos['btc_balance']:.8f}")
                 print(f"  USD: ${pos['usd_balance']:.2f}")
                 if pos.get('entry_price') and pos['entry_price'] > 0:
