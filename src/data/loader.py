@@ -79,6 +79,7 @@ def parse_log_file(file_path, start_date=None, end_date=None):
     # Show 10 progress updates based on lines to process, not total lines
     progress_interval = max(lines_to_process // 10, 1)
     next_progress_line = start_line + progress_interval
+    last_progress_printed = -1
 
     with open(file_path, 'r') as file:
         for i, line in enumerate(file, 1):
@@ -89,8 +90,10 @@ def parse_log_file(file_path, start_date=None, end_date=None):
             if i >= next_progress_line:
                 lines_processed = i - start_line + 1
                 progress = min(lines_processed / lines_to_process * 100, 100.0)
-                print(
-                    f"Progress: {progress:.1f}% - Last date: {last_date}")
+                # Only print if progress has actually changed
+                if progress != last_progress_printed:
+                    print(f"Progress: {progress:.1f}% - Last date: {last_date}")
+                    last_progress_printed = progress
                 next_progress_line += progress_interval
 
             try:
@@ -119,8 +122,9 @@ def parse_log_file(file_path, start_date=None, end_date=None):
             except json.JSONDecodeError:
                 continue
 
-    # Final progress update
-    print(f"Progress: 100.0% - Last date: {last_date}")
+    # Final progress update only if we haven't already printed 100%
+    if last_progress_printed < 100.0:
+        print(f"Progress: 100.0% - Last date: {last_date}")
     print(f"\nFinished processing log file. Last date processed: {last_date}")
     print(f"Total entries skipped: {skipped_count}")
     print(f"Total entries processed: {processed_count}")
