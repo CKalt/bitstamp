@@ -289,14 +289,30 @@ Initializing connection to remote server...
                                 
                                 # Auto-sync server updates without prompting
                                 if server_diffs and not strategy_diffs:
-                                    print("\n📥 Auto-syncing server updates...")
+                                    # Only show sync message if we're actually syncing something
+                                    fields_to_sync = []
                                     for field, local_val, server_val in server_diffs:
-                                        # Never sync null values for critical fields
+                                        # Skip null values for critical fields
                                         if field in ['auto_resume', 'max_trades_per_day'] and server_val is None:
-                                            print(f"  ⚠️  Skipping {field}: server has null value")
                                             continue
-                                        local_strategy[field] = server_val
-                                        print(f"  ✅ {field}: {local_val} → {server_val}")
+                                        fields_to_sync.append((field, local_val, server_val))
+                                    
+                                    if fields_to_sync:
+                                        print("\n📥 Auto-syncing server updates...")
+                                        for field, local_val, server_val in fields_to_sync:
+                                            local_strategy[field] = server_val
+                                            print(f"  ✅ {field}: {local_val} → {server_val}")
+                                    
+                                    # Check if server needs important fields updated
+                                    server_needs_update = []
+                                    if server_strategy.get('auto_resume') is None and local_strategy.get('auto_resume') is True:
+                                        server_needs_update.append('auto_resume')
+                                    if server_strategy.get('max_trades_per_day') is None and local_strategy.get('max_trades_per_day') is not None:
+                                        server_needs_update.append('max_trades_per_day')
+                                    
+                                    if server_needs_update:
+                                        print(f"\n💡 Tip: Server's best_strategy.json needs updating: {', '.join(server_needs_update)}")
+                                        print("   Run 'push' when prompted or manually update on server")
                                     
                                     with open(self.config_file, 'w') as f:
                                         json.dump(local_strategy, f, indent=2)
