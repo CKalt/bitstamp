@@ -1075,13 +1075,14 @@ class MACrossoverStrategy:
                     self.position_cost_basis = leftover_btc * fill_price
 
             # Validate position after update
-            if self.position_size > 0 and self.position_cost_basis > 0:
-                avg_entry = self.position_cost_basis / self.position_size
-                if avg_entry > fill_price * 1.5:
-                    self.logger.error(f"Position tracking error: avg entry ${avg_entry:.2f} > 1.5x fill price ${fill_price:.2f}")
-                    # Reset to reasonable values
-                    self.position_cost_basis = self.position_size * fill_price
-                    self.logger.info(f"Reset cost basis to ${self.position_cost_basis:.2f}")
+            # DISABLED: This check was incorrectly resetting valid entry prices
+            # if self.position_size > 0 and self.position_cost_basis > 0:
+            #     avg_entry = self.position_cost_basis / self.position_size
+            #     if avg_entry > fill_price * 1.5:
+            #         self.logger.error(f"Position tracking error: avg entry ${avg_entry:.2f} > 1.5x fill price ${fill_price:.2f}")
+            #         # Reset to reasonable values
+            #         self.position_cost_basis = self.position_size * fill_price
+            #         self.logger.info(f"Reset cost basis to ${self.position_cost_basis:.2f}")
 
             if self.last_trade_price is not None and self.position == -1:
                 # old code for short -> buy
@@ -1465,13 +1466,15 @@ class MACrossoverStrategy:
             avg_entry = self.position_cost_basis / self.position_size if self.position_size > 0 else 0
             current_price = self.data_manager.get_current_price(self.symbol) or 0
             
-            # Sanity check: entry price shouldn't be more than 1.5x current price
-            if avg_entry > current_price * 1.5 and current_price > 0:
-                self.logger.error(f"Invalid entry price detected: ${avg_entry:.2f} vs current ${current_price:.2f}")
-                # Attempt to fix by recalculating based on current balance
-                # Assume entry was 5% below current price as a reasonable estimate
-                self.position_cost_basis = self.position_size * current_price * 0.95
-                self.logger.info(f"Reset position cost basis to ${self.position_cost_basis:.2f}")
+            # DISABLED: This sanity check was incorrectly resetting valid entry prices
+            # # Sanity check: entry price shouldn't be more than 1.5x current price
+            # if avg_entry > current_price * 1.5 and current_price > 0:
+            #     self.logger.error(f"[SANITY_CHECK] Invalid entry price detected: ${avg_entry:.2f} vs current ${current_price:.2f}")
+            #     self.logger.error(f"[SANITY_CHECK] Original values: position_size={self.position_size:.8f}, cost_basis=${self.position_cost_basis:.2f}")
+            #     # Attempt to fix by recalculating based on current balance
+            #     # Assume entry was 5% below current price as a reasonable estimate
+            #     self.position_cost_basis = self.position_size * current_price * 0.95
+            #     self.logger.error(f"[SANITY_CHECK] OVERRIDING! Reset position cost basis to ${self.position_cost_basis:.2f}")
 
         status = {
             'running': self.running,
@@ -1592,6 +1595,7 @@ class MACrossoverStrategy:
                 # Long position - holding BTC
                 if self.position_size > 1e-8:
                     avg_entry_price = self.position_cost_basis / self.position_size
+                    self.logger.info(f"[ENTRY_PRICE_DEBUG] Calculating entry price: cost_basis=${self.position_cost_basis:.2f} / size={self.position_size:.8f} = ${avg_entry_price:.2f}")
                     position_info['entry_price'] = avg_entry_price
                     position_info['position_size_btc'] = self.position_size
                     position_info['position_size_usd'] = self.position_size * cp
@@ -1794,13 +1798,14 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                     {"balance_btc": self.balance_btc, "balance_usd": self.balance_usd}
                 )
         
-        # Validate cost basis reasonableness
-        if self.position == 1 and self.position_size > 0 and current_price > 0:
-            avg_entry = self.position_cost_basis / self.position_size
-            if avg_entry > current_price * 1.5:
-                self.logger.error(f"Unrealistic entry price: ${avg_entry:.2f} vs current ${current_price:.2f}")
-                self.position_cost_basis = self.position_size * current_price * 0.95
-                self.logger.info(f"Reset cost basis to ${self.position_cost_basis:.2f}")
+        # DISABLED: This validation was incorrectly resetting valid entry prices
+        # # Validate cost basis reasonableness
+        # if self.position == 1 and self.position_size > 0 and current_price > 0:
+        #     avg_entry = self.position_cost_basis / self.position_size
+        #     if avg_entry > current_price * 1.5:
+        #         self.logger.error(f"Unrealistic entry price: ${avg_entry:.2f} vs current ${current_price:.2f}")
+        #         self.position_cost_basis = self.position_size * current_price * 0.95
+        #         self.logger.info(f"Reset cost basis to ${self.position_cost_basis:.2f}")
         
         # Validate short position tracking
         if self.position == -1 and self.position_size >= 0 and self.balance_usd > 50000:

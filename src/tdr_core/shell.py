@@ -533,6 +533,7 @@ class CryptoShell(cmd.Cmd):
                 self.auto_trader.position_cost_basis = amount_num * entry_price
                 self.auto_trader.last_trade_price = entry_price
                 self.logger.info(f"Resume: Set LONG position tracking - {amount_num} BTC @ ${entry_price:.2f}")
+                self.logger.info(f"[RESUME_DEBUG] Set position_size={amount_num}, cost_basis=${amount_num * entry_price:.2f}, entry_price=${entry_price}")
             elif desired_position == -1:  # SHORT position
                 btc_sold = amount_num / entry_price
                 self.auto_trader.position_size = -btc_sold
