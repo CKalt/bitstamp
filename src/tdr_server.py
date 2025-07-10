@@ -130,25 +130,8 @@ def auto_load_history():
             
             try:
                 logger.info("Starting parse_log_file...")
-                # Start a thread to provide periodic updates if parse_log_file is slow
-                stop_updates = threading.Event()
-                
-                def progress_updater():
-                    elapsed = 0
-                    while not stop_updates.is_set():
-                        if server_config.get('history_progress', 0) == 0:
-                            # If still at 0%, show elapsed time
-                            server_config['history_status'] = f'Loading historical data... ({elapsed}s elapsed)'
-                        stop_updates.wait(1)  # Update every second
-                        elapsed += 1
-                
-                update_thread = threading.Thread(target=progress_updater, daemon=True)
-                update_thread.start()
-                
+                # Parse log file - it will update status messages directly
                 df = parse_log_file(log_file, start_date=start_date, end_date=end_date)
-                
-                stop_updates.set()
-                update_thread.join(timeout=0.1)
                 logger.info(f"parse_log_file completed with {len(df) if not df.empty else 0} records")
             finally:
                 sys.stdout = old_stdout
