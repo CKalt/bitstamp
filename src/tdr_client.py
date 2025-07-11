@@ -835,6 +835,144 @@ Initializing connection to remote server...
             print(f"Live Trading: {self.last_status.get('live_trading', False)}")
             print(f"WebSocket: {self.last_status.get('websocket', 'Unknown')}")
     
+    def do_poll_server(self, arg):
+        """Poll server for important events and display notifications
+        Usage: poll_server [interval_seconds]
+        
+        Monitors:
+        - History loading progress
+        - Trading events from auto-trader
+        - Position changes
+        - Connection status changes
+        
+        Press 'q' + Enter or Ctrl+C to stop polling
+        """
+        interval = float(arg) if arg else 10.0
+        
+        if hasattr(self, 'polling_thread') and self.polling_thread and self.polling_thread.is_alive():
+            print("Already polling server. Use 'q' + Enter to stop.")
+            return
+        
+        print(f"\n🔄 Starting server event polling (checking every {interval}s)")
+        print("📊 Monitoring: History loading, trades, position changes")
+        print("⏹️  To stop: Type 'q' and press Enter (or press Ctrl+C)\n")
+        print("─" * 60)
+        
+        self.stop_polling = threading.Event()
+        self.last_trade_count = None
+        self.last_history_status = None
+        self.last_position = None
+        self.history_complete_notified = False
+        
+        def poll_loop():
+            while not self.stop_polling.is_set():
+                try:
+                    # Get current status
+                    response = requests.get(f"{self.server_url}/api/status", timeout=5)
+                    if response.status_code == 200:
+                        status = response.json()
+                        timestamp = datetime.now().strftime('%H:%M:%S')
+                        
+                        # Check history loading status
+                        if status.get('history_loading'):
+                            history_status = status.get('history_status', 'Loading...')
+                            if history_status != self.last_history_status:
+                                print(f"[{timestamp}] 📚 History: {history_status}")
+                                self.last_history_status = history_status
+                        elif status.get('history_loaded') and not self.history_complete_notified:
+                            record_count = status.get('position', {}).get('history_record_count', 0)
+                            print(f"[{timestamp}] ✅ History loading complete! ({record_count:,} records)")
+                            self.history_complete_notified = True
+                        
+                        # Check for auto-trader events
+                        if status.get('auto_trader', {}).get('active'):
+                            at = status['auto_trader']
+                            trades_today = at.get('trades_today', 0)
+                            
+                            # Check for new trades
+                            if self.last_trade_count is not None and trades_today > self.last_trade_count:
+                                # Get recent trades to show the new one
+                                trades_response = requests.get(f"{self.server_url}/api/trades", params={'limit': 1}, timeout=5)
+                                if trades_response.status_code == 200:
+                                    trades_data = trades_response.json()
+                                    if trades_data.get('trades'):
+                                        trade = trades_data['trades'][0]
+                                        action = trade.get('action', 'UNKNOWN')
+                                        amount = trade.get('amount', 0)
+                                        price = trade.get('price', 0)
+                                        print(f"[{timestamp}] 💰 NEW TRADE: {action} {amount:.8f} BTC @ ${price:.2f}")
+                                        
+                                        # Play alert sound if available
+                                        try:
+                                            print('\a')  # Terminal bell
+                                        except:
+                                            pass
+                            
+                            self.last_trade_count = trades_today
+                        
+                        # Check for position changes
+                        if 'position' in status:
+                            pos = status['position']
+                            current_position = {
+                                'btc': pos['btc_balance'],
+                                'usd': pos['usd_balance'],
+                                'side': pos['position']
+                            }
+                            
+                            if self.last_position and current_position != self.last_position:
+                                # Position changed
+                                btc_change = current_position['btc'] - self.last_position['btc']
+                                usd_change = current_position['usd'] - self.last_position['usd']
+                                
+                                if abs(btc_change) > 0.00000001 or abs(usd_change) > 0.01:
+                                    side = 'LONG' if current_position['side'] > 0 else 'SHORT'
+                                    print(f"[{timestamp}] 📍 Position changed to {side}")
+                                    print(f"              BTC: {current_position['btc']:.8f} ({btc_change:+.8f})")
+                                    print(f"              USD: ${current_position['usd']:.2f} ({usd_change:+.2f})")
+                            
+                            self.last_position = current_position
+                        
+                        # Check WebSocket connection
+                        ws_status = status.get('websocket', 'unknown')
+                        if hasattr(self, 'last_ws_status') and ws_status != self.last_ws_status:
+                            if ws_status == 'connected':
+                                print(f"[{timestamp}] 🟢 WebSocket connected")
+                            else:
+                                print(f"[{timestamp}] 🔴 WebSocket disconnected")
+                        self.last_ws_status = ws_status
+                        
+                except KeyboardInterrupt:
+                    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] ⏹️  Stopped polling (Ctrl+C)")
+                    break
+                except Exception as e:
+                    if not self.stop_polling.is_set():
+                        print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️  Poll error: {e}")
+                
+                # Wait for interval or stop signal
+                self.stop_polling.wait(interval)
+            
+            print("─" * 60)
+            print("Server polling stopped.")
+        
+        # Start polling thread
+        self.polling_thread = threading.Thread(target=poll_loop, daemon=True)
+        self.polling_thread.start()
+        
+        # Start input monitor thread
+        def input_monitor():
+            while self.polling_thread.is_alive():
+                try:
+                    user_input = input()
+                    if user_input.lower() == 'q':
+                        print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏹️  Stopping polling...")
+                        self.stop_polling.set()
+                        break
+                except:
+                    break
+        
+        input_thread = threading.Thread(target=input_monitor, daemon=True)
+        input_thread.start()
+    
     def do_monitor(self, arg):
         """Start real-time monitoring of prices and positions
         Usage: monitor [interval_seconds]"""
@@ -1079,6 +1217,9 @@ Local Client Commands:
   trades [n]                - Show recent trades
   load_history              - Start loading historical data
   history_status            - Check history loading progress
+  poll_server [interval]    - Monitor server events (q+Enter or Ctrl+C to stop)
+  monitor [interval]        - Real-time price/position display
+  stop_monitor              - Stop real-time monitoring
   enable_commands           - Enable Claude command interface
   disable_commands          - Disable command interface
   reconnect                 - Reinitialize server connection
@@ -1093,6 +1234,10 @@ Local Client Commands:
         self.stop_monitoring.set()
         if self.monitoring_thread:
             self.monitoring_thread.join(timeout=2)
+        if hasattr(self, 'stop_polling'):
+            self.stop_polling.set()
+        if hasattr(self, 'polling_thread') and self.polling_thread:
+            self.polling_thread.join(timeout=2)
         if self.command_interface:
             self.command_interface.stop()
         return True
