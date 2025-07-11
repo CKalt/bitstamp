@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-07-10T16:30:00Z",
+  "command": "fix_entry_price",
+  "source": "claude_fix_entry",
+  "args": "",
+  "result": {
+    "auto_trader": {
+      "active": true,
+      "strategy": "AdaptiveMultiStrategy"
+    },
+    "command": "fix_entry_price",
+    "output": "",
+    "success": true,
+    "timestamp": "2025-07-10T20:52:42.408778"
+  },
+  "processed_at": "2025-07-10T16:52:42.371973"
+}

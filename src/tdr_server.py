@@ -165,6 +165,19 @@ def auto_load_history():
         server_config['history_status'] = f"Status: Complete - {server_config.get('history_record_count', 0):,} records loaded"
         logger.info("Historical data loaded successfully")
         
+        # CRITICAL: Sync position tracking after history loads
+        # This ensures entry price is preserved when auto-trader is already running
+        if shell and shell.auto_trader and hasattr(shell.auto_trader, 'position_size'):
+            logger.info("[POSITION_DEBUG] Syncing auto_trader position to data_manager after history load")
+            if hasattr(data_manager, 'position_size'):
+                data_manager.position = shell.auto_trader.position
+                data_manager.position_size = shell.auto_trader.position_size
+                data_manager.position_cost_basis = shell.auto_trader.position_cost_basis
+                data_manager.last_trade_price = shell.auto_trader.last_trade_price
+                logger.info(f"[POSITION_DEBUG] Synced position after history: position={data_manager.position}, "
+                          f"size={data_manager.position_size}, cost_basis={data_manager.position_cost_basis}, "
+                          f"entry_price=${data_manager.position_cost_basis / abs(data_manager.position_size) if data_manager.position_size != 0 else 0:.2f}")
+        
         # Check if auto_resume is enabled
         if best_strategy.get('auto_resume', False):
             logger.info("Auto-resume is enabled, checking for saved position...")
@@ -257,6 +270,16 @@ def initialize():
     global data_manager, order_placer, shell, websocket_thread, server_config, initialization_complete
     
     try:
+        # Check if already initialized to prevent re-initialization
+        if initialization_complete:
+            logger.info("Server already initialized, skipping re-initialization")
+            return jsonify({
+                'status': 'already_initialized',
+                'message': 'Server is already initialized',
+                'history_loaded': server_config.get('history_loaded', False),
+                'history_loading': server_config.get('history_loading', False)
+            }), 200
+        
         config = request.json
         if not config:
             return jsonify({'error': 'No configuration provided'}), 400

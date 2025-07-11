@@ -188,4 +188,9 @@ Remember:
 
 
 
-GOAL: Please fix the bug that is causing an incorrect entry price.  Note that the last Sell was at 108,572 which you should be able to inspect and if not I would like you to be able to request the trading history from the running instance.
+GOAL: Please use megathink to fix the bug that is causing an incorrect entry price when I request a status on the client side.
+
+Please use the enable_commands interface to research the problem.
+
+Also, if I run on the client a reconnect and the server loads the history and I exit and re-start src/tdr.py client the server should
+not reload the history again and any auto trade should not have to be resumed.

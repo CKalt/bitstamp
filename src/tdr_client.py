@@ -760,15 +760,31 @@ Initializing connection to remote server...
             print(f"Error: {e}")
     
     def do_reconnect(self, arg):
-        """Reconnect and reinitialize the server"""
+        """Reconnect to the server and sync configuration"""
         print(f"Reconnecting to {self.server_url}...")
-        self.config = self.load_configuration()
-        if self.initialize_server():
-            print("✅ Reconnection successful!")
+        
+        # First test if server is reachable
+        if not self.test_connection():
+            print("❌ Cannot connect to server")
+            return
+        
+        # Check if server is already initialized
+        if self.check_server_initialized():
+            print("✅ Server is already initialized, syncing configuration...")
+            self.config = self.load_configuration()
             self.initialized = True
             self.update_status()
+            print("✅ Reconnection successful!")
         else:
-            print("❌ Reconnection failed")
+            # Server needs initialization
+            print("Server not initialized, sending configuration...")
+            self.config = self.load_configuration()
+            if self.initialize_server():
+                print("✅ Reconnection and initialization successful!")
+                self.initialized = True
+                self.update_status()
+            else:
+                print("❌ Reconnection failed")
     
     def do_load_history(self, arg):
         """Start loading historical data on the server"""
