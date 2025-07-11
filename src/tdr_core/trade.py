@@ -18,7 +18,10 @@ class Trade:
         data_source,
         signal_timestamp,
         live_trading=False,
-        order_result=None
+        order_result=None,
+        trade_group_id=None,
+        multi_part_sequence=None,
+        multi_part_total=None
     ):
         self.type = trade_type
         self.symbol = symbol
@@ -30,6 +33,10 @@ class Trade:
         self.signal_timestamp = signal_timestamp
         self.live_trading = live_trading
         self.order_result = order_result
+        # Multi-part trade tracking
+        self.trade_group_id = trade_group_id  # Unique ID for the entire multi-part trade
+        self.multi_part_sequence = multi_part_sequence  # Part number (1, 2, 3, etc.)
+        self.multi_part_total = multi_part_total  # Total number of parts
 
     def to_dict(self):
         """
@@ -48,4 +55,11 @@ class Trade:
         }
         if self.order_result:
             trade_info['order_result'] = self.order_result
+        # Add multi-part trade information if present
+        if self.trade_group_id is not None:
+            trade_info['trade_group_id'] = self.trade_group_id
+        if self.multi_part_sequence is not None:
+            trade_info['multi_part_sequence'] = self.multi_part_sequence
+        if self.multi_part_total is not None:
+            trade_info['multi_part_total'] = self.multi_part_total
         return trade_info

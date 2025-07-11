@@ -498,10 +498,13 @@ class CryptoShell(cmd.Cmd):
         )
         
         # Check if we have explicit resume parameters first
-        if hasattr(self, '_resume_entry_price') and self._resume_entry_price:
+        is_resume = hasattr(self, '_resume_entry_price') and self._resume_entry_price
+        if is_resume:
             # User provided explicit position parameters - use those
             self.logger.info("Using explicit resume parameters instead of trades.json")
             trades_loaded = False
+            # Mark as resumed position - no theoretical trade should be created
+            self._is_resumed_position = True
         else:
             # No explicit parameters - validate position against trades.json
             self.logger.info("Loading position from trades.json...")
@@ -524,6 +527,8 @@ class CryptoShell(cmd.Cmd):
             # Mark that we have trades so we don't create theoretical ones later
             if self.auto_trader.position_size != 0:
                 self.auto_trader.trades_executed = len(self.auto_trader.trades) if hasattr(self.auto_trader, 'trades') else 1
+                # Mark as resumed from trades
+                self._is_resumed_position = True
             
         
         if hasattr(self, '_resume_entry_price') and self._resume_entry_price and not trades_loaded:
@@ -569,14 +574,15 @@ class CryptoShell(cmd.Cmd):
         current_market_price = self.data_manager.get_current_price(
             'btcusd') or 0.0
 
-        # Only create theoretical trade if we have NO real trades
+        # Only create theoretical trade if we have NO real trades and NOT resuming
         # Check if we have actual trades first
         self.logger.info(f"Checking for real trades: trades_executed={self.auto_trader.trades_executed}")
         # Don't re-validate if we already did it above
-        has_real_trades = self.auto_trader.trades_executed > 0 or (self.auto_trader.position_size != 0 and self.auto_trader.position_cost_basis > 0)
-        self.logger.info(f"Has real trades: {has_real_trades} (position_size={self.auto_trader.position_size}, cost_basis={self.auto_trader.position_cost_basis})")
+        has_real_trades = self.auto_trader.trades_executed > 0 or trades_loaded or (self.auto_trader.position_size != 0 and self.auto_trader.position_cost_basis > 0)
+        is_resumed = hasattr(self, '_is_resumed_position') and self._is_resumed_position
+        self.logger.info(f"Has real trades: {has_real_trades}, Is resumed: {is_resumed} (position_size={self.auto_trader.position_size}, cost_basis={self.auto_trader.position_cost_basis})")
         
-        if desired_position == 1 and hist_position == 1 and current_market_price > 0 and not has_real_trades:
+        if desired_position == 1 and hist_position == 1 and current_market_price > 0 and not has_real_trades and not is_resumed:
             if self.auto_trader.position_size < 1e-8 and not self.auto_trader.theoretical_trade:  # No position and no theoretical trade
                 # Check if we already loaded from trades.json
                 if abs(self.auto_trader.position_size) < 1e-8:
@@ -605,8 +611,8 @@ class CryptoShell(cmd.Cmd):
                     "note": "No actual trade needed - positions aligned"
                 })
 
-        # If the user starts "short" and hist_position is also short => theoretical
-        if desired_position == -1 and hist_position == -1 and current_market_price > 0:
+        # If the user starts "short" and hist_position is also short => theoretical (unless resuming)
+        if desired_position == -1 and hist_position == -1 and current_market_price > 0 and not is_resumed:
             # Use resume entry price if available, otherwise current market price
             effective_entry_price = self._resume_entry_price if hasattr(self, '_resume_entry_price') and self._resume_entry_price else current_market_price
             short_btc = amount_num / effective_entry_price
@@ -647,14 +653,15 @@ class CryptoShell(cmd.Cmd):
                 self.auto_trader.balance_btc = amount_num
                 self.auto_trader.balance_usd = 0.0
 
-                # Set theoretical trade for entry price tracking
-                self.auto_trader.theoretical_trade = {
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'direction': 'long',
-                    'amount': amount_num,
-                    'entry_price': current_market_price,
-                    'theoretical': True
-                }
+                # Set theoretical trade for entry price tracking (unless resuming)
+                if not is_resumed:
+                    self.auto_trader.theoretical_trade = {
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'direction': 'long',
+                        'amount': amount_num,
+                        'entry_price': current_market_price,
+                        'theoretical': True
+                    }
                 self.logger.info(
                     f"Case 1: LONG matches system. Theoretical entry: {amount_num:.8f} BTC @ ${current_market_price:.2f}")
 
@@ -668,14 +675,15 @@ class CryptoShell(cmd.Cmd):
                 self.auto_trader.balance_btc = 0.0
                 self.auto_trader.balance_usd = amount_num
 
-                # Set theoretical trade for entry price tracking
-                self.auto_trader.theoretical_trade = {
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'direction': 'short',
-                    'amount': amount_num,
-                    'entry_price': current_market_price,
-                    'theoretical': True
-                }
+                # Set theoretical trade for entry price tracking (unless resuming)
+                if not is_resumed:
+                    self.auto_trader.theoretical_trade = {
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'direction': 'short',
+                        'amount': amount_num,
+                        'entry_price': current_market_price,
+                        'theoretical': True
+                    }
                 self.logger.info(
                     f"Case 3: SHORT matches system. Theoretical entry: ${amount_num:.2f} @ ${current_market_price:.2f}")
 
@@ -709,13 +717,14 @@ class CryptoShell(cmd.Cmd):
                     self.auto_trader.position_cost_basis = amount_num * current_market_price
                     self.auto_trader.balance_btc = amount_num
                     self.auto_trader.balance_usd = 0.0
-                    self.auto_trader.theoretical_trade = {
-                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        'direction': 'long',
-                        'amount': amount_num,
-                        'entry_price': current_market_price,
-                        'theoretical': True
-                    }
+                    if not is_resumed:
+                        self.auto_trader.theoretical_trade = {
+                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'direction': 'long',
+                            'amount': amount_num,
+                            'entry_price': current_market_price,
+                            'theoretical': True
+                        }
 
                 # --- Theoretical SHORT initialisation (mirrors Case 3) ---
                 elif desired_position == -1:
@@ -725,13 +734,14 @@ class CryptoShell(cmd.Cmd):
                     self.auto_trader.position_cost_basis = amount_num
                     self.auto_trader.balance_btc = 0.0
                     self.auto_trader.balance_usd = amount_num
-                    self.auto_trader.theoretical_trade = {
-                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        'direction': 'short',
-                        'amount': amount_num,
-                        'entry_price': current_market_price,
-                        'theoretical': True
-                    }
+                    if not is_resumed:
+                        self.auto_trader.theoretical_trade = {
+                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'direction': 'short',
+                            'amount': amount_num,
+                            'entry_price': current_market_price,
+                            'theoretical': True
+                        }
 
             # --- Original realignment logic (only if auto_align is True) -------------
             else:

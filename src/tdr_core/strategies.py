@@ -887,25 +887,34 @@ class MACrossoverStrategy:
         # Disable resume state saving during multi-part trade
         self._in_multi_part_trade = True
         
+        # Generate unique trade group ID for this multi-part trade
+        trade_group_id = f"BUY_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        self._current_trade_group_id = trade_group_id
+        self._multi_part_total = 3
+        
         # Log the start of multi-part trade
         self.diagnostic_logger.log_event("MULTI_PART_TRADE_START", {
             "reason": "3-part buy to avoid 90% rule",
             "initial_usd": initial_usd,
             "target_price": price,
             "counts_as_trades": 1,
+            "trade_group_id": trade_group_id,
             "note": "Will execute 3 buys but count as single daily trade"
         })
         
         parts = []
 
+        self._current_multi_part_sequence = 1
         partial_btc_1 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_1)
         parts.append({"part": 1, "btc": partial_btc_1, "price": price})
 
+        self._current_multi_part_sequence = 2
         partial_btc_2 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_2)
         parts.append({"part": 2, "btc": partial_btc_2, "price": price})
 
+        self._current_multi_part_sequence = 3
         partial_btc_3 = self.get_89pct_btc_of_usd(price)
         self.execute_trade("buy", price, timestamp, signal_time, partial_btc_3)
         parts.append({"part": 3, "btc": partial_btc_3, "price": price})
@@ -949,6 +958,10 @@ class MACrossoverStrategy:
         
         # Re-enable saving and save once for the complete trade
         self._in_multi_part_trade = False
+        # Clear multi-part trade tracking
+        self._current_trade_group_id = None
+        self._current_multi_part_sequence = None
+        self._multi_part_total = None
         self.save_resume_state()
 
     def get_89pct_btc_of_usd(self, price):
@@ -994,7 +1007,10 @@ class MACrossoverStrategy:
             self.last_trade_reason,
             'live' if self.live_trading else 'historical',
             signal_time,
-            live_trading=self.live_trading
+            live_trading=self.live_trading,
+            trade_group_id=getattr(self, '_current_trade_group_id', None),
+            multi_part_sequence=getattr(self, '_current_multi_part_sequence', None),
+            multi_part_total=getattr(self, '_multi_part_total', None)
         )
 
         self.last_trade_data_source = trade_info.data_source
@@ -1389,6 +1405,40 @@ class MACrossoverStrategy:
             position_info = status.get('position_info', {})
             current_price = self.data_manager.get_current_price(self.symbol) or 0.0
             
+            # Try to get trade references from trades.json
+            trade_references = []
+            trades_file = os.path.abspath(self.trade_log_file)
+            if os.path.exists(trades_file):
+                with open(trades_file, 'r') as f:
+                    trades = json.load(f)
+                    
+                # Find all trades for current position
+                if trades:
+                    position_trades = []
+                    current_position = None
+                    
+                    for trade in reversed(trades):
+                        if not current_position:
+                            current_position = 'LONG' if trade['type'] == 'buy' else 'SHORT'
+                            position_trades.append(trade)
+                        elif (current_position == 'LONG' and trade['type'] == 'buy') or \
+                             (current_position == 'SHORT' and trade['type'] == 'sell'):
+                            position_trades.append(trade)
+                        else:
+                            break
+                    
+                    # Extract trade references
+                    for trade in position_trades:
+                        trade_ref = {
+                            'timestamp': trade['timestamp'],
+                            'type': trade['type'],
+                            'amount': trade['amount'],
+                            'price': trade['price']
+                        }
+                        if 'trade_group_id' in trade:
+                            trade_ref['trade_group_id'] = trade['trade_group_id']
+                        trade_references.append(trade_ref)
+            
             # Determine position type and amount
             if self.position == 1:  # LONG
                 amount = self.balance_btc
@@ -1430,7 +1480,8 @@ class MACrossoverStrategy:
                     'usd': round(self.balance_usd, 2)
                 },
                 'trades_executed': self.trades_executed,
-                'last_trade_time': self.last_trade_time.isoformat() if self.last_trade_time else None
+                'last_trade_time': self.last_trade_time.isoformat() if self.last_trade_time else None,
+                'trade_references': trade_references
             }
             
             # Save to file
