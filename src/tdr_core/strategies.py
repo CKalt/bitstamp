@@ -1405,8 +1405,9 @@ class MACrossoverStrategy:
             position_info = status.get('position_info', {})
             current_price = self.data_manager.get_current_price(self.symbol) or 0.0
             
-            # Try to get trade references from trades.json
+            # Try to get trade references from trades.json and calculate correct entry price
             trade_references = []
+            calculated_entry_price = None
             trades_file = os.path.abspath(self.trade_log_file)
             if os.path.exists(trades_file):
                 with open(trades_file, 'r') as f:
@@ -1427,6 +1428,23 @@ class MACrossoverStrategy:
                         else:
                             break
                     
+                    # Reverse to get chronological order
+                    position_trades.reverse()
+                    
+                    # Calculate entry price from trades
+                    if position_trades:
+                        if current_position == 'LONG':
+                            # For LONG positions, average all BUY prices (handling multi-part trades)
+                            total_btc = sum(float(t['amount']) for t in position_trades)
+                            total_cost = sum(float(t['amount']) * float(t['price']) for t in position_trades)
+                            calculated_entry_price = total_cost / total_btc if total_btc > 0 else 0
+                            self.logger.info(f"Calculated LONG entry price from {len(position_trades)} trades: ${calculated_entry_price:.2f}")
+                        else:  # SHORT
+                            # For SHORT positions, use the last SELL price
+                            if position_trades:
+                                calculated_entry_price = float(position_trades[-1]['price'])
+                                self.logger.info(f"Using last SELL price for SHORT entry: ${calculated_entry_price:.2f}")
+                    
                     # Extract trade references
                     for trade in position_trades:
                         trade_ref = {
@@ -1444,13 +1462,19 @@ class MACrossoverStrategy:
                 amount = self.balance_btc
                 unit = 'btc'
                 position_type = 'long'
-                entry_price = position_info.get('entry_price', self.last_trade_price or 0)
+                # Use calculated entry price from trades.json if available, otherwise fall back to position tracking
+                if calculated_entry_price is not None:
+                    entry_price = calculated_entry_price
+                else:
+                    entry_price = position_info.get('entry_price', self.last_trade_price or 0)
             elif self.position == -1:  # SHORT
                 amount = self.balance_usd
                 unit = 'usd'
                 position_type = 'short'
-                # For SHORT, try to get correct entry from position tracking or trades.json
-                if self.position_size < 0:
+                # Use calculated entry price from trades.json if available
+                if calculated_entry_price is not None:
+                    entry_price = calculated_entry_price
+                elif self.position_size < 0:
                     entry_price = self.position_cost_basis / abs(self.position_size)
                 else:
                     entry_price = position_info.get('entry_price', self.last_trade_price or 0)

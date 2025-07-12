@@ -534,18 +534,28 @@ class CryptoShell(cmd.Cmd):
         if hasattr(self, '_resume_entry_price') and self._resume_entry_price and not trades_loaded:
             # Use manual entry price when explicitly provided
             entry_price = self._resume_entry_price
-            if desired_position == 1:  # LONG position
-                self.auto_trader.position_size = amount_num
-                self.auto_trader.position_cost_basis = amount_num * entry_price
-                self.auto_trader.last_trade_price = entry_price
-                self.logger.info(f"Resume: Set LONG position tracking - {amount_num} BTC @ ${entry_price:.2f}")
-                self.logger.info(f"[RESUME_DEBUG] Set position_size={amount_num}, cost_basis=${amount_num * entry_price:.2f}, entry_price=${entry_price}")
-            elif desired_position == -1:  # SHORT position
-                btc_sold = amount_num / entry_price
-                self.auto_trader.position_size = -btc_sold
-                self.auto_trader.position_cost_basis = amount_num
-                self.auto_trader.last_trade_price = entry_price
-                self.logger.info(f"Resume: Set SHORT position tracking - {btc_sold:.8f} BTC @ ${entry_price:.2f}")
+            
+            # First, try to validate from trades.json to get the correct entry price
+            if self.auto_trader.validate_position_from_trades():
+                # Successfully loaded position from trades.json
+                actual_entry = self.auto_trader.position_cost_basis / abs(self.auto_trader.position_size) if self.auto_trader.position_size != 0 else 0
+                self.logger.info(f"[RESUME_DEBUG] Validated position from trades.json, actual entry price: ${actual_entry:.2f}")
+                # Use the calculated entry price from trades.json
+                entry_price = actual_entry
+            else:
+                # No trades.json or validation failed, use provided entry price
+                if desired_position == 1:  # LONG position
+                    self.auto_trader.position_size = amount_num
+                    self.auto_trader.position_cost_basis = amount_num * entry_price
+                    self.auto_trader.last_trade_price = entry_price
+                    self.logger.info(f"Resume: Set LONG position tracking - {amount_num} BTC @ ${entry_price:.2f}")
+                    self.logger.info(f"[RESUME_DEBUG] Set position_size={amount_num}, cost_basis=${amount_num * entry_price:.2f}, entry_price=${entry_price}")
+                elif desired_position == -1:  # SHORT position
+                    btc_sold = amount_num / entry_price
+                    self.auto_trader.position_size = -btc_sold
+                    self.auto_trader.position_cost_basis = amount_num
+                    self.auto_trader.last_trade_price = entry_price
+                    self.logger.info(f"Resume: Set SHORT position tracking - {btc_sold:.8f} BTC @ ${entry_price:.2f}")
                 
             # Sync to data_manager
             if hasattr(self.data_manager, 'position_size'):

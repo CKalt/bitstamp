@@ -187,10 +187,17 @@ Remember:
 - Always ensure the client and SSH tunnel are running before attempting to interact with the system!
 
 
-
 GOAL: Please use megathink to fix the bug that is causing an incorrect entry price when I request a status on the client side.
 
-Please use the enable_commands interface to research the problem.
+I must have you fully understand the way the resume auto trade works and particularly of concern is the need to make sure that the resume auto trade json file entry price matches the history from trades.json. 
+And thus from this history you must make sure we compute a last trade price average. In the case of a BUY it must be an average because BUY orders are executed as a set of 3 market orders each with an amount that is 90% of the remaining balanace. This is to work around a bitstamp constraint.  SELL transactions are only a single trade so you may look at the last sale, But in either case this value whether it be an average of the last 3 BUY prices or the last SELL price from the trade itself must be what we store as the entry price for the resume auto trade.
 
-Also, if I run on the client a reconnect and the server loads the history and I exit and re-start src/tdr.py client the server should
-not reload the history again and any auto trade should not have to be resumed.
+Please fix this and then make sure that a status command returns an entry price that is correct according to these ideas.
+
+
+
+
+
+Also, if I run on the client a reconnect and the server loads the history and I exit and re-start src/tdr.py client the server should not reload the history again and any auto trade should not have to be resumed.
+
+
