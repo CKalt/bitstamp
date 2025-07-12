@@ -590,7 +590,10 @@ class CryptoShell(cmd.Cmd):
         # Don't re-validate if we already did it above
         has_real_trades = self.auto_trader.trades_executed > 0 or trades_loaded or (self.auto_trader.position_size != 0 and self.auto_trader.position_cost_basis > 0)
         is_resumed = hasattr(self, '_is_resumed_position') and self._is_resumed_position
-        self.logger.info(f"Has real trades: {has_real_trades}, Is resumed: {is_resumed} (position_size={self.auto_trader.position_size}, cost_basis={self.auto_trader.position_cost_basis})")
+        # Check if position was already loaded from trades.json in the resume section
+        position_already_loaded = (hasattr(self, '_resume_entry_price') and self._resume_entry_price and 
+                                   self.auto_trader.position_size != 0 and self.auto_trader.position_cost_basis > 0)
+        self.logger.info(f"Has real trades: {has_real_trades}, Is resumed: {is_resumed}, Position already loaded: {position_already_loaded} (position_size={self.auto_trader.position_size}, cost_basis={self.auto_trader.position_cost_basis})")
         
         if desired_position == 1 and hist_position == 1 and current_market_price > 0 and not has_real_trades and not is_resumed:
             if self.auto_trader.position_size < 1e-8 and not self.auto_trader.theoretical_trade:  # No position and no theoretical trade
@@ -654,7 +657,10 @@ class CryptoShell(cmd.Cmd):
                 })
 
         # Handle all four initialization scenarios
-        if desired_position == hist_position:
+        # Skip initialization if position was already loaded from trades.json
+        if position_already_loaded:
+            self.logger.info("Position already loaded from trades.json, skipping initialization")
+        elif desired_position == hist_position:
             # Cases 1 & 3: Positions match - initialize tracking with THEORETICAL trade
             if desired_position == 1:  # Case 1: Both long
                 self.auto_trader.position = 1
