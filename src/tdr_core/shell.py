@@ -659,7 +659,9 @@ class CryptoShell(cmd.Cmd):
             if desired_position == 1:  # Case 1: Both long
                 self.auto_trader.position = 1
                 self.auto_trader.position_size = amount_num
-                self.auto_trader.position_cost_basis = amount_num * current_market_price
+                # Use resume entry price if available, otherwise current market price
+                effective_entry_price = self._resume_entry_price if hasattr(self, '_resume_entry_price') and self._resume_entry_price else current_market_price
+                self.auto_trader.position_cost_basis = amount_num * effective_entry_price
                 self.auto_trader.balance_btc = amount_num
                 self.auto_trader.balance_usd = 0.0
 
@@ -669,19 +671,21 @@ class CryptoShell(cmd.Cmd):
                         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         'direction': 'long',
                         'amount': amount_num,
-                        'entry_price': current_market_price,
+                        'entry_price': effective_entry_price,
                         'theoretical': True
                     }
                 self.logger.info(
-                    f"Case 1: LONG matches system. Theoretical entry: {amount_num:.8f} BTC @ ${current_market_price:.2f}")
+                    f"Case 1: LONG matches system. Theoretical entry: {amount_num:.8f} BTC @ ${effective_entry_price:.2f}")
 
             elif desired_position == -1 and not has_real_trades:  # Case 3: Both short
-                short_btc = amount_num / current_market_price
+                # Use resume entry price if available, otherwise current market price
+                effective_entry_price = self._resume_entry_price if hasattr(self, '_resume_entry_price') and self._resume_entry_price else current_market_price
+                short_btc = amount_num / effective_entry_price
                 self.auto_trader.position = -1
                 # FIX: Track short position properly
                 self.auto_trader.position_size = -short_btc  # Negative BTC for short
                 # Cost basis = BTC sold * price for correct entry calculation
-                self.auto_trader.position_cost_basis = short_btc * current_market_price
+                self.auto_trader.position_cost_basis = short_btc * effective_entry_price
                 self.auto_trader.balance_btc = 0.0
                 self.auto_trader.balance_usd = amount_num
 
@@ -691,11 +695,11 @@ class CryptoShell(cmd.Cmd):
                         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         'direction': 'short',
                         'amount': amount_num,
-                        'entry_price': current_market_price,
+                        'entry_price': effective_entry_price,
                         'theoretical': True
                     }
                 self.logger.info(
-                    f"Case 3: SHORT matches system. Theoretical entry: ${amount_num:.2f} @ ${current_market_price:.2f}")
+                    f"Case 3: SHORT matches system. Theoretical entry: ${amount_num:.2f} @ ${effective_entry_price:.2f}")
 
         else:
 # ------------------------------------------------------------------------
@@ -724,7 +728,9 @@ class CryptoShell(cmd.Cmd):
                 if desired_position == 1:
                     self.auto_trader.position = 1
                     self.auto_trader.position_size = amount_num
-                    self.auto_trader.position_cost_basis = amount_num * current_market_price
+                    # Use resume entry price if available, otherwise current market price
+                    effective_entry_price = self._resume_entry_price if hasattr(self, '_resume_entry_price') and self._resume_entry_price else current_market_price
+                    self.auto_trader.position_cost_basis = amount_num * effective_entry_price
                     self.auto_trader.balance_btc = amount_num
                     self.auto_trader.balance_usd = 0.0
                     if not is_resumed:
@@ -732,13 +738,15 @@ class CryptoShell(cmd.Cmd):
                             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             'direction': 'long',
                             'amount': amount_num,
-                            'entry_price': current_market_price,
+                            'entry_price': effective_entry_price,
                             'theoretical': True
                         }
 
                 # --- Theoretical SHORT initialisation (mirrors Case 3) ---
                 elif desired_position == -1:
-                    short_btc = amount_num / current_market_price
+                    # Use resume entry price if available, otherwise current market price
+                    effective_entry_price = self._resume_entry_price if hasattr(self, '_resume_entry_price') and self._resume_entry_price else current_market_price
+                    short_btc = amount_num / effective_entry_price
                     self.auto_trader.position = -1
                     self.auto_trader.position_size = 0.0
                     self.auto_trader.position_cost_basis = amount_num
@@ -749,7 +757,7 @@ class CryptoShell(cmd.Cmd):
                             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             'direction': 'short',
                             'amount': amount_num,
-                            'entry_price': current_market_price,
+                            'entry_price': effective_entry_price,
                             'theoretical': True
                         }
 
