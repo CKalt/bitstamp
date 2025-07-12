@@ -955,6 +955,13 @@ class CryptoShell(cmd.Cmd):
                             print(f"   Difference: ${price_diff:.2f}")
                             print(f"   ✓ Auto-using trades.json price: ${actual_entry_price:.2f}")
                             resume_data['entry_price'] = actual_entry_price
+                            
+                            # Update the resume file with corrected entry price
+                            print(f"   ✓ Updating resume-auto-trade.json with correct entry price...")
+                            resume_data['command'] = f"resume_auto_trade {resume_data['amount']:.8f}{resume_data['unit']} {resume_data['position'].lower()} {int(actual_entry_price)}"
+                            with open(resume_file, 'w') as f:
+                                json.dump(resume_data, f, indent=2)
+                            self.logger.info(f"[RESUME_DEBUG] Updated resume file with correct entry price: ${actual_entry_price:.2f}")
                 
                 # Auto-proceed without confirmation to avoid timeout
                 print("\n✓ Proceeding with resume using above values...")
