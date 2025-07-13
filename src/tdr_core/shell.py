@@ -1634,6 +1634,105 @@ class CryptoShell(cmd.Cmd):
         print(f"\nSession Duration: {hours:.1f} hours\n")
         print("━"*50)
 
+    def do_read_server_file(self, arg):
+        """
+        Read a file on the server with optional line range support.
+        
+        Usage: read_server_file <file_path> [tail_lines]
+               read_server_file <file_path> [start_line] [end_line]
+        
+        Examples:
+          read_server_file trades.json              # Read entire file
+          read_server_file trades.json 50           # Last 50 lines (tail)
+          read_server_file trades.json 100 150      # Lines 100-150
+          read_server_file /home/chris/projects/bitstamp/trades.json
+        """
+        args = arg.split()
+        if not args:
+            print("Usage: read_server_file <file_path> [tail_lines] or [start_line] [end_line]")
+            return
+            
+        file_path = args[0]
+        
+        # If path doesn't start with /, assume it's relative to server working directory
+        if not file_path.startswith('/'):
+            # Get server's working directory
+            import os
+            server_cwd = os.getcwd()
+            file_path = os.path.join(server_cwd, file_path)
+            
+        try:
+            # Check if file exists
+            if not os.path.exists(file_path):
+                print(f"File not found: {file_path}")
+                return
+                
+            # Get file info
+            file_size = os.path.getsize(file_path)
+            with open(file_path, 'r') as f:
+                lines = f.readlines()
+            total_lines = len(lines)
+            
+            print(f"File: {file_path}")
+            print(f"Size: {file_size:,} bytes")
+            print(f"Lines: {total_lines:,}")
+            print("─" * 80)
+            
+            # Determine what to show
+            if len(args) == 1:
+                # Show entire file (with warning if large)
+                if total_lines > 1000:
+                    print(f"WARNING: File has {total_lines} lines. Showing first 1000 lines.")
+                    lines_to_show = lines[:1000]
+                else:
+                    lines_to_show = lines
+            elif len(args) == 2:
+                # Tail mode - show last N lines
+                tail_lines = int(args[1])
+                if tail_lines > total_lines:
+                    tail_lines = total_lines
+                lines_to_show = lines[-tail_lines:]
+                print(f"Showing last {tail_lines} lines:")
+                print("─" * 80)
+            elif len(args) == 3:
+                # Range mode - show lines from start to end
+                start_line = int(args[1])
+                end_line = int(args[2])
+                if start_line < 1:
+                    start_line = 1
+                if end_line > total_lines:
+                    end_line = total_lines
+                lines_to_show = lines[start_line-1:end_line]
+                print(f"Showing lines {start_line}-{end_line}:")
+                print("─" * 80)
+            else:
+                print("Too many arguments. Usage: read_server_file <file_path> [tail_lines] or [start_line] [end_line]")
+                return
+                
+            # Display the content
+            for i, line in enumerate(lines_to_show):
+                # Calculate actual line number
+                if len(args) == 2:
+                    # Tail mode
+                    line_num = total_lines - len(lines_to_show) + i + 1
+                elif len(args) == 3:
+                    # Range mode
+                    line_num = int(args[1]) + i
+                else:
+                    # Full file
+                    line_num = i + 1
+                    
+                print(f"{line_num:6d}: {line.rstrip()}")
+                
+        except FileNotFoundError:
+            print(f"File not found: {file_path}")
+        except PermissionError:
+            print(f"Permission denied: {file_path}")
+        except ValueError as e:
+            print(f"Invalid line number: {e}")
+        except Exception as e:
+            print(f"Error reading file: {e}")
+
     def do_quit(self, arg):
         """
         Quit the program, shutting down threads and processes gracefully.
