@@ -160,6 +160,7 @@ When asked to check the trading system status, Claude should:
 4. `history_status` - Check if historical data is loaded
 5. `strategy_diagnostics` - Detailed strategy analysis
 6. `chart` - Launch web-based charting interface
+7. `read_server_file <path> [tail_lines]` - Read files on the server (added 2025-01-13)
 
 ## Common Issues to Check
 
@@ -277,5 +278,43 @@ When the user says "Update session knowledge", Claude should:
 
 This helps maintain institutional knowledge across Claude sessions without losing important discoveries.
 
+## Entry Price Calculation (Fixed 2025-01-13)
 
-GOAL: Please review the code and the current trading position and wait for more directions. enable_commands is active.
+### The Problem
+Entry prices were being calculated incorrectly because the system wasn't reading from trades.json to get actual execution prices.
+
+### The Solution
+- Added `calculate_entry_price_from_trades()` method in strategies.py
+- For LONG positions: Averages all BUY prices (handles 3-part trades correctly)
+- For SHORT positions: Uses the last SELL price
+- Both `save_resume_state()` and `get_status()` now use this method for consistency
+
+### Multi-Part Trade Handling
+- BUY orders execute as 3 separate market orders (Bitstamp constraint workaround)
+- Each part uses 90% of remaining balance
+- All parts must be averaged for correct entry price
+- Trade group ID links the parts together
+
+### Server Initialization Protection
+- Server checks `initialization_complete` flag before re-initializing
+- History loading protected by `history_loading_lock` and flags
+- Once loaded, history won't reload on client reconnections
+- Auto-trader state persists across client sessions
+
+## Debugging Server Files
+
+### read_server_file Command (Added 2025-01-13)
+Allows reading files on the server from the client:
+```bash
+read_server_file trades.json              # Read entire file
+read_server_file trades.json 50           # Last 50 lines (tail)
+read_server_file trades.json 100 150      # Lines 100-150
+read_server_file /home/chris/projects/bitstamp/trades.json  # Absolute path
+```
+
+### Key Server Files
+- **trades.json**: Actual trade execution history (source of truth for entry prices)
+- **resume-auto-trade.json**: Saved position state for resuming
+- **btcusd.log**: Historical price data (continuously updated by websock-ticker2.py)
+- **best_strategy.json**: Strategy configuration (DO NOT modify during testing)
+
