@@ -13,6 +13,33 @@ You are being asked to check the health and status of a Bitcoin trading system t
 
 There are no partial positions or gradual entries/exits. Every trade flips the entire position.
 
+## System Architecture Details
+
+### Core Components
+- **tdr_server.py**: Flask-based REST API server running on remote machine
+- **tdr_client.py**: Command-line client with tab completion
+- **tdr.py**: Main entry point (client mode is now default)
+- **DataManager**: Handles both historical and real-time price data
+- **AdaptiveMultiStrategy**: Switches between TRENDING, RANGING, and VOLATILE strategies
+
+### Data Pipeline
+1. **Historical Data**: 
+   - Loaded from `btcusd.log` file at server startup
+   - **IMPORTANT**: `websock-ticker2.py` runs as a separate process continuously appending trades to `btcusd.log`
+   - This ensures NO DATA IS EVER LOST - even if TDR server crashes, historical data is preserved
+   
+2. **Real-time Data**:
+   - Server's WebSocket connection provides live updates while running
+   - DataManager combines historical + live data seamlessly
+   - Chart data includes both sources for complete picture
+
+### Charting System
+- **Runs on SERVER side**, not client!
+- Uses Dash/Plotly in separate process
+- Access via browser: `http://localhost:8050` (with port forwarding)
+- Updates every 30 seconds with data refreshed every 60 seconds
+- Default command `chart` uses: btcusd, 1H bars, port 8050
+
 ## Prerequisites for Claude Interaction
 
 ⚠️ **IMPORTANT**: Before Claude can check the system status, the following MUST be running:
@@ -20,7 +47,11 @@ There are no partial positions or gradual entries/exits. Every trade flips the e
 ### 1. SSH Tunnel
 The user must have an SSH tunnel running to connect to the remote server:
 ```bash
+# Basic tunnel for client-server communication
 ssh -L 4000:localhost:4000 chriskoin
+
+# Full tunnel including charting
+ssh -L 4000:localhost:4000 -L 8050:localhost:8050 chriskoin
 ```
 
 ### 2. TDR Client
@@ -38,6 +69,36 @@ tdr> enable_commands
 - Automatically check if server is available at localhost:4000
 - Show clear error message if server not found
 - No need for --client flag anymore
+
+## Starting the Complete System
+
+### Step 1: Start Server (on chriskoin)
+```bash
+ssh chriskoin
+cd /home/chris/projects/bitstamp/
+source env/bin/activate
+python src/tdr.py --server
+```
+
+### Step 2: Set Up Tunnels (local machine)
+```bash
+ssh -L 4000:localhost:4000 -L 8050:localhost:8050 chriskoin
+```
+
+### Step 3: Start Client (local machine)
+```bash
+cd /Users/chris/projects/python/btc
+source env/bin/activate
+python src/tdr.py
+tdr> enable_commands
+```
+
+### Step 4: Start Charting (optional)
+```bash
+tdr> chart                          # Default: btcusd 1H port 8050
+tdr> chart btcusd 1H 8051          # Custom port
+tdr> chart btcusd 1H 8051 alt_strategy-1.json  # Compare strategies
+```
 
 ## Initial Health Check Procedure
 
@@ -70,23 +131,35 @@ When asked to check the trading system status, Claude should:
 
 ## Key System Information
 
-### Expected Position (as of last session)
+### Current Position (as of July 12, 2025)
 - Position: LONG 1.52275326 BTC
-- Entry Price: ~$108,234
+- Entry Price: $109,330
 - Strategy: Adaptive Multi-Strategy
 - Live Trading: ENABLED
+- Unrealized P&L: +$12,350.55 (profitable)
 
 ### Important Paths
 - **Local**: /Users/chris/projects/python/btc/
+- **Remote**: /home/chris/projects/bitstamp/
 - **Commands**: commands/pending/ (Claude writes here)
 - **Results**: commands/processed/ (Claude reads responses)
 - **Config**: best_strategy.json (DO NOT modify during testing)
+- **Data**: btcusd.log (continuously updated by websock-ticker2.py)
+
+### Command Processing Flow
+1. Claude writes JSON command to `commands/pending/`
+2. Client monitors directory and sends command to server
+3. Server executes command and returns result
+4. Client writes result to `commands/processed/`
+5. Claude reads the processed file for response
 
 ### Critical Commands for Health Check
 1. `status` or `status long` - Full system status
 2. `trades` - Recent trading activity
 3. `logs` - View recent server logs
 4. `history_status` - Check if historical data is loaded
+5. `strategy_diagnostics` - Detailed strategy analysis
+6. `chart` - Launch web-based charting interface
 
 ## Common Issues to Check
 
@@ -105,6 +178,10 @@ When asked to check the trading system status, Claude should:
    - Compare reported position with expected
    - DO NOT proceed if mismatched - investigate first
 
+5. **Connection failures**:
+   - Check SSH tunnel is active
+   - Verify server is running on remote machine
+
 ## Safe Operations
 
 ✅ **Claude CAN safely**:
@@ -113,6 +190,8 @@ When asked to check the trading system status, Claude should:
 - Check trades
 - Monitor position
 - Read configuration
+- Launch charting interface
+- Run diagnostics
 
 ❌ **Claude should NOT**:
 - Modify best_strategy.json
@@ -137,10 +216,10 @@ When reporting system health, include:
 
 Connection: Active (client connected to server)
 Auto-Trader: Running (AdaptiveMultiStrategy)
-Position: LONG 1.52275326 BTC @ $108,234
-Current Price: $108,150
-Unrealized P&L: -$128 (-0.08%)
-Market Regime: TRENDING (65% confidence)
+Position: LONG 1.52275326 BTC @ $109,330
+Current Price: $117,500
+Unrealized P&L: +$12,350.55 (+11.3%)
+Market Regime: TRENDING (58.3% confidence)
 Live Trading: ENABLED
 Recent Trades: 0 in last 24 hours
 
@@ -148,27 +227,26 @@ Recent Trades: 0 in last 24 hours
 ✅ Status: System operating normally
 ```
 
-## Quick Command Reference
+## Technical Architecture Notes
 
-### Starting the System
-```bash
-# On remote server (chriskoin)
-python src/tdr.py --server
+### Strategy System
+- **MA Strategy**: Moving Average crossover (configurable windows)
+- **RSI Strategy**: Relative Strength Index based
+- **Adaptive Strategy**: Switches between TRENDING/RANGING/VOLATILE based on market conditions
+- Requires 80% confidence to switch strategies
+- Signal confirmation required (default 2 bars)
 
-# On local machine (with SSH tunnel running)
-python src/tdr.py  # Connects to localhost:4000 by default
-python src/tdr.py --server-url http://other-host:4000  # For different server
-```
+### Data Management
+- Historical data window configured in best_strategy.json
+- Live data stored in memory during runtime
+- DataManager provides unified interface for all data access
+- Charting system accesses data via shared memory dictionary
 
-### Quick Status Check on Remote
-```bash
-# Directly on remote server (no tunnel needed)
-cd /home/chris/projects/bitstamp/
-source env/bin/activate
-python src/tdr.py  # Will connect to localhost:4000
-tdr> status
-tdr> exit
-```
+### Process Architecture
+- Main server process handles trading logic
+- Separate process for Dash charting app
+- Background threads for WebSocket data and updates
+- Command processing via file system monitoring
 
 ## Signal Direction Information
 
@@ -186,18 +264,18 @@ Remember:
 - System requires high confidence (80%) for reversals
 - Always ensure the client and SSH tunnel are running before attempting to interact with the system!
 
+## Session Documentation Update Trigger
 
-GOAL: Please use megathink to fix the bug that is causing an incorrect entry price when I request a status on the client side.
+**TRIGGER PHRASE**: "Update session knowledge"
 
-I must have you fully understand the way the resume auto trade works and particularly of concern is the need to make sure that the resume auto trade json file entry price matches the history from trades.json. 
-And thus from this history you must make sure we compute a last trade price average. In the case of a BUY it must be an average because BUY orders are executed as a set of 3 market orders each with an amount that is 90% of the remaining balanace. This is to work around a bitstamp constraint.  SELL transactions are only a single trade so you may look at the last sale, But in either case this value whether it be an average of the last 3 BUY prices or the last SELL price from the trade itself must be what we store as the entry price for the resume auto trade.
+When the user says "Update session knowledge", Claude should:
+1. Review all new learnings from the current session
+2. Read the current `prompts/resume-claude-session.txt` file
+3. Update it with any new architectural insights, command discoveries, or important clarifications
+4. Preserve all existing content while adding new sections or details
+5. Ensure the file remains a comprehensive reference for future sessions
 
-Please fix this and then make sure that a status command returns an entry price that is correct according to these ideas.
-
-
-
-
-
-Also, if I run on the client a reconnect and the server loads the history and I exit and re-start src/tdr.py client the server should not reload the history again and any auto trade should not have to be resumed.
+This helps maintain institutional knowledge across Claude sessions without losing important discoveries.
 
 
+GOAL: Please review the code and the current trading position and wait for more directions. enable_commands is active.
