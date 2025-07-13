@@ -1393,6 +1393,62 @@ class MACrossoverStrategy:
             self.logger.error(f"Error validating position from trades: {e}")
             return False
     
+    def calculate_entry_price_from_trades(self):
+        """Calculate the correct entry price from trades.json based on position type.
+        Returns: (entry_price, position_trades)
+        """
+        import json
+        import os
+        
+        try:
+            trades_file = os.path.abspath(self.trade_log_file)
+            if not os.path.exists(trades_file):
+                return None, []
+                
+            with open(trades_file, 'r') as f:
+                trades = json.load(f)
+                
+            if not trades:
+                return None, []
+                
+            # Find all trades for current position
+            position_trades = []
+            current_position = None
+            
+            for trade in reversed(trades):
+                if not current_position:
+                    current_position = 'LONG' if trade['type'] == 'buy' else 'SHORT'
+                    position_trades.append(trade)
+                elif (current_position == 'LONG' and trade['type'] == 'buy') or \
+                     (current_position == 'SHORT' and trade['type'] == 'sell'):
+                    position_trades.append(trade)
+                else:
+                    break
+            
+            # Reverse to get chronological order
+            position_trades.reverse()
+            
+            if not position_trades:
+                return None, []
+            
+            # Calculate entry price based on position type
+            if current_position == 'LONG':
+                # For LONG positions, average all BUY prices (handling multi-part trades)
+                total_btc = sum(float(t['amount']) for t in position_trades)
+                total_cost = sum(float(t['amount']) * float(t['price']) for t in position_trades)
+                calculated_entry_price = total_cost / total_btc if total_btc > 0 else 0
+                self.logger.info(f"Calculated LONG entry price from {len(position_trades)} trades: ${calculated_entry_price:.2f}")
+            else:  # SHORT
+                # For SHORT positions, use the last SELL price
+                calculated_entry_price = float(position_trades[-1]['price'])
+                self.logger.info(f"Using last SELL price for SHORT entry: ${calculated_entry_price:.2f}")
+                
+            return calculated_entry_price, position_trades
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating entry price from trades: {e}")
+            return None, []
+    
     def save_resume_state(self):
         """Save current position state to resume-auto-trade.json for easy restart."""
         import json
@@ -1405,57 +1461,22 @@ class MACrossoverStrategy:
             position_info = status.get('position_info', {})
             current_price = self.data_manager.get_current_price(self.symbol) or 0.0
             
-            # Try to get trade references from trades.json and calculate correct entry price
+            # Calculate correct entry price from trades
+            calculated_entry_price, position_trades = self.calculate_entry_price_from_trades()
+            
+            # Extract trade references
             trade_references = []
-            calculated_entry_price = None
-            trades_file = os.path.abspath(self.trade_log_file)
-            if os.path.exists(trades_file):
-                with open(trades_file, 'r') as f:
-                    trades = json.load(f)
-                    
-                # Find all trades for current position
-                if trades:
-                    position_trades = []
-                    current_position = None
-                    
-                    for trade in reversed(trades):
-                        if not current_position:
-                            current_position = 'LONG' if trade['type'] == 'buy' else 'SHORT'
-                            position_trades.append(trade)
-                        elif (current_position == 'LONG' and trade['type'] == 'buy') or \
-                             (current_position == 'SHORT' and trade['type'] == 'sell'):
-                            position_trades.append(trade)
-                        else:
-                            break
-                    
-                    # Reverse to get chronological order
-                    position_trades.reverse()
-                    
-                    # Calculate entry price from trades
-                    if position_trades:
-                        if current_position == 'LONG':
-                            # For LONG positions, average all BUY prices (handling multi-part trades)
-                            total_btc = sum(float(t['amount']) for t in position_trades)
-                            total_cost = sum(float(t['amount']) * float(t['price']) for t in position_trades)
-                            calculated_entry_price = total_cost / total_btc if total_btc > 0 else 0
-                            self.logger.info(f"Calculated LONG entry price from {len(position_trades)} trades: ${calculated_entry_price:.2f}")
-                        else:  # SHORT
-                            # For SHORT positions, use the last SELL price
-                            if position_trades:
-                                calculated_entry_price = float(position_trades[-1]['price'])
-                                self.logger.info(f"Using last SELL price for SHORT entry: ${calculated_entry_price:.2f}")
-                    
-                    # Extract trade references
-                    for trade in position_trades:
-                        trade_ref = {
-                            'timestamp': trade['timestamp'],
-                            'type': trade['type'],
-                            'amount': trade['amount'],
-                            'price': trade['price']
-                        }
-                        if 'trade_group_id' in trade:
-                            trade_ref['trade_group_id'] = trade['trade_group_id']
-                        trade_references.append(trade_ref)
+            if position_trades:
+                for trade in position_trades:
+                    trade_ref = {
+                        'timestamp': trade['timestamp'],
+                        'type': trade['type'],
+                        'amount': trade['amount'],
+                        'price': trade['price']
+                    }
+                    if 'trade_group_id' in trade:
+                        trade_ref['trade_group_id'] = trade['trade_group_id']
+                    trade_references.append(trade_ref)
             
             # Determine position type and amount
             if self.position == 1:  # LONG
@@ -1711,9 +1732,19 @@ class MACrossoverStrategy:
 
         else:
             # REAL TRADES: Use actual balances and tracking
+            # First try to get entry price from trades.json for consistency
+            calculated_entry_price, _ = self.calculate_entry_price_from_trades()
+            
             if self.position == 1:
                 # Long position - holding BTC
-                if self.position_size > 1e-8:
+                if calculated_entry_price is not None:
+                    # Use the calculated entry price from trades.json
+                    position_info['entry_price'] = calculated_entry_price
+                    position_info['position_size_btc'] = self.balance_btc
+                    position_info['position_size_usd'] = self.balance_btc * cp
+                    position_info['unrealized_pnl'] = (self.balance_btc * cp) - (self.balance_btc * calculated_entry_price)
+                    self.logger.info(f"[ENTRY_PRICE_DEBUG] Using trades.json entry price: ${calculated_entry_price:.2f}")
+                elif self.position_size > 1e-8:
                     avg_entry_price = self.position_cost_basis / self.position_size
                     self.logger.info(f"[ENTRY_PRICE_DEBUG] Calculating entry price: cost_basis=${self.position_cost_basis:.2f} / size={self.position_size:.8f} = ${avg_entry_price:.2f}")
                     position_info['entry_price'] = avg_entry_price
@@ -1739,54 +1770,29 @@ class MACrossoverStrategy:
                 # Short position - properly calculate from stored position data
                 position_info['position_size_btc'] = 0.0  # No BTC held
                 position_info['position_size_usd'] = self.balance_usd  # USD from sale
-                 
-                # Calculate entry price and P&L for short position
-                if self.position_size < 0:  # We have a short position properly tracked
+                
+                if calculated_entry_price is not None:
+                    # Use the calculated entry price from trades.json
+                    btc_sold = self.balance_usd / calculated_entry_price if calculated_entry_price > 0 else 0
+                    position_info['entry_price'] = calculated_entry_price
+                    position_info['unrealized_pnl'] = (calculated_entry_price - cp) * btc_sold
+                    self.logger.info(f"[ENTRY_PRICE_DEBUG] Using trades.json entry price for SHORT: ${calculated_entry_price:.2f}")
+                    
+                    # Update position tracking if needed
+                    if abs(self.position_size) < 1e-8 or self.position_cost_basis == 0:
+                        self.logger.warning(f"[POSITION_DEBUG] Updating SHORT position tracking from trades.json: size={-btc_sold}, cost_basis={self.balance_usd}")
+                        self.position_size = -btc_sold
+                        self.position_cost_basis = self.balance_usd
+                        self.last_trade_price = calculated_entry_price
+                elif self.position_size < 0:  # We have a short position properly tracked
                     btc_sold = abs(self.position_size)
                     entry_price = self.position_cost_basis / btc_sold if btc_sold > 0 else 0
                     position_info['entry_price'] = entry_price
                     position_info['unrealized_pnl'] = (entry_price - cp) * btc_sold
                 else:
-                    # For SHORT positions after resume, try to find the actual entry price
-                    try:
-                        import json
-                        import os
-                        trades_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'trades.json')
-                        if os.path.exists(trades_file):
-                            with open(trades_file, 'r') as f:
-                                trades = json.load(f)
-                            # Find the most recent SELL trade
-                            sell_trades = [t for t in trades if t.get('type') == 'sell']
-                            if sell_trades:
-                                last_sell = sell_trades[-1]
-                                actual_short_entry = float(last_sell.get('price', 0))
-                                
-                                if actual_short_entry > 0 and self.balance_usd > 0:
-                                    btc_sold = self.balance_usd / actual_short_entry
-                                    position_info['entry_price'] = actual_short_entry
-                                    position_info['unrealized_pnl'] = (actual_short_entry - cp) * btc_sold
-                                    
-                                    # Only fix position tracking if it's not already set correctly
-                                    if abs(self.position_size) < 1e-8 or self.position_cost_basis == 0:
-                                        self.logger.warning(f"[POSITION_DEBUG] get_status() is fixing uninitialized SHORT position tracking: size={-btc_sold}, cost_basis={self.balance_usd}")
-                                        self.position_size = -btc_sold
-                                        self.position_cost_basis = self.balance_usd
-                                        self.last_trade_price = actual_short_entry
-                                    else:
-                                        self.logger.info(f"[POSITION_DEBUG] get_status() skipping position fix - already set correctly: size={self.position_size}, cost_basis={self.position_cost_basis}")
-                                else:
-                                    position_info['entry_price'] = self.last_trade_price or 0.0
-                                    position_info['unrealized_pnl'] = 0.0
-                            else:
-                                position_info['entry_price'] = self.last_trade_price or 0.0
-                                position_info['unrealized_pnl'] = 0.0
-                        else:
-                            position_info['entry_price'] = self.last_trade_price or 0.0
-                            position_info['unrealized_pnl'] = 0.0
-                    except Exception as e:
-                        # If anything fails, use fallback
-                        position_info['entry_price'] = self.last_trade_price or 0.0
-                        position_info['unrealized_pnl'] = 0.0
+                    # Fallback to last trade price
+                    position_info['entry_price'] = self.last_trade_price or 0.0
+                    position_info['unrealized_pnl'] = 0.0
             else:
                 # This should never happen in this system
                 self.logger.error("System in neutral position - this should not occur!")
