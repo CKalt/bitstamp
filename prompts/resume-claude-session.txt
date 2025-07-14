@@ -131,12 +131,14 @@ When asked to check the trading system status, Claude should:
 
 ## Key System Information
 
-### Current Position (as of July 12, 2025)
-- Position: LONG 1.52275326 BTC
-- Entry Price: $109,330
+### Current Position (as of July 14, 2025)
+- Position: LONG 1.49465979 BTC
+- Entry Price: $118,099
+- Current Price: $121,972
 - Strategy: Adaptive Multi-Strategy
 - Live Trading: ENABLED
-- Unrealized P&L: +$12,350.55 (profitable)
+- Unrealized P&L: +$5,788.82 (profitable)
+- Pivot Protection: Support @ $121,175, Resistance @ $122,090
 
 ### Important Paths
 - **Local**: /Users/chris/projects/python/btc/
@@ -317,4 +319,48 @@ read_server_file /home/chris/projects/bitstamp/trades.json  # Absolute path
 - **resume-auto-trade.json**: Saved position state for resuming
 - **btcusd.log**: Historical price data (continuously updated by websock-ticker2.py)
 - **best_strategy.json**: Strategy configuration (DO NOT modify during testing)
+
+## Dynamic Pivot Protection (Added 2025-01-13)
+
+### Overview
+A fast-acting profit protection mechanism that monitors support/resistance levels based on recent price action and executes immediate position flips when key levels break.
+
+### How It Works
+1. **Monitors recent price extremes** (default: last 2 hours)
+2. **Sets dynamic levels**:
+   - For LONG: Support = Recent Low - $50
+   - For SHORT: Resistance = Recent High + $50
+3. **Instant execution** when levels break (no MA confirmation wait)
+4. **Automatic re-entry** if price reverses back through opposite level
+
+### Configuration Parameters
+- `pivot_buffer`: Total buffer zone in dollars (default: 100)
+- `pivot_lookback_hours`: Hours of price data to analyze (default: 2)
+- `enable_pivot_protection`: Can disable if needed (default: true)
+
+### Example Scenario
+LONG at $121,000:
+- Recent 2hr low: $120,500 → Support set at $120,450
+- Price drops below $120,450 → Immediately flip to SHORT
+- New resistance: Recent high + $50
+- If price rises back above resistance → Flip back to LONG
+
+### Status Display
+The `status long` command now shows:
+- Calculation details (recent high/low, buffer)
+- Current support/resistance levels
+- Distance to trigger in $ and %
+- Total flip zone width
+
+### Key Benefits
+1. **Protects profits** by exiting on momentum breaks
+2. **Quick re-entry** prevents missing trend continuation
+3. **Market-based levels** adapt to current volatility
+4. **Prevents whipsaws** with buffer zone
+
+### Trading Examples from Session
+- July 9: LONG @ $109,330
+- July 13 11:03: Flipped to SHORT @ $117,835 (+$8,500 profit)
+- July 13 12:00: Flipped back to LONG @ $118,099 (57 minutes later)
+- System captured the major move while staying nimble
 
