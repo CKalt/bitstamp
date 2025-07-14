@@ -1613,6 +1613,26 @@ class CryptoShell(cmd.Cmd):
                 status_icon = "🔵" if strategy_name == self.auto_trader.active_strategy else "⚪"
                 print(
                     f"    {status_icon} {strategy_name.upper()}: {trades} trades, ${profit:.2f} profit")
+            
+            # Show pivot protection levels if available
+            if hasattr(self.auto_trader, 'pivot_tracker') and self.auto_trader.pivot_tracker.get('support_level'):
+                print(f"\n  🎯 Pivot Protection (Quick Flip Levels):")
+                current_price = self.data_manager.get_current_price(self.auto_trader.symbol) or 0
+                support = self.auto_trader.pivot_tracker['support_level']
+                resistance = self.auto_trader.pivot_tracker['resistance_level']
+                
+                if self.auto_trader.position == 1:  # LONG
+                    distance_to_flip = current_price - support
+                    percent_to_flip = (distance_to_flip / current_price) * 100 if current_price > 0 else 0
+                    print(f"     • Support Level: ${support:.0f} (flip SHORT if broken)")
+                    print(f"     • Current Price: ${current_price:.0f}")
+                    print(f"     • Distance to Flip: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
+                else:  # SHORT
+                    distance_to_flip = resistance - current_price
+                    percent_to_flip = (distance_to_flip / current_price) * 100 if current_price > 0 else 0
+                    print(f"     • Resistance Level: ${resistance:.0f} (flip LONG if broken)")
+                    print(f"     • Current Price: ${current_price:.0f}")
+                    print(f"     • Distance to Flip: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
 
             # Explain why current strategy was chosen
             if self.auto_trader.current_regime == "ranging":
@@ -2681,6 +2701,26 @@ class CryptoShell(cmd.Cmd):
                 status_icon = "🔵" if strategy_name == self.auto_trader.active_strategy else "⚪"
                 print(
                     f"    {status_icon} {strategy_name.upper()}: {trades} trades, ${profit:.2f} profit")
+            
+            # Show pivot protection levels if available
+            if hasattr(self.auto_trader, 'pivot_tracker') and self.auto_trader.pivot_tracker.get('support_level'):
+                print(f"\n  🎯 Pivot Protection (Quick Flip Levels):")
+                current_price = self.data_manager.get_current_price(self.auto_trader.symbol) or 0
+                support = self.auto_trader.pivot_tracker['support_level']
+                resistance = self.auto_trader.pivot_tracker['resistance_level']
+                
+                if self.auto_trader.position == 1:  # LONG
+                    distance_to_flip = current_price - support
+                    percent_to_flip = (distance_to_flip / current_price) * 100 if current_price > 0 else 0
+                    print(f"     • Support Level: ${support:.0f} (flip SHORT if broken)")
+                    print(f"     • Current Price: ${current_price:.0f}")
+                    print(f"     • Distance to Flip: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
+                else:  # SHORT
+                    distance_to_flip = resistance - current_price
+                    percent_to_flip = (distance_to_flip / current_price) * 100 if current_price > 0 else 0
+                    print(f"     • Resistance Level: ${resistance:.0f} (flip LONG if broken)")
+                    print(f"     • Current Price: ${current_price:.0f}")
+                    print(f"     • Distance to Flip: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
 
             # Explain why current strategy was chosen
             if self.auto_trader.current_regime == "ranging":

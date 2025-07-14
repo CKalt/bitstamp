@@ -1855,6 +1855,11 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         self.macd_threshold = kwargs.pop('macd_threshold', 0.001)
         self.signal_confirmation_bars = kwargs.pop(
             'signal_confirmation_bars', 2)
+        
+        # Pivot protection parameters
+        self.pivot_buffer = kwargs.pop('pivot_buffer', 100)  # Buffer zone in dollars
+        self.pivot_lookback_hours = kwargs.pop('pivot_lookback_hours', 2)  # Hours to look back for pivots
+        self.enable_pivot_protection = kwargs.pop('enable_pivot_protection', True)  # Can disable if needed
 
         # Initialize parent class
         super().__init__(*args, **kwargs)
@@ -2255,6 +2260,72 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             self.signal_history = [emergency_signal] * self.signal_confirmation_bars  # Force confirmation
                             self.check_for_signals(emergency_signal, current_price, signal_time)
                             continue
+                        
+                        # 0.5 Check for pivot-based quick flips (Support/Resistance)
+                        if self.enable_pivot_protection:
+                            current_price = self.data_manager.get_current_price(self.symbol) or df_resampled.iloc[-1]['close']
+                            
+                            # Initialize pivot tracking if not exists
+                            if not hasattr(self, 'pivot_tracker'):
+                                self.pivot_tracker = {
+                                    'recent_high': current_price,
+                                    'recent_low': current_price,
+                                    'last_update': datetime.now(),
+                                    'support_level': None,
+                                    'resistance_level': None,
+                                    'buffer_zone': self.pivot_buffer  # Configurable buffer
+                                }
+                        
+                            # Update pivot levels (look at configurable hours of data)
+                            lookback_hours = min(self.pivot_lookback_hours, len(df_resampled))
+                            recent_data = df_resampled.iloc[-lookback_hours:] if lookback_hours > 0 else df_resampled
+                            recent_high = recent_data['high'].max()
+                            recent_low = recent_data['low'].min()
+                            
+                            # Update support/resistance based on recent price action
+                            if self.position == 1:  # LONG position
+                                # Support is the recent low minus half the buffer
+                                self.pivot_tracker['support_level'] = recent_low - (self.pivot_buffer / 2)
+                                self.pivot_tracker['resistance_level'] = recent_high + (self.pivot_buffer / 2)
+                                
+                                # Check if price broke below support
+                                if current_price < self.pivot_tracker['support_level']:
+                                    self.logger.warning(f"🚨 PIVOT BREAK: Price ${current_price:.0f} broke support ${self.pivot_tracker['support_level']:.0f}")
+                                    pivot_signal = -1  # Flip to SHORT
+                                    pivot_reason = f"Pivot break: below support ${self.pivot_tracker['support_level']:.0f}"
+                                    
+                                    # Force immediate execution
+                                    signal_time = df_resampled.index[-1]
+                                    self.signal_history = [pivot_signal] * self.signal_confirmation_bars
+                                    self.last_trade_reason = pivot_reason
+                                    self.check_for_signals(pivot_signal, current_price, signal_time)
+                                    continue
+                                    
+                            elif self.position == -1:  # SHORT position
+                                # Resistance is the recent high plus half the buffer
+                                self.pivot_tracker['support_level'] = recent_low - (self.pivot_buffer / 2)
+                                self.pivot_tracker['resistance_level'] = recent_high + (self.pivot_buffer / 2)
+                                
+                                # Check if price broke above resistance
+                                if current_price > self.pivot_tracker['resistance_level']:
+                                    self.logger.warning(f"🚨 PIVOT BREAK: Price ${current_price:.0f} broke resistance ${self.pivot_tracker['resistance_level']:.0f}")
+                                    pivot_signal = 1  # Flip to LONG
+                                    pivot_reason = f"Pivot break: above resistance ${self.pivot_tracker['resistance_level']:.0f}"
+                                    
+                                    # Force immediate execution
+                                    signal_time = df_resampled.index[-1]
+                                    self.signal_history = [pivot_signal] * self.signal_confirmation_bars
+                                    self.last_trade_reason = pivot_reason
+                                    self.check_for_signals(pivot_signal, current_price, signal_time)
+                                    continue
+                            
+                            # Log pivot levels periodically
+                            if not hasattr(self, '_last_pivot_log') or \
+                               (datetime.now() - self._last_pivot_log).total_seconds() > 300:
+                                self.logger.info(f"📊 Pivot Levels - Support: ${self.pivot_tracker['support_level']:.0f}, "
+                                               f"Resistance: ${self.pivot_tracker['resistance_level']:.0f}, "
+                                               f"Current: ${current_price:.0f}")
+                                self._last_pivot_log = datetime.now()
                         
                         # 1. Detect market regime
                         regime, confidence, metrics = self.detect_market_regime(
