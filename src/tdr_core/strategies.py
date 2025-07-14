@@ -2282,6 +2282,10 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             recent_high = recent_data['high'].max()
                             recent_low = recent_data['low'].min()
                             
+                            # Store in tracker for status display
+                            self.pivot_tracker['recent_high'] = recent_high
+                            self.pivot_tracker['recent_low'] = recent_low
+                            
                             # Update support/resistance based on recent price action
                             if self.position == 1:  # LONG position
                                 # Support is the recent low minus half the buffer

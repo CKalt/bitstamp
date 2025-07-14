@@ -1616,23 +1616,55 @@ class CryptoShell(cmd.Cmd):
             
             # Show pivot protection levels if available
             if hasattr(self.auto_trader, 'pivot_tracker') and self.auto_trader.pivot_tracker.get('support_level'):
-                print(f"\n  🎯 Pivot Protection (Quick Flip Levels):")
+                print(f"\n  🎯 Dynamic Pivot Protection (Profit Lock & Quick Re-entry):")
                 current_price = self.data_manager.get_current_price(self.auto_trader.symbol) or 0
                 support = self.auto_trader.pivot_tracker['support_level']
                 resistance = self.auto_trader.pivot_tracker['resistance_level']
                 
+                # Get recent high/low for calculation display
+                if hasattr(self.auto_trader, 'pivot_tracker'):
+                    recent_high = self.auto_trader.pivot_tracker.get('recent_high', 0)
+                    recent_low = self.auto_trader.pivot_tracker.get('recent_low', 0)
+                    buffer = getattr(self.auto_trader, 'pivot_buffer', 100)
+                    lookback = getattr(self.auto_trader, 'pivot_lookback_hours', 2)
+                else:
+                    recent_high = recent_low = buffer = lookback = 0
+                
+                print(f"     📊 Calculation Details:")
+                print(f"       • Looking at last {lookback} hours of price data")
+                print(f"       • Recent High: ${recent_high:.0f}")
+                print(f"       • Recent Low: ${recent_low:.0f}")
+                print(f"       • Buffer Zone: ${buffer:.0f} (prevents whipsaws)")
+                print(f"       • Calculations:")
+                print(f"         - Support = Recent Low (${recent_low:.0f}) - Buffer/2 (${buffer/2:.0f}) = ${support:.0f}")
+                print(f"         - Resistance = Recent High (${recent_high:.0f}) + Buffer/2 (${buffer/2:.0f}) = ${resistance:.0f}")
+                
                 if self.auto_trader.position == 1:  # LONG
                     distance_to_flip = current_price - support
                     percent_to_flip = (distance_to_flip / current_price) * 100 if current_price > 0 else 0
-                    print(f"     • Support Level: ${support:.0f} (flip SHORT if broken)")
+                    print(f"\n     📈 LONG Position Protection:")
+                    print(f"     • TAKE PROFIT Level: ${support:.0f}")
+                    print(f"       → If price drops below, immediately flip to SHORT")
+                    print(f"       → Locks in profits from current LONG position")
                     print(f"     • Current Price: ${current_price:.0f}")
-                    print(f"     • Distance to Flip: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
+                    print(f"     • Distance to Profit Lock: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
+                    print(f"     • RE-ENTRY Level: ${resistance:.0f}")
+                    print(f"       → After SHORT flip, if price rises back above ${resistance:.0f}")
+                    print(f"       → Will flip back to LONG for trend continuation")
+                    print(f"     • Total Flip Zone: ${resistance - support:.0f} (${support:.0f} to ${resistance:.0f})")
                 else:  # SHORT
                     distance_to_flip = resistance - current_price
                     percent_to_flip = (distance_to_flip / current_price) * 100 if current_price > 0 else 0
-                    print(f"     • Resistance Level: ${resistance:.0f} (flip LONG if broken)")
+                    print(f"\n     📉 SHORT Position Protection:")
+                    print(f"     • TAKE PROFIT Level: ${resistance:.0f}")
+                    print(f"       → If price rises above, immediately flip to LONG")
+                    print(f"       → Locks in profits from current SHORT position")
                     print(f"     • Current Price: ${current_price:.0f}")
-                    print(f"     • Distance to Flip: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
+                    print(f"     • Distance to Profit Lock: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
+                    print(f"     • RE-ENTRY Level: ${support:.0f}")
+                    print(f"       → After LONG flip, if price drops back below ${support:.0f}")
+                    print(f"       → Will flip back to SHORT for trend continuation")
+                    print(f"     • Total Flip Zone: ${resistance - support:.0f} (${support:.0f} to ${resistance:.0f})")
 
             # Explain why current strategy was chosen
             if self.auto_trader.current_regime == "ranging":
@@ -2704,23 +2736,55 @@ class CryptoShell(cmd.Cmd):
             
             # Show pivot protection levels if available
             if hasattr(self.auto_trader, 'pivot_tracker') and self.auto_trader.pivot_tracker.get('support_level'):
-                print(f"\n  🎯 Pivot Protection (Quick Flip Levels):")
+                print(f"\n  🎯 Dynamic Pivot Protection (Profit Lock & Quick Re-entry):")
                 current_price = self.data_manager.get_current_price(self.auto_trader.symbol) or 0
                 support = self.auto_trader.pivot_tracker['support_level']
                 resistance = self.auto_trader.pivot_tracker['resistance_level']
                 
+                # Get recent high/low for calculation display
+                if hasattr(self.auto_trader, 'pivot_tracker'):
+                    recent_high = self.auto_trader.pivot_tracker.get('recent_high', 0)
+                    recent_low = self.auto_trader.pivot_tracker.get('recent_low', 0)
+                    buffer = getattr(self.auto_trader, 'pivot_buffer', 100)
+                    lookback = getattr(self.auto_trader, 'pivot_lookback_hours', 2)
+                else:
+                    recent_high = recent_low = buffer = lookback = 0
+                
+                print(f"     📊 Calculation Details:")
+                print(f"       • Looking at last {lookback} hours of price data")
+                print(f"       • Recent High: ${recent_high:.0f}")
+                print(f"       • Recent Low: ${recent_low:.0f}")
+                print(f"       • Buffer Zone: ${buffer:.0f} (prevents whipsaws)")
+                print(f"       • Calculations:")
+                print(f"         - Support = Recent Low (${recent_low:.0f}) - Buffer/2 (${buffer/2:.0f}) = ${support:.0f}")
+                print(f"         - Resistance = Recent High (${recent_high:.0f}) + Buffer/2 (${buffer/2:.0f}) = ${resistance:.0f}")
+                
                 if self.auto_trader.position == 1:  # LONG
                     distance_to_flip = current_price - support
                     percent_to_flip = (distance_to_flip / current_price) * 100 if current_price > 0 else 0
-                    print(f"     • Support Level: ${support:.0f} (flip SHORT if broken)")
+                    print(f"\n     📈 LONG Position Protection:")
+                    print(f"     • TAKE PROFIT Level: ${support:.0f}")
+                    print(f"       → If price drops below, immediately flip to SHORT")
+                    print(f"       → Locks in profits from current LONG position")
                     print(f"     • Current Price: ${current_price:.0f}")
-                    print(f"     • Distance to Flip: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
+                    print(f"     • Distance to Profit Lock: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
+                    print(f"     • RE-ENTRY Level: ${resistance:.0f}")
+                    print(f"       → After SHORT flip, if price rises back above ${resistance:.0f}")
+                    print(f"       → Will flip back to LONG for trend continuation")
+                    print(f"     • Total Flip Zone: ${resistance - support:.0f} (${support:.0f} to ${resistance:.0f})")
                 else:  # SHORT
                     distance_to_flip = resistance - current_price
                     percent_to_flip = (distance_to_flip / current_price) * 100 if current_price > 0 else 0
-                    print(f"     • Resistance Level: ${resistance:.0f} (flip LONG if broken)")
+                    print(f"\n     📉 SHORT Position Protection:")
+                    print(f"     • TAKE PROFIT Level: ${resistance:.0f}")
+                    print(f"       → If price rises above, immediately flip to LONG")
+                    print(f"       → Locks in profits from current SHORT position")
                     print(f"     • Current Price: ${current_price:.0f}")
-                    print(f"     • Distance to Flip: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
+                    print(f"     • Distance to Profit Lock: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
+                    print(f"     • RE-ENTRY Level: ${support:.0f}")
+                    print(f"       → After LONG flip, if price drops back below ${support:.0f}")
+                    print(f"       → Will flip back to SHORT for trend continuation")
+                    print(f"     • Total Flip Zone: ${resistance - support:.0f} (${support:.0f} to ${resistance:.0f})")
 
             # Explain why current strategy was chosen
             if self.auto_trader.current_regime == "ranging":
