@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-01-12T21:00:00Z",
+  "command": "chart btcusd 1H 8051",
+  "source": "claude_chart_test",
+  "args": "",
+  "result": {
+    "auto_trader": {
+      "active": true,
+      "strategy": "AdaptiveMultiStrategy"
+    },
+    "command": "chart btcusd 1H 8051",
+    "output": "Dash app is running at http://127.0.0.1:8051/\nSymbol: BTCUSD, Bar Size: 1H\nStrategy: MA Strategy\nUse the dropdown in the web interface to compare strategies.\nTo stop the chart, use 'quit' or shut down via http://127.0.0.1:8051/shutdown\n",
+    "success": true,
+    "timestamp": "2025-07-12T19:49:22.907459"
+  },
+  "processed_at": "2025-07-12T15:49:22.954750"
+}

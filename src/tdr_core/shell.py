@@ -1627,14 +1627,17 @@ class CryptoShell(cmd.Cmd):
                     recent_low = self.auto_trader.pivot_tracker.get('recent_low', 0)
                     buffer = getattr(self.auto_trader, 'pivot_buffer', 100)
                     lookback = getattr(self.auto_trader, 'pivot_lookback_hours', 2)
+                    levels_locked = self.auto_trader.pivot_tracker.get('levels_locked', False)
                 else:
                     recent_high = recent_low = buffer = lookback = 0
+                    levels_locked = False
                 
                 print(f"     📊 Calculation Details:")
                 print(f"       • Looking at last {lookback} hours of price data")
                 print(f"       • Recent High: ${recent_high:.0f}")
                 print(f"       • Recent Low: ${recent_low:.0f}")
                 print(f"       • Buffer Zone: ${buffer:.0f} (prevents whipsaws)")
+                print(f"       • Level Status: {'🔒 LOCKED (Sticky)' if levels_locked else '🔄 UPDATING (Dynamic)'}")
                 print(f"       • Calculations:")
                 print(f"         - Support = Recent Low (${recent_low:.0f}) - Buffer/2 (${buffer/2:.0f}) = ${support:.0f}")
                 print(f"         - Resistance = Recent High (${recent_high:.0f}) + Buffer/2 (${buffer/2:.0f}) = ${resistance:.0f}")
@@ -2747,14 +2750,17 @@ class CryptoShell(cmd.Cmd):
                     recent_low = self.auto_trader.pivot_tracker.get('recent_low', 0)
                     buffer = getattr(self.auto_trader, 'pivot_buffer', 100)
                     lookback = getattr(self.auto_trader, 'pivot_lookback_hours', 2)
+                    levels_locked = self.auto_trader.pivot_tracker.get('levels_locked', False)
                 else:
                     recent_high = recent_low = buffer = lookback = 0
+                    levels_locked = False
                 
                 print(f"     📊 Calculation Details:")
                 print(f"       • Looking at last {lookback} hours of price data")
                 print(f"       • Recent High: ${recent_high:.0f}")
                 print(f"       • Recent Low: ${recent_low:.0f}")
                 print(f"       • Buffer Zone: ${buffer:.0f} (prevents whipsaws)")
+                print(f"       • Level Status: {'🔒 LOCKED (Sticky)' if levels_locked else '🔄 UPDATING (Dynamic)'}")
                 print(f"       • Calculations:")
                 print(f"         - Support = Recent Low (${recent_low:.0f}) - Buffer/2 (${buffer/2:.0f}) = ${support:.0f}")
                 print(f"         - Resistance = Recent High (${recent_high:.0f}) + Buffer/2 (${buffer/2:.0f}) = ${resistance:.0f}")

@@ -1,17 +1,17 @@
 {
-  "timestamp": "2025-01-08T00:03:00Z",
+  "timestamp": "2025-01-13T12:01:00Z",
   "command": "logs",
-  "source": "claude_entry_price_bug_check",
-  "args": "",
+  "source": "claude_entry_price_debug",
+  "args": "20",
   "result": {
     "auto_trader": {
       "active": true,
       "strategy": "AdaptiveMultiStrategy"
     },
-    "command": "logs",
+    "command": "logs 20",
     "output": "",
     "success": true,
-    "timestamp": "2025-07-08T19:02:48.505382"
+    "timestamp": "2025-07-13T18:53:51.046477"
   },
-  "processed_at": "2025-07-08T15:02:48.457820"
+  "processed_at": "2025-07-13T14:53:50.930640"
 }

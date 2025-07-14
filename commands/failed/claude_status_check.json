@@ -1,0 +1,6 @@
+{
+  "timestamp": "2025-01-13T20:00:00Z",
+  "command": "status long",
+  "source": "claude_position_review",
+  "args": ""
+}

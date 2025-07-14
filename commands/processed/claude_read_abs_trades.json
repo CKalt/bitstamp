@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-01-13T12:06:00Z",
+  "command": "read_server_file /home/chris/projects/bitstamp/trades.json 10",
+  "source": "claude_server_file_absolute_test",
+  "args": "",
+  "result": {
+    "auto_trader": {
+      "active": true,
+      "strategy": "AdaptiveMultiStrategy"
+    },
+    "command": "read_server_file /home/chris/projects/bitstamp/trades.json 10",
+    "output": "",
+    "success": true,
+    "timestamp": "2025-07-13T18:58:56.558063"
+  },
+  "processed_at": "2025-07-13T14:58:56.421799"
+}

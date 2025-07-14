@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-01-13T12:00:00Z",
+  "command": "status long",
+  "source": "claude_entry_price_verification",
+  "args": "",
+  "result": {
+    "auto_trader": {
+      "active": true,
+      "strategy": "AdaptiveMultiStrategy"
+    },
+    "command": "status long",
+    "output": "\nAuto-Trading Status:\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n  \u2022 Running: True\n  \u2022 Position: Long\n  \u2022 Daily Trades: 0/10\n  \u2022 Remaining Trades Today: 10\n\nAccount Balances & Performance:\n  \u2022 Initial USD Balance: $0.00\n  \u2022 Initial BTC Balance: 1.49465979\n  \u2022 Current MTM (BTC): 1.49465979\n  \u2022 Max MTM (USD): $177928.79\n  \u2022 Min MTM (USD): $177925.80\n  \u2022 Max USD Balance: $0.00\n  \u2022 Min USD Balance: $0.00\n  \u2022 Max BTC Balance: 1.49465979\n  \u2022 Min BTC Balance: 1.49465979\n\nPosition Details:\n  \u2022 Direction:  Long\n  \u2022 Current Price:  $119043.00\n  \u2022 Entry Price:    $118099.00\n  \u2022 Position Size (BTC): 1.49465979\n  \u2022 Position Value (USD): $177928.79\n  \u2022 Unrealized PnL:  $1410.96\n\nTrading Statistics:\n  \u2022 Total Trades: 0\n  \u2022 Profitable Trades: 0\n  \u2022 Win Rate: 0.0%\n\nTechnical Analysis:\n\nNo trades yet, stats are limited.\n\nAdaptive Strategy Details:\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n  \u2022 Current Market Regime: TRENDING\n  \u2022 Regime Confidence: 75.0%\n  \u2022 Active Trading Strategy: TRENDING\n  \u2022 Strategy Switches Today: 0\n  \u2022 Signal Confirmation: 1/2 bars\n  \u2022 Min Trade Gap: 15 minutes\n\n  Strategy Performance Breakdown:\n    \ud83d\udd35 TRENDING: 0 trades, $0.00 profit\n    \u26aa RANGING: 0 trades, $0.00 profit\n    \u26aa VOLATILE: 0 trades, $0.00 profit\n\n  \ud83d\udcc8 TRENDING MARKET DETECTED:\n     \u2022 Clear directional movement\n     \u2022 Using MA CROSSOVER strategy\n\nSession Duration: 0.0 hours\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n",
+    "position": {
+      "btc_balance": 1.52275326,
+      "entry_price": 118098.99999999999,
+      "position": 1,
+      "usd_balance": 0
+    },
+    "success": true,
+    "timestamp": "2025-07-13T18:53:11.564438"
+  },
+  "processed_at": "2025-07-13T14:53:11.458453"
+}

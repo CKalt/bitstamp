@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-01-12T20:53:00Z",
+  "command": "history_status",
+  "source": "claude_history_status",
+  "args": "",
+  "result": {
+    "auto_trader": {
+      "active": true,
+      "strategy": "AdaptiveMultiStrategy"
+    },
+    "command": "history_status",
+    "output": "",
+    "position": {
+      "btc_balance": 1.52275326,
+      "entry_price": 109330.0,
+      "position": 1,
+      "usd_balance": 0
+    },
+    "success": true,
+    "timestamp": "2025-07-12T19:32:35.357004"
+  },
+  "processed_at": "2025-07-12T15:32:35.362081"
+}

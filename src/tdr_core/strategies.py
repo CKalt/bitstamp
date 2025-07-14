@@ -2273,7 +2273,9 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                     'last_update': datetime.now(),
                                     'support_level': None,
                                     'resistance_level': None,
-                                    'buffer_zone': self.pivot_buffer  # Configurable buffer
+                                    'buffer_zone': self.pivot_buffer,  # Configurable buffer
+                                    'levels_locked': False,  # Track if levels are established
+                                    'last_position_flip': None  # Track when we last flipped position
                                 }
                         
                             # Update pivot levels (look at configurable hours of data)
@@ -2288,15 +2290,25 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             
                             # Update support/resistance based on recent price action
                             if self.position == 1:  # LONG position
-                                # Support is the recent low minus half the buffer
-                                self.pivot_tracker['support_level'] = recent_low - (self.pivot_buffer / 2)
-                                self.pivot_tracker['resistance_level'] = recent_high + (self.pivot_buffer / 2)
+                                # Check if we need to establish new levels (after position flip or first time)
+                                if (not self.pivot_tracker['levels_locked'] or 
+                                    self.pivot_tracker['last_position_flip'] != self.position):
+                                    # Set sticky support level based on recent low
+                                    self.pivot_tracker['support_level'] = recent_low - (self.pivot_buffer / 2)
+                                    self.pivot_tracker['resistance_level'] = recent_high + (self.pivot_buffer / 2)
+                                    self.pivot_tracker['levels_locked'] = True
+                                    self.pivot_tracker['last_position_flip'] = self.position
+                                    self.logger.info(f"📍 LONG Pivot Levels Established - Support: ${self.pivot_tracker['support_level']:.0f}, "
+                                                   f"Resistance: ${self.pivot_tracker['resistance_level']:.0f}")
                                 
                                 # Check if price broke below support
                                 if current_price < self.pivot_tracker['support_level']:
                                     self.logger.warning(f"🚨 PIVOT BREAK: Price ${current_price:.0f} broke support ${self.pivot_tracker['support_level']:.0f}")
                                     pivot_signal = -1  # Flip to SHORT
                                     pivot_reason = f"Pivot break: below support ${self.pivot_tracker['support_level']:.0f}"
+                                    
+                                    # Reset levels for next position
+                                    self.pivot_tracker['levels_locked'] = False
                                     
                                     # Force immediate execution
                                     signal_time = df_resampled.index[-1]
@@ -2306,15 +2318,25 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                     continue
                                     
                             elif self.position == -1:  # SHORT position
-                                # Resistance is the recent high plus half the buffer
-                                self.pivot_tracker['support_level'] = recent_low - (self.pivot_buffer / 2)
-                                self.pivot_tracker['resistance_level'] = recent_high + (self.pivot_buffer / 2)
+                                # Check if we need to establish new levels (after position flip or first time)
+                                if (not self.pivot_tracker['levels_locked'] or 
+                                    self.pivot_tracker['last_position_flip'] != self.position):
+                                    # Set sticky resistance level based on recent high
+                                    self.pivot_tracker['support_level'] = recent_low - (self.pivot_buffer / 2)
+                                    self.pivot_tracker['resistance_level'] = recent_high + (self.pivot_buffer / 2)
+                                    self.pivot_tracker['levels_locked'] = True
+                                    self.pivot_tracker['last_position_flip'] = self.position
+                                    self.logger.info(f"📍 SHORT Pivot Levels Established - Support: ${self.pivot_tracker['support_level']:.0f}, "
+                                                   f"Resistance: ${self.pivot_tracker['resistance_level']:.0f}")
                                 
                                 # Check if price broke above resistance
                                 if current_price > self.pivot_tracker['resistance_level']:
                                     self.logger.warning(f"🚨 PIVOT BREAK: Price ${current_price:.0f} broke resistance ${self.pivot_tracker['resistance_level']:.0f}")
                                     pivot_signal = 1  # Flip to LONG
                                     pivot_reason = f"Pivot break: above resistance ${self.pivot_tracker['resistance_level']:.0f}"
+                                    
+                                    # Reset levels for next position
+                                    self.pivot_tracker['levels_locked'] = False
                                     
                                     # Force immediate execution
                                     signal_time = df_resampled.index[-1]
@@ -2326,7 +2348,8 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             # Log pivot levels periodically
                             if not hasattr(self, '_last_pivot_log') or \
                                (datetime.now() - self._last_pivot_log).total_seconds() > 300:
-                                self.logger.info(f"📊 Pivot Levels - Support: ${self.pivot_tracker['support_level']:.0f}, "
+                                status = "LOCKED" if self.pivot_tracker.get('levels_locked', False) else "UPDATING"
+                                self.logger.info(f"📊 Pivot Levels ({status}) - Support: ${self.pivot_tracker['support_level']:.0f}, "
                                                f"Resistance: ${self.pivot_tracker['resistance_level']:.0f}, "
                                                f"Current: ${current_price:.0f}")
                                 self._last_pivot_log = datetime.now()

@@ -1,0 +1,6 @@
+{
+  "timestamp": "2025-01-13T14:20:00Z",
+  "command": "status long",
+  "source": "claude_price_drop_check",
+  "args": ""
+}
