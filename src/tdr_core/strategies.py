@@ -2314,6 +2314,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                     signal_time = df_resampled.index[-1]
                                     self.signal_history = [pivot_signal] * self.signal_confirmation_bars
                                     self.last_trade_reason = pivot_reason
+                                    self._pivot_triggered = True  # Flag to preserve reason
                                     self.check_for_signals(pivot_signal, current_price, signal_time)
                                     continue
                                     
@@ -2342,6 +2343,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                     signal_time = df_resampled.index[-1]
                                     self.signal_history = [pivot_signal] * self.signal_confirmation_bars
                                     self.last_trade_reason = pivot_reason
+                                    self._pivot_triggered = True  # Flag to preserve reason
                                     self.check_for_signals(pivot_signal, current_price, signal_time)
                                     continue
                             
@@ -2563,7 +2565,9 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             }
             
             self.position = 1
-            self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed long"
+            # Don't overwrite pivot protection reasons
+            if "Pivot break:" not in self.last_trade_reason:
+                self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed long"
             self.last_trade_time = datetime.now()
             self.buy_in_three_parts(current_price, datetime.now().strftime(
                 '%Y-%m-%d %H:%M:%S'), signal_time)
@@ -2596,7 +2600,9 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             }
             
             self.position = -1
-            self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed short"
+            # Don't overwrite pivot protection reasons
+            if "Pivot break:" not in self.last_trade_reason:
+                self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed short"
             self.last_trade_time = datetime.now()
             trade_btc = round(self.balance_btc, 8)
             
