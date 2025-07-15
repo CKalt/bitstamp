@@ -471,6 +471,51 @@ Implement a comprehensive trading history and analytics system that allows Claud
      - Technical indicators (MA values, RSI, etc.)
    - Track strategy performance metrics over time
    - Record false signals and why trades weren't executed
+   
+   **AdaptiveMultiStrategy Analysis Framework**:
+   - **Regime Detection Performance**:
+     - Track accuracy of TRENDING/RANGING/VOLATILE classification
+     - Record confidence threshold effectiveness (80% requirement analysis)
+     - Monitor how often regime switches occur vs market reality
+     - Analyze false regime signals and their impact on trading
+   
+   - **Strategy Switching Effectiveness**:
+     - Performance comparison: MA Crossover vs RSI vs other strategies per regime
+     - Track how long each strategy remains active
+     - Measure profitability difference between regimes
+     - Identify optimal confidence thresholds for regime switching
+   
+   - **Regime-Strategy Mapping Optimization**:
+     - TRENDING regime: Is MA Crossover truly optimal?
+     - RANGING regime: Alternative strategies performance analysis
+     - VOLATILE regime: Strategy effectiveness in high volatility
+     - Cross-regime performance to identify misclassifications
+   
+   - **Signal Confirmation Analysis**:
+     - Track effectiveness of 2-bar vs 3-bar confirmation by regime
+     - Analyze false breakouts prevented vs missed opportunities
+     - Regime-specific confirmation requirements optimization
+   
+   **Pivot Protection System Analytics**:
+   - **Level Calculation Effectiveness**:
+     - Track accuracy of 2-hour lookback period vs other timeframes
+     - Analyze $100 buffer zone effectiveness vs market volatility
+     - Monitor sticky level performance vs dynamic recalculation
+   
+   - **Trigger Accuracy & Timing**:
+     - Success rate of pivot-triggered trades vs regular signals
+     - Average time between pivot establishment and trigger
+     - False trigger analysis (whipsaws immediately after flip)
+   
+   - **Profit Protection Efficiency**:
+     - Actual profit locked vs maximum possible profit
+     - Comparison with fixed stop-loss approaches
+     - Re-entry success rates after pivot triggers
+   
+   - **Parameter Optimization**:
+     - Buffer zone sizing based on market volatility
+     - Lookback period effectiveness in different market conditions
+     - Integration with regime detection for adaptive parameters
 
 2. **Server-Side Analytics Engine**
    - New commands for Claude to request analysis:
@@ -480,6 +525,8 @@ Implement a comprehensive trading history and analytics system that allows Claud
      analyze_pivots <count>
      analyze_regime_switches
      analyze_false_signals
+     analyze_adaptive_tuning
+     analyze_regime_accuracy
      ```
    - Generate reports on:
      - Win/loss ratios by strategy
@@ -487,6 +534,10 @@ Implement a comprehensive trading history and analytics system that allows Claud
      - Pivot protection effectiveness
      - Strategy switching patterns
      - Best/worst performing periods
+     - AdaptiveMultiStrategy regime classification accuracy
+     - Optimal confidence thresholds for regime switching
+     - Strategy performance correlation with market conditions
+     - Pivot parameter optimization recommendations
 
 3. **Data Storage Architecture**
    - Extend trades.json with richer metadata
