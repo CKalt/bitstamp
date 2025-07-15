@@ -732,7 +732,10 @@ Initializing connection to remote server...
     def do_trades(self, args):
         """Show recent trades from server
         Usage: trades [limit]"""
-        limit = int(args) if args else 10
+        try:
+            limit = int(args.strip()) if args.strip() else 10
+        except ValueError:
+            limit = 10
         
         try:
             response = requests.get(
@@ -746,7 +749,23 @@ Initializing connection to remote server...
                 if trades:
                     print(f"\n=== RECENT TRADES (showing {len(trades)}) ===")
                     for trade in trades:
-                        timestamp = datetime.fromtimestamp(trade.get('timestamp', 0))
+                        # Handle timestamp - could be string or number
+                        timestamp_val = trade.get('timestamp', 0)
+                        if isinstance(timestamp_val, str):
+                            try:
+                                # Try parsing as ISO format first
+                                timestamp = datetime.fromisoformat(timestamp_val.replace('Z', '+00:00'))
+                            except ValueError:
+                                try:
+                                    # Try parsing as float string
+                                    timestamp = datetime.fromtimestamp(float(timestamp_val))
+                                except (ValueError, TypeError):
+                                    timestamp = datetime.now()
+                        else:
+                            try:
+                                timestamp = datetime.fromtimestamp(timestamp_val)
+                            except (ValueError, TypeError):
+                                timestamp = datetime.now()
                         action = trade.get('action', 'UNKNOWN')
                         amount = trade.get('amount', 0)
                         price = trade.get('price', 0)
