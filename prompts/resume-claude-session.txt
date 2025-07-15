@@ -391,6 +391,31 @@ if (not self.pivot_tracker['levels_locked'] or
 
 This ensures levels only update when entering a new position, not continuously.
 
+## Pivot Protection Trade Reason Mystery (Discovered 2025-01-15)
+
+### The Mystery
+Status displays showed "Last Trade Reason: Pivot break: above resistance $118407" but trades.json showed "Adaptive ranging: confirmed short". This led to initial confusion about whether pivot protection was actually working.
+
+### Investigation Results
+1. **Pivot Protection IS Working**: The last trade at 14:07 was indeed triggered by price breaking above resistance
+2. **Trade Was Profitable**: Bought at ~$116,920, sold at $118,289 = +$1,369/BTC profit
+3. **The Bug**: Trade reason gets overwritten in check_for_signals() method
+
+### Root Cause
+When pivot protection triggers:
+1. Sets `self.last_trade_reason = "Pivot break: ..."`
+2. Calls `check_for_signals()`
+3. check_for_signals() OVERWRITES with `self.last_trade_reason = "Adaptive {strategy}: confirmed {direction}"`
+4. Status display preserves the correct reason, but trades.json gets the overwritten value
+
+### TODO: Complete Fix
+- ✅ Added logic to preserve pivot reasons: `if "Pivot break:" not in self.last_trade_reason`
+- ❌ Still need to remove the `_pivot_triggered` flag remnants
+- ❌ Add clearer logging when pivot protection triggers
+- ❌ Ensure trades.json always shows accurate trigger reason
+
+This mystery demonstrates that the pivot protection has been successfully protecting profits, but the logging was misleading.
+
 
 GOALS:
 

@@ -998,6 +998,13 @@ class MACrossoverStrategy:
             return
 
         from tdr_core.trade import Trade
+        
+        # Log trade reason prominently
+        if "Pivot break:" in self.last_trade_reason:
+            self.logger.warning(f"🎯 EXECUTING PIVOT-TRIGGERED TRADE: {self.last_trade_reason}")
+        else:
+            self.logger.info(f"📊 Executing trade: {self.last_trade_reason}")
+            
         trade_info = Trade(
             trade_type,
             self.symbol,
@@ -2314,7 +2321,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                     signal_time = df_resampled.index[-1]
                                     self.signal_history = [pivot_signal] * self.signal_confirmation_bars
                                     self.last_trade_reason = pivot_reason
-                                    self._pivot_triggered = True  # Flag to preserve reason
+                                    self.logger.warning(f"🎯 PIVOT PROTECTION TRIGGERED: {pivot_reason}")
                                     self.check_for_signals(pivot_signal, current_price, signal_time)
                                     continue
                                     
@@ -2343,7 +2350,7 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                     signal_time = df_resampled.index[-1]
                                     self.signal_history = [pivot_signal] * self.signal_confirmation_bars
                                     self.last_trade_reason = pivot_reason
-                                    self._pivot_triggered = True  # Flag to preserve reason
+                                    self.logger.warning(f"🎯 PIVOT PROTECTION TRIGGERED: {pivot_reason}")
                                     self.check_for_signals(pivot_signal, current_price, signal_time)
                                     continue
                             
