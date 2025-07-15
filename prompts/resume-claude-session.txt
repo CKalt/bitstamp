@@ -1,3 +1,5 @@
+READ THIS AND PERFORM GOALS LISTED AT END:
+
 # TDR Client-Server Trading System Health Check
 
 ## System Overview
@@ -134,11 +136,11 @@ When asked to check the trading system status, Claude should:
 ### Current Position (as of July 14, 2025)
 - Position: LONG 1.49465979 BTC
 - Entry Price: $118,099
-- Current Price: $121,972
+- Current Price: $120,296
 - Strategy: Adaptive Multi-Strategy
 - Live Trading: ENABLED
-- Unrealized P&L: +$5,788.82 (profitable)
-- Pivot Protection: Support @ $121,175, Resistance @ $122,090
+- Unrealized P&L: +$3,284 (profitable)
+- Pivot Protection: Support @ $119,153, Resistance @ $121,235 (LOCKED/Sticky)
 
 ### Important Paths
 - **Local**: /Users/chris/projects/python/btc/
@@ -156,7 +158,7 @@ When asked to check the trading system status, Claude should:
 5. Claude reads the processed file for response
 
 ### Critical Commands for Health Check
-1. `status` or `status long` - Full system status
+1. `status` or `status long` - Full system status (pivot details only in long view)
 2. `trades` - Recent trading activity
 3. `logs` - View recent server logs
 4. `history_status` - Check if historical data is loaded
@@ -320,18 +322,27 @@ read_server_file /home/chris/projects/bitstamp/trades.json  # Absolute path
 - **btcusd.log**: Historical price data (continuously updated by websock-ticker2.py)
 - **best_strategy.json**: Strategy configuration (DO NOT modify during testing)
 
-## Dynamic Pivot Protection (Added 2025-01-13)
+## Dynamic Pivot Protection (Fixed 2025-01-14)
 
 ### Overview
 A fast-acting profit protection mechanism that monitors support/resistance levels based on recent price action and executes immediate position flips when key levels break.
 
+### Critical Bug Fix (2025-01-14)
+**Problem**: Support levels were continuously recalculating based on new price lows, preventing protective stops from triggering. This allowed profits to evaporate as support would "chase" the falling price.
+
+**Solution**: Implemented sticky support/resistance levels that:
+- Lock in place once established for a position
+- Only reset after a successful position flip
+- Tracked via `levels_locked` flag and `last_position_flip`
+- Status display shows 🔒 LOCKED vs 🔄 UPDATING
+
 ### How It Works
 1. **Monitors recent price extremes** (default: last 2 hours)
-2. **Sets dynamic levels**:
-   - For LONG: Support = Recent Low - $50
-   - For SHORT: Resistance = Recent High + $50
+2. **Sets STICKY levels on position entry**:
+   - For LONG: Support = Recent Low - $50 (LOCKS in place)
+   - For SHORT: Resistance = Recent High + $50 (LOCKS in place)
 3. **Instant execution** when levels break (no MA confirmation wait)
-4. **Automatic re-entry** if price reverses back through opposite level
+4. **Levels reset** only after position flip, then re-lock for new position
 
 ### Configuration Parameters
 - `pivot_buffer`: Total buffer zone in dollars (default: 100)
@@ -339,28 +350,50 @@ A fast-acting profit protection mechanism that monitors support/resistance level
 - `enable_pivot_protection`: Can disable if needed (default: true)
 
 ### Example Scenario
-LONG at $121,000:
-- Recent 2hr low: $120,500 → Support set at $120,450
-- Price drops below $120,450 → Immediately flip to SHORT
-- New resistance: Recent high + $50
-- If price rises back above resistance → Flip back to LONG
+LONG at $118,099:
+- Recent 2hr low: $119,203 → Support LOCKED at $119,153
+- Price drops below $119,153 → Immediately flip to SHORT
+- Support level stays fixed, won't move with price
+- New resistance calculated and LOCKED for SHORT position
 
 ### Status Display
-The `status long` command now shows:
+**Note**: Pivot details only show with `status long` command, not basic `status`:
 - Calculation details (recent high/low, buffer)
 - Current support/resistance levels
+- Lock status: 🔒 LOCKED (sticky) or 🔄 UPDATING
 - Distance to trigger in $ and %
 - Total flip zone width
 
 ### Key Benefits
-1. **Protects profits** by exiting on momentum breaks
-2. **Quick re-entry** prevents missing trend continuation
-3. **Market-based levels** adapt to current volatility
-4. **Prevents whipsaws** with buffer zone
+1. **True profit protection** - levels don't chase price down
+2. **Predictable exits** - know exactly where protection kicks in
+3. **Quick re-entry** prevents missing trend continuation
+4. **Market-based levels** adapt to volatility at position entry
+5. **Prevents whipsaws** with buffer zone
 
 ### Trading Examples from Session
 - July 9: LONG @ $109,330
 - July 13 11:03: Flipped to SHORT @ $117,835 (+$8,500 profit)
 - July 13 12:00: Flipped back to LONG @ $118,099 (57 minutes later)
-- System captured the major move while staying nimble
+- July 14: Support locked at $119,153 protecting $1,576+ profit
 
+### Implementation Details
+Key code in strategies.py:
+```python
+# Check if we need to establish new levels (after position flip or first time)
+if (not self.pivot_tracker['levels_locked'] or 
+    self.pivot_tracker['last_position_flip'] != self.position):
+    # Set sticky support level based on recent low
+    self.pivot_tracker['support_level'] = recent_low - (self.pivot_buffer / 2)
+    self.pivot_tracker['levels_locked'] = True
+    self.pivot_tracker['last_position_flip'] = self.position
+```
+
+This ensures levels only update when entering a new position, not continuously.
+
+
+GOALS:
+
+Please use the enable_commands session to talk with the tdr.py client running on this same 
+host where claude code is running. Please request a list of recent trades and 
+make sure that the pivot trading is working as designed and implemented yesterday.
