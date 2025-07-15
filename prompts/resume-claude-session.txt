@@ -515,6 +515,95 @@ Implement a comprehensive trading history and analytics system that allows Claud
 4. Extend visualization capabilities
 5. Prepare ML-ready data structures
 
+### Daily Summary System (Critical for Strategy Optimization)
+
+#### Command: `daily_summary` or `summary`
+Generates a concise daily report with key metrics for strategy evaluation.
+
+#### Core Metrics to Track:
+1. **Trading Activity**
+   - Trades executed (with breakdown by trigger: MA/Pivot/Regime)
+   - Fees paid (absolute and as % of volume traded)
+   - Win rate and average win/loss sizes
+   
+2. **Risk Metrics**
+   - Maximum drawdown (intraday and peak-to-trough)
+   - Time spent in drawdown
+   - Risk/reward ratios achieved
+   - How close positions came to stop levels without triggering
+
+3. **Pivot Protection Analysis**
+   - Number of pivot triggers
+   - Average distance from entry to pivot level
+   - "Near misses" - price approached pivot but reversed
+   - Effectiveness score (profitable exits vs whipsaws)
+
+4. **Market Regime Performance**
+   - Time spent in each regime
+   - P&L by regime type
+   - Regime switch frequency and accuracy
+   - False signals by regime
+
+5. **Optimization Insights**
+   - Signal confirmation effectiveness (2 vs 3 bar analysis)
+   - Trade gap impact (missed opportunities vs avoided losses)
+   - Hour-of-day performance patterns
+   - Fee impact on marginal trades
+
+#### Data Point Structure for Historical Analysis:
+Each daily summary creates a structured data point:
+```json
+{
+  "date": "2025-07-15",
+  "summary_version": "1.0",
+  "position_flips": 1,
+  "fees_paid": 211.47,
+  "gross_pnl": 1725.00,
+  "net_pnl": 1513.53,
+  "win_rate": 1.0,
+  "largest_drawdown": -625.13,
+  "pivot_triggers": {
+    "count": 1,
+    "successful": 1,
+    "avg_distance_to_trigger": 0.9,
+    "near_misses": 0
+  },
+  "regime_performance": {
+    "trending": {"time_pct": 58.3, "trades": 1, "pnl": -625.13},
+    "ranging": {"time_pct": 41.7, "trades": 0, "pnl": 0},
+    "volatile": {"time_pct": 0, "trades": 0, "pnl": 0}
+  },
+  "signals": {
+    "generated": 15,
+    "confirmed": 3,
+    "executed": 1,
+    "blocked_by_gap": 2,
+    "blocked_by_limit": 0
+  },
+  "optimization_scores": {
+    "pivot_buffer_efficiency": 0.85,
+    "confirmation_accuracy": 0.33,
+    "fee_efficiency": 0.88
+  }
+}
+```
+
+#### Long-term Analysis Capabilities:
+- **30-day rolling metrics** for trend identification
+- **Statistical significance testing** for parameter changes
+- **Correlation analysis** between metrics
+- **Machine learning features** for pattern recognition
+- **A/B testing framework** for strategy improvements
+
+#### Implementation Notes:
+- Summary data stored in `daily_summaries.json`
+- Automatic generation at market close or on-demand
+- Compression of older summaries to maintain performance
+- Export functionality for external analysis tools
+- Integration with charting system for visual trends
+
+This daily summary system provides the quantitative foundation for data-driven strategy optimization, ensuring every trading decision contributes to our understanding of what works and what doesn't.
+
 This will enable deep analysis of trading performance and continuous strategy improvement.
 
 
