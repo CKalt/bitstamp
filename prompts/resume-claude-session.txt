@@ -133,14 +133,14 @@ When asked to check the trading system status, Claude should:
 
 ## Key System Information
 
-### Current Position (as of July 14, 2025)
-- Position: LONG 1.49465979 BTC
-- Entry Price: $118,099
-- Current Price: $120,296
+### Current Position (as of July 15, 2025)
+- Position: LONG 1.50271956 BTC
+- Entry Price: $117,182
+- Current Price: $117,014
 - Strategy: Adaptive Multi-Strategy
 - Live Trading: ENABLED
-- Unrealized P&L: +$3,284 (profitable)
-- Pivot Protection: Support @ $119,153, Resistance @ $121,235 (LOCKED/Sticky)
+- Unrealized P&L: -$252 (small loss)
+- Pivot Protection: Support @ $115,728, Resistance @ $117,246 (LOCKED/Sticky)
 
 ### Important Paths
 - **Local**: /Users/chris/projects/python/btc/
@@ -271,9 +271,11 @@ Remember:
 
 ## Session Documentation Update Trigger
 
-**TRIGGER PHRASE**: "Update session knowledge"
+**TRIGGER PHRASES**: 
+- "Update session knowledge" (original)
+- "USK" or "usk" (case-insensitive alias added 2025-01-15)
 
-When the user says "Update session knowledge", Claude should:
+When the user says any of these trigger phrases, Claude should:
 1. Review all new learnings from the current session
 2. Read the current `prompts/resume-claude-session.txt` file
 3. Update it with any new architectural insights, command discoveries, or important clarifications
@@ -376,6 +378,7 @@ LONG at $118,099:
 - July 13 11:03: Flipped to SHORT @ $117,835 (+$8,500 profit)
 - July 13 12:00: Flipped back to LONG @ $118,099 (57 minutes later)
 - July 14: Support locked at $119,153 protecting $1,576+ profit
+- July 15 16:00: Flipped to LONG @ $117,182 via pivot break at $117,134
 
 ### Implementation Details
 Key code in strategies.py:
@@ -391,7 +394,13 @@ if (not self.pivot_tracker['levels_locked'] or
 
 This ensures levels only update when entering a new position, not continuously.
 
-## Pivot Protection Trade Reason Mystery (Discovered 2025-01-15)
+### Verified Working (2025-01-15)
+- Pivot protection successfully triggered at 16:00 when price broke above $117,134
+- Locked in ~$1,725 profit from SHORT position
+- Immediately flipped to LONG as designed
+- New support/resistance levels established and locked
+
+## Pivot Protection Trade Reason Mystery (Discovered & Fixed 2025-01-15)
 
 ### The Mystery
 Status displays showed "Last Trade Reason: Pivot break: above resistance $118407" but trades.json showed "Adaptive ranging: confirmed short". This led to initial confusion about whether pivot protection was actually working.
@@ -408,13 +417,14 @@ When pivot protection triggers:
 3. check_for_signals() OVERWRITES with `self.last_trade_reason = "Adaptive {strategy}: confirmed {direction}"`
 4. Status display preserves the correct reason, but trades.json gets the overwritten value
 
-### TODO: Complete Fix
+### Fix Applied (2025-01-15)
 - ✅ Added logic to preserve pivot reasons: `if "Pivot break:" not in self.last_trade_reason`
-- ❌ Still need to remove the `_pivot_triggered` flag remnants
-- ❌ Add clearer logging when pivot protection triggers
-- ❌ Ensure trades.json always shows accurate trigger reason
+- ✅ Removed the `_pivot_triggered` flag complexity
+- ✅ Added clear logging when pivot protection triggers: `🎯 PIVOT PROTECTION TRIGGERED`
+- ✅ Added prominent logging for pivot trades: `🎯 EXECUTING PIVOT-TRIGGERED TRADE`
+- ✅ Ensures trades.json shows accurate trigger reason
 
-This mystery demonstrates that the pivot protection has been successfully protecting profits, but the logging was misleading.
+This fix ensures transparency in the trading system and accurate historical records.
 
 ## Git Workflow Best Practices (Added 2025-01-15)
 
@@ -444,6 +454,68 @@ Only skip pushing if:
 - Dealing with sensitive configuration changes
 
 Remember: **Commit and push by default!**
+
+## TODO: Enhanced Trading History & Analytics System (Added 2025-01-15)
+
+### Objective
+Implement a comprehensive trading history and analytics system that allows Claude to request detailed analysis of trading strategy performance over time.
+
+### Requirements
+
+1. **Enhanced History Tracking**
+   - Store detailed snapshots of each trade decision including:
+     - Market conditions at time of trade
+     - All strategy signals (not just the winning one)
+     - Regime detection confidence levels
+     - Pivot protection state
+     - Technical indicators (MA values, RSI, etc.)
+   - Track strategy performance metrics over time
+   - Record false signals and why trades weren't executed
+
+2. **Server-Side Analytics Engine**
+   - New commands for Claude to request analysis:
+     ```
+     analyze_performance <start_date> <end_date>
+     analyze_strategy <strategy_name> <timeframe>
+     analyze_pivots <count>
+     analyze_regime_switches
+     analyze_false_signals
+     ```
+   - Generate reports on:
+     - Win/loss ratios by strategy
+     - Average profit per trade by market regime
+     - Pivot protection effectiveness
+     - Strategy switching patterns
+     - Best/worst performing periods
+
+3. **Data Storage Architecture**
+   - Extend trades.json with richer metadata
+   - Create new analytics_history.json for detailed snapshots
+   - Implement rolling history files to manage size
+   - Index by date/strategy/regime for fast queries
+
+4. **Visualization Enhancements**
+   - Add analytics charts to the Dash interface
+   - Strategy performance comparison graphs
+   - Drawdown analysis
+   - Regime transition visualizations
+
+5. **Machine Learning Preparation**
+   - Structure data for future ML analysis
+   - Include features like:
+     - Time of day/week patterns
+     - Volume profiles
+     - Market microstructure data
+     - Correlation with external events
+
+### Implementation Priority
+1. Start with enhanced trade logging
+2. Add basic analytics commands
+3. Implement performance reports
+4. Extend visualization capabilities
+5. Prepare ML-ready data structures
+
+This will enable deep analysis of trading performance and continuous strategy improvement.
 
 
 GOALS:
