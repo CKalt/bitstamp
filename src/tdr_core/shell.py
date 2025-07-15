@@ -1141,10 +1141,10 @@ class CryptoShell(cmd.Cmd):
             
         try:
             # Get current price data
-            current_price = self.data_manager.get_current_price('btcusd') or 0
+            current_price = self.auto_trader.data_manager.get_current_price('btcusd') or 0
             
-            # Calculate alternative levels based on current data
-            df = self.data_manager.get_dataframe('btcusd', '1H')
+            # Calculate alternative levels based on current data  
+            df = self.auto_trader.data_manager.get_dataframe('btcusd', '1H')
             if df is None or len(df) < 2:
                 print("Not enough data to calculate alternative pivot levels")
                 return

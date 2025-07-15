@@ -1496,6 +1496,20 @@ class MACrossoverStrategy:
         
         return False
     
+    def _serialize_pivot_tracker(self):
+        """Serialize pivot tracker data for JSON storage, handling datetime objects."""
+        if not hasattr(self, 'pivot_tracker') or not self.pivot_tracker:
+            return {}
+            
+        tracker = self.pivot_tracker.copy()
+        
+        # Convert datetime objects to ISO format strings
+        if 'last_update' in tracker and tracker['last_update']:
+            if hasattr(tracker['last_update'], 'isoformat'):
+                tracker['last_update'] = tracker['last_update'].isoformat()
+        
+        return tracker
+    
     def save_resume_state(self):
         """Save current position state to resume-auto-trade.json for easy restart."""
         import json
@@ -1576,7 +1590,7 @@ class MACrossoverStrategy:
                 'trade_references': trade_references,
                 'pivot_protection': {
                     'enabled': getattr(self, 'enable_pivot_protection', False),
-                    'tracker': getattr(self, 'pivot_tracker', {}) if hasattr(self, 'pivot_tracker') else {}
+                    'tracker': self._serialize_pivot_tracker()
                 }
             }
             
