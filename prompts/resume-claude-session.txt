@@ -416,6 +416,35 @@ When pivot protection triggers:
 
 This mystery demonstrates that the pivot protection has been successfully protecting profits, but the logging was misleading.
 
+## Git Workflow Best Practices (Added 2025-01-15)
+
+### Default Behavior for Code Changes
+**IMPORTANT**: Claude should ALWAYS commit AND push changes to the remote repository as the default action when making code modifications. This ensures:
+1. Changes are backed up immediately
+2. Server can pull updates without manual file transfers
+3. Complete audit trail of all modifications
+4. Easy rollback if issues arise
+
+### Standard Git Workflow
+```bash
+# After making changes
+git add <modified files>
+git commit -m "Clear description of changes
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+git push origin <current-branch>
+```
+
+### Exceptions
+Only skip pushing if:
+- User explicitly requests local-only changes
+- Working on experimental features not ready for deployment
+- Dealing with sensitive configuration changes
+
+Remember: **Commit and push by default!**
+
 
 GOALS:
 
