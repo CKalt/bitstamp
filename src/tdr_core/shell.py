@@ -1124,6 +1124,107 @@ class CryptoShell(cmd.Cmd):
         except Exception as e:
             print(f"Error saving resume state: {e}")
 
+    def do_check_pivot_alternatives(self, arg):
+        """
+        Check alternative pivot levels based on current market data.
+        Shows what the pivot levels would be if recalculated now vs preserved original levels.
+        
+        Usage: check_pivot_alternatives
+        """
+        if not self.auto_trader:
+            print("No auto trader running")
+            return
+            
+        if not hasattr(self.auto_trader, 'enable_pivot_protection') or not self.auto_trader.enable_pivot_protection:
+            print("Pivot protection is not enabled")
+            return
+            
+        try:
+            # Get current price data
+            current_price = self.data_manager.get_current_price('btcusd') or 0
+            
+            # Calculate alternative levels based on current data
+            df = self.data_manager.get_dataframe('btcusd', '1H')
+            if df is None or len(df) < 2:
+                print("Not enough data to calculate alternative pivot levels")
+                return
+                
+            # Use same logic as the strategy for calculating current levels
+            lookback_hours = min(self.auto_trader.pivot_lookback_hours, len(df))
+            recent_data = df.tail(lookback_hours)
+            
+            current_high = recent_data['high'].max()
+            current_low = recent_data['low'].min()
+            buffer = self.auto_trader.pivot_buffer
+            
+            # Calculate what levels would be if recalculated now
+            alternative_support = current_low - (buffer / 2)
+            alternative_resistance = current_high + (buffer / 2)
+            
+            print("\n" + "="*80)
+            print("🔄 PIVOT LEVEL COMPARISON")
+            print("="*80)
+            
+            # Show current preserved levels
+            if hasattr(self.auto_trader, 'pivot_tracker') and self.auto_trader.pivot_tracker.get('levels_locked'):
+                preserved_support = self.auto_trader.pivot_tracker.get('support_level')
+                preserved_resistance = self.auto_trader.pivot_tracker.get('resistance_level')
+                
+                print(f"\n🔒 PRESERVED ORIGINAL LEVELS (Active):")
+                print(f"   • Support:    ${preserved_support:.0f}")
+                print(f"   • Resistance: ${preserved_resistance:.0f}")
+                print(f"   • Status:     LOCKED (sticky)")
+                
+                if self.auto_trader.position == 1:  # LONG
+                    distance_to_preserved = current_price - preserved_support
+                    print(f"   • Distance to trigger: ${distance_to_preserved:.0f} ({distance_to_preserved/current_price*100:.1f}%)")
+                else:  # SHORT
+                    distance_to_preserved = preserved_resistance - current_price
+                    print(f"   • Distance to trigger: ${distance_to_preserved:.0f} ({distance_to_preserved/current_price*100:.1f}%)")
+            else:
+                print(f"\n⚠️  NO PRESERVED LEVELS (pivot tracker not initialized)")
+                
+            print(f"\n🔄 ALTERNATIVE LEVELS (Current Data):")
+            print(f"   • Support:    ${alternative_support:.0f}")
+            print(f"   • Resistance: ${alternative_resistance:.0f}")
+            print(f"   • Based on:   Last {lookback_hours} hours")
+            print(f"   • High:       ${current_high:.0f}")
+            print(f"   • Low:        ${current_low:.0f}")
+            print(f"   • Buffer:     ${buffer}")
+            
+            if self.auto_trader.position == 1:  # LONG
+                distance_to_alternative = current_price - alternative_support
+                print(f"   • Distance to trigger: ${distance_to_alternative:.0f} ({distance_to_alternative/current_price*100:.1f}%)")
+            else:  # SHORT
+                distance_to_alternative = alternative_resistance - current_price
+                print(f"   • Distance to trigger: ${distance_to_alternative:.0f} ({distance_to_alternative/current_price*100:.1f}%)")
+                
+            print(f"\n📊 CURRENT MARKET:")
+            print(f"   • Price:      ${current_price:.0f}")
+            print(f"   • Position:   {'LONG' if self.auto_trader.position == 1 else 'SHORT'}")
+            
+            # Show which is more conservative
+            if hasattr(self.auto_trader, 'pivot_tracker') and self.auto_trader.pivot_tracker.get('levels_locked'):
+                if self.auto_trader.position == 1:  # LONG
+                    if preserved_support < alternative_support:
+                        print(f"\n💡 ANALYSIS: Preserved levels are MORE CONSERVATIVE (further from current price)")
+                        print(f"   Preserved gives you more room before trigger: ${alternative_support - preserved_support:.0f}")
+                    else:
+                        print(f"\n💡 ANALYSIS: Alternative levels are MORE CONSERVATIVE (further from current price)")
+                        print(f"   Alternative gives you more room before trigger: ${preserved_support - alternative_support:.0f}")
+                else:  # SHORT
+                    if preserved_resistance > alternative_resistance:
+                        print(f"\n💡 ANALYSIS: Preserved levels are MORE CONSERVATIVE (further from current price)")
+                        print(f"   Preserved gives you more room before trigger: ${preserved_resistance - alternative_resistance:.0f}")
+                    else:
+                        print(f"\n💡 ANALYSIS: Alternative levels are MORE CONSERVATIVE (further from current price)")
+                        print(f"   Alternative gives you more room before trigger: ${alternative_resistance - preserved_resistance:.0f}")
+            
+            print("\n" + "="*80)
+            
+        except Exception as e:
+            print(f"Error checking pivot alternatives: {e}")
+
     def do_position_history(self, arg):
         """
         Query position history from the server.

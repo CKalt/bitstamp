@@ -657,6 +657,102 @@ This daily summary system provides the quantitative foundation for data-driven s
 
 This will enable deep analysis of trading performance and continuous strategy improvement.
 
+## Pivot Protection Level Preservation Fix (Added 2025-01-15)
+
+### Problem Identified
+Server restarts were recalculating pivot protection levels based on current 2-hour market data, breaking the fundamental "sticky" principle. This caused:
+- Unpredictable changes to risk parameters
+- Loss of original profit protection levels
+- User confusion about actual stop levels
+
+### Solution Implemented
+**Preserve Original Levels Across Restarts**:
+
+#### Code Changes Made
+1. **Enhanced `save_resume_state()` method** (strategies.py:1537-1540):
+   ```python
+   'pivot_protection': {
+       'enabled': getattr(self, 'enable_pivot_protection', False),
+       'tracker': getattr(self, 'pivot_tracker', {}) if hasattr(self, 'pivot_tracker') else {}
+   }
+   ```
+
+2. **Added `_restore_pivot_tracker_from_resume()` method** (strategies.py:1459-1497):
+   - Reads pivot tracker data from resume-auto-trade.json
+   - Restores original support/resistance levels when levels_locked=True
+   - Maintains sticky behavior across restarts
+   - Logs restoration: "🔒 RESTORED ORIGINAL PIVOT LEVELS"
+
+3. **Integrated restoration in strategy initialization** (strategies.py:1897):
+   - Calls `_restore_pivot_tracker_from_resume()` during __init__
+   - Ensures levels are preserved before new calculations begin
+
+#### New Command: `check_pivot_alternatives`
+**Location**: shell.py:1127-1226
+
+**Functionality**:
+- Compares preserved original levels vs current market-based calculations
+- Shows distance to trigger for both scenarios
+- Analyzes which approach is more conservative
+- Helps users understand the difference between sticky vs dynamic levels
+
+**Example Output**:
+```
+🔒 PRESERVED ORIGINAL LEVELS (Active):
+   • Support:    $115728
+   • Distance to trigger: $876 (0.8%)
+
+🔄 ALTERNATIVE LEVELS (Current Data):  
+   • Support:    $116187
+   • Distance to trigger: $417 (0.4%)
+
+💡 ANALYSIS: Preserved levels are MORE CONSERVATIVE
+   Preserved gives you more room before trigger: $459
+```
+
+### Benefits Achieved
+1. **Predictable Risk Management**: Stop levels don't change unexpectedly
+2. **True Profit Protection**: Maintains levels that actually locked in profits
+3. **User Confidence**: Clear understanding of actual trigger points
+4. **System Reliability**: Restarts don't alter trading parameters
+5. **Informed Decisions**: Can compare original vs current market levels
+
+### Real-World Impact
+In your case:
+- **Before Fix**: Restart changed support from $115,728 to $116,187 (much tighter)
+- **After Fix**: Original $115,728 level preserved (better profit protection)
+- **Difference**: $459 more room before trigger (0.4% vs 0.8% from current price)
+
+The preserved level maintains the profit protection that was established when your LONG position was profitable, rather than using current market conditions that might be less favorable.
+
+## Session Knowledge Update Protocol (USK)
+
+When updating session knowledge (triggered by "Update session knowledge", "USK", or "usk"), Claude should:
+
+1. **Review and Document**: Analyze all new learnings from the current session
+2. **Update Knowledge Base**: Add new insights to `prompts/resume-claude-session.txt`
+3. **Preserve Context**: Maintain all existing content while adding new sections
+4. **ALWAYS COMMIT AND PUSH**: After updating session knowledge, Claude must:
+   - **For modified files**: Add and commit automatically
+   - **For new files**: Ask user permission before adding to git
+   ```bash
+   git add prompts/resume-claude-session.txt [other modified files]
+   git commit -m "Update session knowledge with [specific learnings]
+   
+   🤖 Generated with [Claude Code](https://claude.ai/code)
+   
+   Co-Authored-By: Claude <noreply@anthropic.com>"
+   git push origin [current-branch]
+   ```
+
+**This is MANDATORY** - session knowledge updates must be immediately committed and pushed to ensure:
+- Knowledge is preserved across sessions
+- Changes are backed up to remote repository
+- Other team members can access updated documentation
+- Complete audit trail of all discoveries and improvements
+
+**Default Behavior**: Commit and push ALL code changes, documentation updates, and session knowledge modifications unless explicitly told otherwise.
+
 
 GOALS:
 

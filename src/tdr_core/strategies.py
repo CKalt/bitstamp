@@ -1456,6 +1456,46 @@ class MACrossoverStrategy:
             self.logger.error(f"Error calculating entry price from trades: {e}")
             return None, []
     
+    def _restore_pivot_tracker_from_resume(self):
+        """Restore pivot tracker from resume-auto-trade.json to preserve original levels across restarts."""
+        try:
+            import os
+            import json
+            from datetime import datetime
+            
+            # Find resume file (same logic as save_resume_state)
+            resume_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'resume-auto-trade.json')
+            
+            if os.path.exists(resume_file):
+                with open(resume_file, 'r') as f:
+                    resume_data = json.load(f)
+                
+                # Check if pivot protection data exists
+                pivot_data = resume_data.get('pivot_protection', {})
+                if pivot_data.get('enabled') and pivot_data.get('tracker'):
+                    tracker = pivot_data['tracker']
+                    
+                    # Restore pivot tracker with original levels
+                    if tracker.get('levels_locked') and tracker.get('support_level') is not None:
+                        self.pivot_tracker = {
+                            'recent_high': tracker.get('recent_high', 0),
+                            'recent_low': tracker.get('recent_low', 0),
+                            'last_update': datetime.now(),  # Update timestamp to now
+                            'support_level': tracker.get('support_level'),  # Preserve original
+                            'resistance_level': tracker.get('resistance_level'),  # Preserve original
+                            'buffer_zone': tracker.get('buffer_zone', self.pivot_buffer),
+                            'levels_locked': True,  # Keep locked
+                            'last_position_flip': tracker.get('last_position_flip')
+                        }
+                        
+                        self.logger.info(f"🔒 RESTORED ORIGINAL PIVOT LEVELS: Support=${self.pivot_tracker['support_level']:.0f}, Resistance=${self.pivot_tracker['resistance_level']:.0f}")
+                        return True
+                        
+        except Exception as e:
+            self.logger.warning(f"Could not restore pivot tracker from resume file: {e}")
+        
+        return False
+    
     def save_resume_state(self):
         """Save current position state to resume-auto-trade.json for easy restart."""
         import json
@@ -1533,7 +1573,11 @@ class MACrossoverStrategy:
                 },
                 'trades_executed': self.trades_executed,
                 'last_trade_time': self.last_trade_time.isoformat() if self.last_trade_time else None,
-                'trade_references': trade_references
+                'trade_references': trade_references,
+                'pivot_protection': {
+                    'enabled': getattr(self, 'enable_pivot_protection', False),
+                    'tracker': getattr(self, 'pivot_tracker', {}) if hasattr(self, 'pivot_tracker') else {}
+                }
             }
             
             # Save to file
@@ -1888,6 +1932,9 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         self.regime_confidence = 0.0
         self.active_strategy = "trending"  # trending, ranging, volatile
         self.strategy_switches_today = 0
+        
+        # Try to restore pivot tracker from resume file if available
+        self._restore_pivot_tracker_from_resume()
         self.signal_history = []
         self.last_confirmed_signal = 0
 
