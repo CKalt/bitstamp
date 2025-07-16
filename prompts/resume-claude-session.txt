@@ -1318,6 +1318,76 @@ When updating session knowledge (triggered by "Update session knowledge", "USK",
 
 **Default Behavior**: Commit and push ALL code changes, documentation updates, and session knowledge modifications unless explicitly told otherwise.
 
+## Claude Night Monitoring System (Added 2025-01-16)
+
+### Overview
+A system that keeps Claude informed of trading system status during extended periods when the user is away (sleeping, etc). This maintains Claude's awareness of system state across long sessions.
+
+### How It Works
+1. **Persistent Chat Session**: User keeps Claude chat open in a screen session
+2. **Monitor Script**: Runs in separate screen session, sends regular status updates
+3. **Command Flow**: Monitor → TDR Client → Server → Results appear in Claude's chat
+4. **Continuous Awareness**: Claude sees all updates and can provide comprehensive reports
+
+### Setup Instructions
+```bash
+# 1. Keep Claude chat session active (already in screen)
+# This is where Claude sees all the updates
+
+# 2. Create new screen session for monitor
+screen -S night-monitor
+cd /Users/chris/projects/python/btc
+./start_night_monitor.sh
+
+# 3. Detach from monitor screen
+# Press Ctrl+A, then D
+```
+
+### Monitor Features
+- **Status Checks**: Every 5 minutes via `status long` command
+- **Trade Monitoring**: Checks for new trades every 5 minutes
+- **Strategy Diagnostics**: Detailed analysis every 30 minutes
+- **Alert Detection**: Watches for pivot triggers and position flips
+- **Complete Logging**: All output saved to `claude_monitor.log`
+
+### Monitor Scripts Created
+
+#### claude_night_monitor.sh
+Main monitoring script that:
+- Sends periodic commands to TDR system
+- Captures responses and displays in terminal
+- Logs everything to file for review
+- Alerts on significant events (pivot triggers, position flips)
+
+#### start_night_monitor.sh
+Simple wrapper to start the monitor with clear instructions
+
+### Benefits
+1. **Continuous Oversight**: Claude maintains awareness during long periods
+2. **Complete History**: Full log of overnight/extended period activity
+3. **Immediate Briefing**: Claude can provide comprehensive summary upon user return
+4. **Peace of Mind**: User knows Claude is "watching" the system
+
+### Important Notes
+- Both Claude chat and monitor must run in screen sessions
+- Mac must stay powered on (plugged in) for continuous monitoring
+- Monitor continues until manually stopped with Ctrl+C
+- All monitoring is read-only - no trades executed
+
+### Example Morning Interaction
+```
+User: Good morning
+Claude: Good morning! Here's your overnight summary:
+- Position still LONG 1.50271956 BTC
+- No trades executed overnight
+- Price ranged between $117,200-$118,100
+- Pivot support at $116,187 never threatened
+- Market regime shifted to TRENDING at 3:45 AM
+- All systems operating normally
+```
+
+This system bridges the gap between Claude's conversational nature and the need for continuous system awareness during extended sessions.
+
 
 GOALS:
 
