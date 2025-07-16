@@ -1685,3 +1685,21 @@ GOALS:
 Please use the enable_commands session to talk with the tdr.py client running on this same
 host where claude code is running. Please request a list of recent trades and
 make sure that the pivot trading is working as designed and implemented yesterday.
+
+Please fix the fact that when I run trades from the tdr.py client mode I get this result
+which is incorrectly showing UNKONWN values.  Where are the BUY and SELL indicators?
+
+tdr> trades
+
+=== RECENT TRADES (showing 10) ===
+2025-07-15 16:32:13 - UNKNOWN 1.34009170 BTC @ $117182.00 = $157034.63
+2025-07-15 16:32:13 - UNKNOWN 0.14659584 BTC @ $117182.00 = $17178.39
+2025-07-15 16:32:13 - UNKNOWN 0.01603202 BTC @ $117182.00 = $1878.66
+2025-07-15 14:07:54 - UNKNOWN 1.49256049 BTC @ $118289.00 = $176553.49
+2025-07-15 10:21:37 - UNKNOWN 1.33013528 BTC @ $116921.00 = $155520.75
+2025-07-15 10:21:37 - UNKNOWN 0.14632500 BTC @ $116921.00 = $17108.47
+2025-07-15 10:21:37 - UNKNOWN 0.01610021 BTC @ $116921.00 = $1882.45
+2025-07-15 07:38:25 - UNKNOWN 1.49877515 BTC @ $116730.00 = $174952.02
+2025-07-15 06:14:04 - UNKNOWN 1.33570569 BTC @ $117127.00 = $156447.20
+2025-07-15 06:14:04 - UNKNOWN 0.14691747 BTC @ $117127.00 = $17208.00
+tdr> 

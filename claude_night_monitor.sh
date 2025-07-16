@@ -55,7 +55,8 @@ while true; do
     }' | tee -a "$LOG_FILE"
     
     # 3. Check strategy diagnostics every 30 minutes
-    if [ $(($(date +%M) % 30)) -lt 5 ]; then
+    # Force base 10 to avoid octal interpretation of minutes like 08, 09
+    if [ $((10#$(date +%M) % 30)) -lt 5 ]; then
         echo -e "\n🔍 Strategy Diagnostics:" | tee -a "$LOG_FILE"
         send_command "diag" '{
             "timestamp": "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'",
