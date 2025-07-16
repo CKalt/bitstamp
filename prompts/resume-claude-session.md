@@ -1600,6 +1600,86 @@ Through analysis on 2025-01-16, verified that the pivot protection system is fun
 
 The pivot protection successfully triggered the last position flip and is actively protecting the current LONG position with appropriate risk parameters.
 
+## TODO: Enhanced Pivot Protection with Profit-Aware Trailing (Added 2025-01-16)
+
+### Current Limitation
+
+The pivot protection system uses "sticky" levels that lock when a position is entered and don't update until the position flips. While this prevents the "chasing" problem, it fails to protect growing profits. Example:
+- Entry: $117,182
+- Current: $119,705 (+$2,523/BTC profit)
+- Support: $116,187 (would exit BELOW entry price!)
+
+### Proposed Enhancement: Dynamic Trailing Pivot Protection
+
+Implement a sophisticated system that maintains sticky level benefits while protecting accumulated profits:
+
+#### Key Features
+
+1. **Profit-Based Trailing**:
+   - Support levels can only move UP (for longs) / DOWN (for shorts) to protect profits
+   - Never moves adversely, maintaining the "sticky" benefit
+   - Adjusts based on profit tiers:
+     - 5% profit: protect 70% of gains
+     - 10% profit: protect 80% of gains
+     - 15% profit: protect 85% of gains
+     - 20%+ profit: protect 90% of gains
+
+2. **Market Structure Aware**:
+   - Looks for significant support/resistance levels (not just arbitrary prices)
+   - Uses larger lookback periods (24h+) for established positions
+   - Respects technical levels while ensuring profit protection
+
+3. **Implementation Strategy**:
+   ```python
+   # Calculate minimum acceptable support based on profit
+   if self.position == 1:  # LONG
+       profit_per_btc = current_price - entry_price
+       min_profit_to_keep = profit_per_btc * protection_ratio
+       min_support = entry_price + min_profit_to_keep
+       
+       # Only raise support, never lower it
+       if self.pivot_tracker['support_level'] < min_support:
+           # Find recent significant support level
+           recent_support = self.find_significant_support(lookback_hours=24)
+           new_support = max(min_support, recent_support - self.pivot_buffer/2)
+           
+           # Update with detailed logging
+           self.pivot_tracker['support_level'] = new_support
+           self.pivot_tracker['profit_locked'] = new_support - entry_price
+   ```
+
+4. **Configuration Options**:
+   - Profit tier thresholds (customizable)
+   - Protection ratios per tier
+   - Update frequency (hourly, on new highs, manual)
+   - Buffer zone scaling based on volatility
+
+5. **Visual Enhancements**:
+   - Display "Profit Locked: $X" in status
+   - Show protection ratio active for current profit level
+   - Alert when support is raised to lock in more profit
+   - Track history of all pivot adjustments
+
+#### Implementation Tasks
+
+1. Add `update_pivot_protection()` method to AdaptiveMultiStrategy
+2. Create profit tier configuration in best_strategy.json
+3. Add "ratchet_pivot" manual command for user control
+4. Implement significant support/resistance detection algorithm
+5. Add comprehensive logging for all pivot adjustments
+6. Update status display to show locked profit amount
+7. Create unit tests for various profit scenarios
+
+#### Expected Benefits
+
+- Protects 70-90% of profits as position becomes more profitable
+- Reduces risk of giving back all gains on retracements
+- Maintains original benefit of not chasing price down
+- Provides clear visibility of protected profit amount
+- Allows manual override when user sees fit
+
+This enhancement would transform the pivot protection from a static stop-loss to an intelligent profit protection system that adapts to position performance.
+
 GOALS:
 
 Please use the enable_commands session to talk with the tdr.py client running on this same
