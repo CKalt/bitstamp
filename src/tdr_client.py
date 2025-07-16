@@ -766,7 +766,18 @@ Initializing connection to remote server...
                                 timestamp = datetime.fromtimestamp(timestamp_val)
                             except (ValueError, TypeError):
                                 timestamp = datetime.now()
-                        action = trade.get('action', 'UNKNOWN')
+                        # Check for trade type - could be 'action' or 'type' field
+                        action = trade.get('action')
+                        if action is None:
+                            # Look for 'type' field and convert to BUY/SELL
+                            trade_type = trade.get('type', 'UNKNOWN')
+                            if trade_type == 'buy':
+                                action = 'BUY'
+                            elif trade_type == 'sell':
+                                action = 'SELL'
+                            else:
+                                action = 'UNKNOWN'
+                        
                         amount = trade.get('amount', 0)
                         price = trade.get('price', 0)
                         total = trade.get('total_usd', amount * price)
