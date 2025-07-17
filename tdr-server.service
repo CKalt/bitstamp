@@ -5,15 +5,16 @@ After=network.target
 [Service]
 Type=simple
 User=chris
-Group=chriskoin
-WorkingDirectory=/home/chris/projects/bitstamp
-Environment="PATH=/home/chris/projects/bitstamp/env/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/home/chris/projects/bitstamp/env/bin/python src/tdr_server.py
+Group=staff
+WorkingDirectory=/Users/chris/projects/python/btc
+Environment="PATH=/Users/chris/projects/python/btc/env/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="USE_DATA_CACHE=1"
+ExecStart=/Users/chris/projects/python/btc/env/bin/python src/tdr_server.py
 ExecStop=/usr/bin/curl -X POST http://localhost:4000/api/shutdown
 Restart=on-failure
 RestartSec=10
-StandardOutput=append:/home/chris/projects/bitstamp/logs/server.log
-StandardError=append:/home/chris/projects/bitstamp/logs/server.log
+StandardOutput=append:/Users/chris/projects/python/btc/logs/server.log
+StandardError=append:/Users/chris/projects/python/btc/logs/server.log
 
 # Security settings
 NoNewPrivileges=true
