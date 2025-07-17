@@ -33,6 +33,14 @@ from tdr_core.order_placer import OrderPlacer
 from tdr_core.strategies import MACrossoverStrategy, AdaptiveMultiStrategy
 from tdr_core.shell import CryptoShell
 
+# Import data persistence for fast restarts
+try:
+    from data_persistence import DataPersistence
+    CACHE_ENABLED = True
+except ImportError:
+    CACHE_ENABLED = False
+    print("Warning: Data caching not available - restarts will be slower")
+
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app)
@@ -711,19 +719,77 @@ def load_history():
                 start_date = now - timedelta(days=start_back) if start_back else None
                 end_date = now - timedelta(days=end_back) if end_back else None
                 
-                logger.info(f"Loading historical data from {log_file}")
-                df = parse_log_file(log_file, start_date=start_date, end_date=end_date)
+                # Try to load from cache first
+                df = None
+                cache_used = False
                 
-                if not df.empty:
-                    # Need to process the dataframe like in main tdr.py
-                    df.rename(columns={'price': 'close'}, inplace=True)
-                    df['open'] = df['close']
-                    df['high'] = df['close']
-                    df['low'] = df['close']
-                    df['trades'] = 1
-                    if 'volume' not in df.columns:
-                        df['volume'] = df.get('amount', 0.0)
+                if CACHE_ENABLED and os.environ.get('USE_DATA_CACHE', '1') == '1':
+                    try:
+                        # Get file info for cache validation
+                        file_stat = os.stat(log_file)
+                        source_info = {
+                            "path": log_file,
+                            "size": file_stat.st_size,
+                            "modified": datetime.fromtimestamp(file_stat.st_mtime).isoformat()
+                        }
+                        
+                        # Try to load from cache
+                        persistence = DataPersistence()
+                        cached_df = persistence.load_processed_data('btcusd', source_info)
+                        
+                        if cached_df is not None:
+                            # Filter by date range if needed
+                            df = cached_df
+                            if start_date:
+                                df = df[df.index >= start_date]
+                            if end_date:
+                                df = df[df.index <= end_date]
+                            
+                            cache_used = True
+                            logger.info(f"Loaded {len(df)} records from cache (instant!)")
+                            server_config['history_status'] = f"Loaded from cache - {len(df):,} records"
+                    except Exception as e:
+                        logger.warning(f"Cache load failed: {e}")
+                
+                # If no cache, load from file
+                if df is None:
+                    logger.info(f"Loading historical data from {log_file}")
+                    server_config['history_status'] = "Reading historical data - starting..."
                     
+                    # Create a custom progress callback
+                    def progress_callback(lines_read, last_date):
+                        if lines_read % 100000 == 0:
+                            server_config['history_status'] = f"Reading historical data - {lines_read:,} lines processed - Last date: {last_date}"
+                    
+                    # Load with progress tracking
+                    df = parse_log_file(log_file, start_date=start_date, end_date=end_date, progress_callback=progress_callback)
+                    
+                    if not df.empty:
+                        # Need to process the dataframe like in main tdr.py
+                        df.rename(columns={'price': 'close'}, inplace=True)
+                        df['open'] = df['close']
+                        df['high'] = df['close']
+                        df['low'] = df['close']
+                        df['trades'] = 1
+                        if 'volume' not in df.columns:
+                            df['volume'] = df.get('amount', 0.0)
+                        
+                        # Save to cache for next time
+                        if CACHE_ENABLED and not cache_used:
+                            try:
+                                file_stat = os.stat(log_file)
+                                source_info = {
+                                    "path": log_file,
+                                    "size": file_stat.st_size,
+                                    "modified": datetime.fromtimestamp(file_stat.st_mtime).isoformat()
+                                }
+                                persistence = DataPersistence()
+                                persistence.save_processed_data('btcusd', df, source_info)
+                                logger.info("Saved processed data to cache for next restart")
+                            except Exception as e:
+                                logger.warning(f"Failed to save cache: {e}")
+                
+                if df is not None and not df.empty:
                     data_manager.load_historical_data({'btcusd': df})
                     logger.info(f"Loaded {len(df)} historical records")
                     server_config['history_record_count'] = len(df)
