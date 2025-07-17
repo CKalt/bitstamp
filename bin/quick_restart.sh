@@ -5,7 +5,8 @@ echo "🔄 Quick Restart Script Starting..."
 
 # Store current directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
+# Go to project root (parent of bin)
+cd "$SCRIPT_DIR/.."
 
 # Function to check if server is running
 check_server() {

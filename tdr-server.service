@@ -1,0 +1,23 @@
+[Unit]
+Description=TDR Trading Server
+After=network.target
+
+[Service]
+Type=simple
+User=chris
+Group=chriskoin
+WorkingDirectory=/home/chris/projects/bitstamp
+Environment="PATH=/home/chris/projects/bitstamp/env/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/chris/projects/bitstamp/env/bin/python src/tdr_server.py
+ExecStop=/usr/bin/curl -X POST http://localhost:4000/api/shutdown
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/home/chris/projects/bitstamp/logs/server.log
+StandardError=append:/home/chris/projects/bitstamp/logs/server.log
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
