@@ -2590,8 +2590,8 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                         self.check_for_signals(pivot_signal, current_price, signal_time)
                                         continue
                             
-                            # Update trailing pivot protection if enabled
-                            if getattr(self, 'enable_trailing_pivots', True):
+                                # Update trailing pivot protection if enabled
+                                if getattr(self, 'enable_trailing_pivots', True):
                                     self.update_trailing_pivot_protection(current_price)
                                 
                                 # Log pivot levels periodically
