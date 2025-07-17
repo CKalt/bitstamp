@@ -408,6 +408,21 @@ class MACrossoverStrategy:
             "strategy": "MA_CROSSOVER",
             "parameters": {"short": short_window, "long": long_window, "live": live_trading}
         })
+        
+        # Initialize whipsaw tracking
+        self.whipsaw_tracker = {
+            'trades': [],  # List of all trades with timestamps
+            'whipsaws': [],  # Detected whipsaw patterns
+            'stats': {
+                'total_whipsaws': 0,
+                'whipsaw_losses': 0.0,
+                'whipsaw_timeframes': [],  # Time between flip-flops
+                'false_breakouts': 0,
+                'avg_whipsaw_cost': 0.0
+            },
+            'detection_window': 3600 * 4,  # 4 hours to detect whipsaw
+            'last_analysis': None
+        }
 
         # Register real-time callback
         data_manager.add_trade_observer(self.check_instant_signal)
@@ -1075,6 +1090,9 @@ class MACrossoverStrategy:
 
         self.trades_this_hour.append(datetime.utcnow())
         self._log_successful_trade(trade_info)
+        
+        # Track trade for whipsaw detection
+        self.track_trade_for_whipsaw(trade_type, price, timestamp)
 
         # If a theoretical trade existed, clear it
         if self.theoretical_trade is not None:
@@ -2037,6 +2055,108 @@ class MACrossoverStrategy:
 
     def _log_failed_trade(self, trade_info):
         self.logger.info(f"Trade failed/canceled: {trade_info.to_dict()}")
+
+    def track_trade_for_whipsaw(self, trade_type, price, timestamp):
+        """Track trade and detect whipsaw patterns"""
+        if not hasattr(self, 'whipsaw_tracker'):
+            return
+            
+        # Add trade to history
+        trade_entry = {
+            'type': trade_type,
+            'price': price,
+            'timestamp': timestamp,
+            'position': self.position
+        }
+        self.whipsaw_tracker['trades'].append(trade_entry)
+        
+        # Only keep recent trades (last 24 hours)
+        cutoff_time = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S') - timedelta(hours=24)
+        self.whipsaw_tracker['trades'] = [
+            t for t in self.whipsaw_tracker['trades'] 
+            if datetime.strptime(t['timestamp'], '%Y-%m-%d %H:%M:%S') > cutoff_time
+        ]
+        
+        # Detect whipsaws
+        self._detect_whipsaws(timestamp)
+        
+    def _detect_whipsaws(self, current_timestamp):
+        """Detect whipsaw patterns in recent trades"""
+        trades = self.whipsaw_tracker['trades']
+        if len(trades) < 3:
+            return
+            
+        # Look for pattern: BUY -> SELL -> BUY or SELL -> BUY -> SELL
+        # within detection window
+        current_time = datetime.strptime(current_timestamp, '%Y-%m-%d %H:%M:%S')
+        detection_window = timedelta(seconds=self.whipsaw_tracker['detection_window'])
+        
+        for i in range(len(trades) - 2):
+            t1, t2, t3 = trades[i], trades[i+1], trades[i+2]
+            
+            # Check if trades form a whipsaw pattern
+            if t1['type'] == t3['type'] and t1['type'] != t2['type']:
+                t3_time = datetime.strptime(t3['timestamp'], '%Y-%m-%d %H:%M:%S')
+                t1_time = datetime.strptime(t1['timestamp'], '%Y-%m-%d %H:%M:%S')
+                
+                if t3_time - t1_time <= detection_window:
+                    # Calculate loss from whipsaw
+                    if t1['type'] == 'buy':
+                        # BUY -> SELL -> BUY: loss = (t1_price - t2_price) + (t3_price - t2_price)
+                        loss = (t1['price'] - t2['price']) + (t3['price'] - t2['price'])
+                    else:
+                        # SELL -> BUY -> SELL: loss = (t2_price - t1_price) + (t2_price - t3_price)
+                        loss = (t2['price'] - t1['price']) + (t2['price'] - t3['price'])
+                    
+                    whipsaw = {
+                        'pattern': f"{t1['type']} -> {t2['type']} -> {t3['type']}",
+                        'timestamps': [t1['timestamp'], t2['timestamp'], t3['timestamp']],
+                        'prices': [t1['price'], t2['price'], t3['price']],
+                        'loss': loss,
+                        'duration': str(t3_time - t1_time)
+                    }
+                    
+                    # Check if this whipsaw was already recorded
+                    if not any(w['timestamps'] == whipsaw['timestamps'] for w in self.whipsaw_tracker['whipsaws']):
+                        self.whipsaw_tracker['whipsaws'].append(whipsaw)
+                        self.whipsaw_tracker['stats']['total_whipsaws'] += 1
+                        self.whipsaw_tracker['stats']['whipsaw_losses'] += max(0, loss)
+                        self.whipsaw_tracker['stats']['whipsaw_timeframes'].append((t3_time - t1_time).total_seconds())
+                        
+                        # Update average cost
+                        if self.whipsaw_tracker['stats']['total_whipsaws'] > 0:
+                            self.whipsaw_tracker['stats']['avg_whipsaw_cost'] = (
+                                self.whipsaw_tracker['stats']['whipsaw_losses'] / 
+                                self.whipsaw_tracker['stats']['total_whipsaws']
+                            )
+                        
+                        self.logger.warning(f"⚡ Whipsaw detected: {whipsaw['pattern']} - Loss: ${loss:.2f}")
+    
+    def get_whipsaw_stats(self):
+        """Get current whipsaw statistics"""
+        if not hasattr(self, 'whipsaw_tracker'):
+            return None
+            
+        stats = self.whipsaw_tracker['stats'].copy()
+        
+        # Add recent whipsaws
+        recent_whipsaws = []
+        cutoff = datetime.utcnow() - timedelta(hours=24)
+        for w in self.whipsaw_tracker['whipsaws']:
+            last_trade_time = datetime.strptime(w['timestamps'][-1], '%Y-%m-%d %H:%M:%S')
+            if last_trade_time > cutoff:
+                recent_whipsaws.append(w)
+        
+        stats['recent_whipsaws'] = recent_whipsaws
+        stats['trades_last_24h'] = len(self.whipsaw_tracker['trades'])
+        
+        # Calculate whipsaw rate
+        if len(self.whipsaw_tracker['trades']) >= 3:
+            stats['whipsaw_rate'] = (stats['total_whipsaws'] * 3) / len(self.whipsaw_tracker['trades'])
+        else:
+            stats['whipsaw_rate'] = 0.0
+            
+        return stats
 
 
 ###############################################################################

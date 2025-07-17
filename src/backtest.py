@@ -270,6 +270,9 @@ class AdaptiveStrategyBacktester:
                 else:
                     perf['time_in_regime_pct'] = 0
             
+            # Calculate whipsaw statistics
+            whipsaw_stats = self._analyze_whipsaws(trades)
+            
             # Compile results
             results = {
                 'params': params,
@@ -281,6 +284,7 @@ class AdaptiveStrategyBacktester:
                 'max_drawdown': self._calculate_max_drawdown(trades),
                 'regime_performance': regime_performance,
                 'regime_history': regime_history,
+                'whipsaw_stats': whipsaw_stats,
                 'trades': trades if self.backtest_settings.get('save_trade_history', False) else []
             }
             
@@ -310,6 +314,58 @@ class AdaptiveStrategyBacktester:
                 max_dd = dd
         
         return max_dd * 100  # As percentage
+    
+    def _analyze_whipsaws(self, trades: List[Dict]) -> Dict:
+        """Analyze trades for whipsaw patterns."""
+        if len(trades) < 3:
+            return {
+                'total_whipsaws': 0,
+                'whipsaw_losses': 0.0,
+                'avg_whipsaw_cost': 0.0,
+                'whipsaw_rate': 0.0,
+                'whipsaw_patterns': []
+            }
+        
+        whipsaws = []
+        whipsaw_losses = 0.0
+        detection_window = timedelta(hours=4)  # 4 hour window for whipsaw detection
+        
+        for i in range(len(trades) - 2):
+            t1, t2, t3 = trades[i], trades[i+1], trades[i+2]
+            
+            # Check if trades form a whipsaw pattern (BUY->SELL->BUY or SELL->BUY->SELL)
+            if t1['type'] == t3['type'] and t1['type'] != t2['type']:
+                time_diff = t3['timestamp'] - t1['timestamp']
+                
+                if time_diff <= detection_window:
+                    # Calculate loss from whipsaw
+                    if t1['type'] == 'BUY':
+                        # BUY -> SELL -> BUY pattern
+                        loss = (t1['price'] - t2['price']) + (t3['price'] - t2['price'])
+                    else:
+                        # SELL -> BUY -> SELL pattern
+                        loss = (t2['price'] - t1['price']) + (t2['price'] - t3['price'])
+                    
+                    whipsaw = {
+                        'pattern': f"{t1['type']} -> {t2['type']} -> {t3['type']}",
+                        'timestamps': [t1['timestamp'], t2['timestamp'], t3['timestamp']],
+                        'prices': [t1['price'], t2['price'], t3['price']],
+                        'loss': loss * t1['amount'],  # Multiply by position size
+                        'duration': str(time_diff)
+                    }
+                    
+                    whipsaws.append(whipsaw)
+                    whipsaw_losses += max(0, whipsaw['loss'])
+        
+        whipsaw_stats = {
+            'total_whipsaws': len(whipsaws),
+            'whipsaw_losses': whipsaw_losses,
+            'avg_whipsaw_cost': whipsaw_losses / len(whipsaws) if whipsaws else 0.0,
+            'whipsaw_rate': (len(whipsaws) * 3) / len(trades) if len(trades) >= 3 else 0.0,
+            'whipsaw_patterns': whipsaws[:5]  # Include first 5 whipsaws for review
+        }
+        
+        return whipsaw_stats
     
     def optimize_parameters(self, param_ranges: Dict) -> pd.DataFrame:
         """
@@ -727,10 +783,24 @@ def run_enhanced_trading_system(df, config, include_adaptive=True, args=None):
             
             detailed_result = adaptive_backtester.backtest_adaptive_strategy(best_params)
             
+            # Display whipsaw statistics if available
+            if 'whipsaw_stats' in detailed_result:
+                whipsaw_stats = detailed_result['whipsaw_stats']
+                print("\n🌊 WHIPSAW ANALYSIS:")
+                print(f"  • Total Whipsaws: {whipsaw_stats['total_whipsaws']}")
+                print(f"  • Whipsaw Losses: ${whipsaw_stats['whipsaw_losses']:.2f}")
+                print(f"  • Average Whipsaw Cost: ${whipsaw_stats['avg_whipsaw_cost']:.2f}")
+                print(f"  • Whipsaw Rate: {whipsaw_stats['whipsaw_rate']:.1%}")
+                
+                if whipsaw_stats['whipsaw_patterns']:
+                    print("\n  Recent Whipsaw Patterns:")
+                    for i, pattern in enumerate(whipsaw_stats['whipsaw_patterns'][:3], 1):
+                        print(f"    {i}. {pattern['pattern']} - Loss: ${pattern['loss']:.2f}")
+            
             # Save detailed results with regime performance
             with open('adaptive_strategy_detailed_results.json', 'w') as f:
                 json.dump(detailed_result, f, indent=4, default=str)
-            print("Detailed adaptive strategy results saved to 'adaptive_strategy_detailed_results.json'")
+            print("\nDetailed adaptive strategy results saved to 'adaptive_strategy_detailed_results.json'")
     
     return optimization_results, strategy_comparison
 

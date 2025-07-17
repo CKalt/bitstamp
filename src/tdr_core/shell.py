@@ -1885,6 +1885,71 @@ class CryptoShell(cmd.Cmd):
         print(f"\nSession Duration: {hours:.1f} hours\n")
         print("━"*50)
 
+    def do_whipsaw_stats(self, arg):
+        """
+        Show whipsaw statistics and analysis. Usage: whipsaw_stats
+        
+        Displays:
+        - Total whipsaws detected
+        - Whipsaw losses
+        - Average whipsaw cost
+        - Recent whipsaw patterns
+        - Whipsaw rate
+        """
+        if not self.auto_trader or not self.auto_trader.running:
+            print("Auto-trading is not running.")
+            return
+            
+        strategy = self.auto_trader.strategy
+        if not hasattr(strategy, 'get_whipsaw_stats'):
+            print("Current strategy does not support whipsaw tracking.")
+            return
+            
+        stats = strategy.get_whipsaw_stats()
+        if not stats:
+            print("No whipsaw statistics available.")
+            return
+            
+        print("\n🌊 WHIPSAW ANALYSIS")
+        print("━" * 50)
+        print(f"  • Total Whipsaws: {stats['total_whipsaws']}")
+        print(f"  • Total Whipsaw Losses: ${stats['whipsaw_losses']:.2f}")
+        print(f"  • Average Whipsaw Cost: ${stats['avg_whipsaw_cost']:.2f}")
+        print(f"  • Whipsaw Rate: {stats['whipsaw_rate']:.1%}")
+        print(f"  • Trades in Last 24h: {stats['trades_last_24h']}")
+        
+        if stats['whipsaw_timeframes']:
+            avg_timeframe = sum(stats['whipsaw_timeframes']) / len(stats['whipsaw_timeframes'])
+            print(f"  • Average Whipsaw Duration: {avg_timeframe/3600:.1f} hours")
+        
+        if stats['recent_whipsaws']:
+            print(f"\n  Recent Whipsaws (Last 24h):")
+            for i, whipsaw in enumerate(stats['recent_whipsaws'][-5:], 1):  # Show last 5
+                print(f"\n  {i}. {whipsaw['pattern']}")
+                print(f"     Time: {whipsaw['timestamps'][0]} → {whipsaw['timestamps'][-1]}")
+                print(f"     Prices: ${whipsaw['prices'][0]:.0f} → ${whipsaw['prices'][1]:.0f} → ${whipsaw['prices'][2]:.0f}")
+                print(f"     Loss: ${whipsaw['loss']:.2f}")
+                print(f"     Duration: {whipsaw['duration']}")
+        
+        # Provide analysis
+        print(f"\n  💡 Analysis:")
+        if stats['whipsaw_rate'] > 0.3:
+            print("     ⚠️  HIGH whipsaw rate - Consider:")
+            print("        • Increasing confirmation bars")
+            print("        • Widening pivot buffer zone")
+            print("        • Using longer MA periods")
+        elif stats['whipsaw_rate'] > 0.15:
+            print("     ⚡ MODERATE whipsaw rate - Monitor closely")
+        else:
+            print("     ✅ LOW whipsaw rate - Strategy performing well")
+            
+        if stats['avg_whipsaw_cost'] > 200:
+            print(f"     ⚠️  High average whipsaw cost (${stats['avg_whipsaw_cost']:.0f})")
+            print("        • Consider tighter stop losses")
+            print("        • Review position sizing")
+            
+        print("\n" + "━" * 50)
+
     def do_read_server_file(self, arg):
         """
         Read a file on the server with optional line range support.
