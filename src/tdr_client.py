@@ -1298,6 +1298,22 @@ Initializing connection to remote server...
         else:
             print("Command interface is not enabled")
     
+    def do_server_restart(self, arg):
+        """Restart server with latest code changes
+        
+        Executes bin/quick_restart.sh on the server to:
+        - Stop the server gracefully
+        - Pull latest changes from git
+        - Restart with data caching for fast startup
+        """
+        response = self.send_command("server_restart")
+        if response and 'data' in response:
+            data = response['data']
+            if isinstance(data, str):
+                print(data)
+            else:
+                print(json.dumps(data, indent=2))
+                
     def do_whipsaw_stats(self, arg):
         """Show whipsaw statistics and analysis
         

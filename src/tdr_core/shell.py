@@ -1918,6 +1918,51 @@ class CryptoShell(cmd.Cmd):
         print(f"\nSession Duration: {hours:.1f} hours\n")
         print("━"*50)
 
+    def do_server_restart(self, arg):
+        """
+        Restart the server with latest code changes. Usage: server_restart
+        
+        Executes bin/quick_restart.sh on the server to:
+        - Stop the server gracefully
+        - Pull latest changes from git
+        - Restart with data caching for fast startup
+        """
+        print("🔄 Initiating server restart...")
+        print("   This will:")
+        print("   1. Stop the current server")
+        print("   2. Pull latest code from git")
+        print("   3. Restart with cached data (fast restart)")
+        print("")
+        
+        # Execute the quick restart script
+        import subprocess
+        import os
+        
+        try:
+            # Change to project root directory
+            original_dir = os.getcwd()
+            script_path = os.path.join(original_dir, "bin", "quick_restart.sh")
+            
+            if not os.path.exists(script_path):
+                print(f"❌ Error: {script_path} not found!")
+                return
+                
+            # Run the script
+            print("📍 Executing quick restart...")
+            result = subprocess.run([script_path], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                print("✅ Server restart initiated successfully!")
+                print("\n📋 Restart output:")
+                print(result.stdout)
+            else:
+                print("❌ Server restart failed!")
+                print("Error output:")
+                print(result.stderr)
+                
+        except Exception as e:
+            print(f"❌ Error running restart script: {e}")
+            
     def do_whipsaw_stats(self, arg):
         """
         Show whipsaw statistics and analysis. Usage: whipsaw_stats
