@@ -2485,15 +2485,14 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         
                         # 0.5 Check for pivot-based quick flips (Support/Resistance)
                         if self.enable_pivot_protection:
+                            current_price = self.data_manager.get_current_price(self.symbol) or df_resampled.iloc[-1]['close']
+                            
                             # Skip pivot protection during startup grace period to prevent phantom trades
                             grace_period_active = False
                             if hasattr(self, 'startup_time') and hasattr(self, 'startup_grace_period_minutes'):
                                 if (datetime.now() - self.startup_time).total_seconds() < (self.startup_grace_period_minutes * 60):
                                     grace_period_active = True
                                     self.logger.debug("Skipping pivot protection during startup grace period")
-                            
-                            if not grace_period_active:
-                                current_price = self.data_manager.get_current_price(self.symbol) or df_resampled.iloc[-1]['close']
                             
                             # Initialize pivot tracking if not exists
                             if not hasattr(self, 'pivot_tracker'):
@@ -2508,18 +2507,20 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                     'last_position_flip': None  # Track when we last flipped position
                                 }
                         
-                            # Update pivot levels (look at configurable hours of data)
-                            lookback_hours = min(self.pivot_lookback_hours, len(df_resampled))
-                            recent_data = df_resampled.iloc[-lookback_hours:] if lookback_hours > 0 else df_resampled
-                            recent_high = recent_data['high'].max()
-                            recent_low = recent_data['low'].min()
-                            
-                            # Store in tracker for status display
-                            self.pivot_tracker['recent_high'] = recent_high
-                            self.pivot_tracker['recent_low'] = recent_low
-                            
-                            # Update support/resistance based on recent price action
-                            if self.position == 1:  # LONG position
+                            # Skip all pivot operations during grace period
+                            if not grace_period_active:
+                                # Update pivot levels (look at configurable hours of data)
+                                lookback_hours = min(self.pivot_lookback_hours, len(df_resampled))
+                                recent_data = df_resampled.iloc[-lookback_hours:] if lookback_hours > 0 else df_resampled
+                                recent_high = recent_data['high'].max()
+                                recent_low = recent_data['low'].min()
+                                
+                                # Store in tracker for status display
+                                self.pivot_tracker['recent_high'] = recent_high
+                                self.pivot_tracker['recent_low'] = recent_low
+                                
+                                # Update support/resistance based on recent price action
+                                if self.position == 1:  # LONG position
                                 # Check if we need to establish new levels (after position flip or first time)
                                 if (not self.pivot_tracker['levels_locked'] or 
                                     self.pivot_tracker['last_position_flip'] != self.position):
@@ -2591,19 +2592,19 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                             
                             # Update trailing pivot protection if enabled
                             if getattr(self, 'enable_trailing_pivots', True):
-                                self.update_trailing_pivot_protection(current_price)
-                            
-                            # Log pivot levels periodically
-                            if not hasattr(self, '_last_pivot_log') or \
-                               (datetime.now() - self._last_pivot_log).total_seconds() > 300:
-                                status = "LOCKED" if self.pivot_tracker.get('levels_locked', False) else "UPDATING"
-                                profit_info = ""
-                                if hasattr(self.pivot_tracker, 'profit_locked') and self.pivot_tracker.get('profit_locked'):
-                                    profit_info = f" (Profit Locked: ${self.pivot_tracker['profit_locked']:.0f})"
-                                self.logger.info(f"📊 Pivot Levels ({status}) - Support: ${self.pivot_tracker['support_level']:.0f}, "
-                                               f"Resistance: ${self.pivot_tracker['resistance_level']:.0f}, "
-                                               f"Current: ${current_price:.0f}{profit_info}")
-                                self._last_pivot_log = datetime.now()
+                                    self.update_trailing_pivot_protection(current_price)
+                                
+                                # Log pivot levels periodically
+                                if not hasattr(self, '_last_pivot_log') or \
+                                   (datetime.now() - self._last_pivot_log).total_seconds() > 300:
+                                    status = "LOCKED" if self.pivot_tracker.get('levels_locked', False) else "UPDATING"
+                                    profit_info = ""
+                                    if hasattr(self.pivot_tracker, 'profit_locked') and self.pivot_tracker.get('profit_locked'):
+                                        profit_info = f" (Profit Locked: ${self.pivot_tracker['profit_locked']:.0f})"
+                                    self.logger.info(f"📊 Pivot Levels ({status}) - Support: ${self.pivot_tracker['support_level']:.0f}, "
+                                                   f"Resistance: ${self.pivot_tracker['resistance_level']:.0f}, "
+                                                   f"Current: ${current_price:.0f}{profit_info}")
+                                    self._last_pivot_log = datetime.now()
                         
                         # 1. Detect market regime
                         regime, confidence, metrics = self.detect_market_regime(
