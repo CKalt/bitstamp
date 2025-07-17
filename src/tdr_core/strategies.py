@@ -2485,7 +2485,15 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         
                         # 0.5 Check for pivot-based quick flips (Support/Resistance)
                         if self.enable_pivot_protection:
-                            current_price = self.data_manager.get_current_price(self.symbol) or df_resampled.iloc[-1]['close']
+                            # Skip pivot protection during startup grace period to prevent phantom trades
+                            grace_period_active = False
+                            if hasattr(self, 'startup_time') and hasattr(self, 'startup_grace_period_minutes'):
+                                if (datetime.now() - self.startup_time).total_seconds() < (self.startup_grace_period_minutes * 60):
+                                    grace_period_active = True
+                                    self.logger.debug("Skipping pivot protection during startup grace period")
+                            
+                            if not grace_period_active:
+                                current_price = self.data_manager.get_current_price(self.symbol) or df_resampled.iloc[-1]['close']
                             
                             # Initialize pivot tracking if not exists
                             if not hasattr(self, 'pivot_tracker'):
@@ -2525,6 +2533,12 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                 
                                 # Check if price broke below support
                                 if current_price < self.pivot_tracker['support_level']:
+                                    # Check if we're still in startup grace period
+                                    if hasattr(self, 'startup_time') and hasattr(self, 'startup_grace_period_minutes'):
+                                        if (datetime.now() - self.startup_time).total_seconds() < (self.startup_grace_period_minutes * 60):
+                                            self.logger.info(f"⏳ Pivot break detected during grace period - IGNORING to prevent phantom trade")
+                                            continue
+                                    
                                     self.logger.warning(f"🚨 PIVOT BREAK: Price ${current_price:.0f} broke support ${self.pivot_tracker['support_level']:.0f}")
                                     pivot_signal = -1  # Flip to SHORT
                                     pivot_reason = f"Pivot break: below support ${self.pivot_tracker['support_level']:.0f}"
@@ -2554,6 +2568,12 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                 
                                 # Check if price broke above resistance
                                 if current_price > self.pivot_tracker['resistance_level']:
+                                    # Check if we're still in startup grace period
+                                    if hasattr(self, 'startup_time') and hasattr(self, 'startup_grace_period_minutes'):
+                                        if (datetime.now() - self.startup_time).total_seconds() < (self.startup_grace_period_minutes * 60):
+                                            self.logger.info(f"⏳ Pivot break detected during grace period - IGNORING to prevent phantom trade")
+                                            continue
+                                    
                                     self.logger.warning(f"🚨 PIVOT BREAK: Price ${current_price:.0f} broke resistance ${self.pivot_tracker['resistance_level']:.0f}")
                                     pivot_signal = 1  # Flip to LONG
                                     pivot_reason = f"Pivot break: above resistance ${self.pivot_tracker['resistance_level']:.0f}"
