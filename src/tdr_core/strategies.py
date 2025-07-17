@@ -2521,74 +2521,74 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                 
                                 # Update support/resistance based on recent price action
                                 if self.position == 1:  # LONG position
-                                # Check if we need to establish new levels (after position flip or first time)
-                                if (not self.pivot_tracker['levels_locked'] or 
-                                    self.pivot_tracker['last_position_flip'] != self.position):
-                                    # Set sticky support level based on recent low
-                                    self.pivot_tracker['support_level'] = recent_low - (self.pivot_buffer / 2)
-                                    self.pivot_tracker['resistance_level'] = recent_high + (self.pivot_buffer / 2)
-                                    self.pivot_tracker['levels_locked'] = True
-                                    self.pivot_tracker['last_position_flip'] = self.position
-                                    self.logger.info(f"📍 LONG Pivot Levels Established - Support: ${self.pivot_tracker['support_level']:.0f}, "
-                                                   f"Resistance: ${self.pivot_tracker['resistance_level']:.0f}")
-                                
-                                # Check if price broke below support
-                                if current_price < self.pivot_tracker['support_level']:
-                                    # Check if we're still in startup grace period
-                                    if hasattr(self, 'startup_time') and hasattr(self, 'startup_grace_period_minutes'):
-                                        if (datetime.now() - self.startup_time).total_seconds() < (self.startup_grace_period_minutes * 60):
-                                            self.logger.info(f"⏳ Pivot break detected during grace period - IGNORING to prevent phantom trade")
-                                            continue
+                                    # Check if we need to establish new levels (after position flip or first time)
+                                    if (not self.pivot_tracker['levels_locked'] or 
+                                        self.pivot_tracker['last_position_flip'] != self.position):
+                                        # Set sticky support level based on recent low
+                                        self.pivot_tracker['support_level'] = recent_low - (self.pivot_buffer / 2)
+                                        self.pivot_tracker['resistance_level'] = recent_high + (self.pivot_buffer / 2)
+                                        self.pivot_tracker['levels_locked'] = True
+                                        self.pivot_tracker['last_position_flip'] = self.position
+                                        self.logger.info(f"📍 LONG Pivot Levels Established - Support: ${self.pivot_tracker['support_level']:.0f}, "
+                                                       f"Resistance: ${self.pivot_tracker['resistance_level']:.0f}")
                                     
-                                    self.logger.warning(f"🚨 PIVOT BREAK: Price ${current_price:.0f} broke support ${self.pivot_tracker['support_level']:.0f}")
-                                    pivot_signal = -1  # Flip to SHORT
-                                    pivot_reason = f"Pivot break: below support ${self.pivot_tracker['support_level']:.0f}"
+                                    # Check if price broke below support
+                                    if current_price < self.pivot_tracker['support_level']:
+                                        # Check if we're still in startup grace period
+                                        if hasattr(self, 'startup_time') and hasattr(self, 'startup_grace_period_minutes'):
+                                            if (datetime.now() - self.startup_time).total_seconds() < (self.startup_grace_period_minutes * 60):
+                                                self.logger.info(f"⏳ Pivot break detected during grace period - IGNORING to prevent phantom trade")
+                                                continue
+                                        
+                                        self.logger.warning(f"🚨 PIVOT BREAK: Price ${current_price:.0f} broke support ${self.pivot_tracker['support_level']:.0f}")
+                                        pivot_signal = -1  # Flip to SHORT
+                                        pivot_reason = f"Pivot break: below support ${self.pivot_tracker['support_level']:.0f}"
+                                        
+                                        # Reset levels for next position
+                                        self.pivot_tracker['levels_locked'] = False
+                                        
+                                        # Force immediate execution
+                                        signal_time = df_resampled.index[-1]
+                                        self.signal_history = [pivot_signal] * self.signal_confirmation_bars
+                                        self.last_trade_reason = pivot_reason
+                                        self.logger.warning(f"🎯 PIVOT PROTECTION TRIGGERED: {pivot_reason}")
+                                        self.check_for_signals(pivot_signal, current_price, signal_time)
+                                        continue
                                     
-                                    # Reset levels for next position
-                                    self.pivot_tracker['levels_locked'] = False
+                                elif self.position == -1:  # SHORT position
+                                    # Check if we need to establish new levels (after position flip or first time)
+                                    if (not self.pivot_tracker['levels_locked'] or 
+                                        self.pivot_tracker['last_position_flip'] != self.position):
+                                        # Set sticky resistance level based on recent high
+                                        self.pivot_tracker['support_level'] = recent_low - (self.pivot_buffer / 2)
+                                        self.pivot_tracker['resistance_level'] = recent_high + (self.pivot_buffer / 2)
+                                        self.pivot_tracker['levels_locked'] = True
+                                        self.pivot_tracker['last_position_flip'] = self.position
+                                        self.logger.info(f"📍 SHORT Pivot Levels Established - Support: ${self.pivot_tracker['support_level']:.0f}, "
+                                                       f"Resistance: ${self.pivot_tracker['resistance_level']:.0f}")
                                     
-                                    # Force immediate execution
-                                    signal_time = df_resampled.index[-1]
-                                    self.signal_history = [pivot_signal] * self.signal_confirmation_bars
-                                    self.last_trade_reason = pivot_reason
-                                    self.logger.warning(f"🎯 PIVOT PROTECTION TRIGGERED: {pivot_reason}")
-                                    self.check_for_signals(pivot_signal, current_price, signal_time)
-                                    continue
-                                    
-                            elif self.position == -1:  # SHORT position
-                                # Check if we need to establish new levels (after position flip or first time)
-                                if (not self.pivot_tracker['levels_locked'] or 
-                                    self.pivot_tracker['last_position_flip'] != self.position):
-                                    # Set sticky resistance level based on recent high
-                                    self.pivot_tracker['support_level'] = recent_low - (self.pivot_buffer / 2)
-                                    self.pivot_tracker['resistance_level'] = recent_high + (self.pivot_buffer / 2)
-                                    self.pivot_tracker['levels_locked'] = True
-                                    self.pivot_tracker['last_position_flip'] = self.position
-                                    self.logger.info(f"📍 SHORT Pivot Levels Established - Support: ${self.pivot_tracker['support_level']:.0f}, "
-                                                   f"Resistance: ${self.pivot_tracker['resistance_level']:.0f}")
-                                
-                                # Check if price broke above resistance
-                                if current_price > self.pivot_tracker['resistance_level']:
-                                    # Check if we're still in startup grace period
-                                    if hasattr(self, 'startup_time') and hasattr(self, 'startup_grace_period_minutes'):
-                                        if (datetime.now() - self.startup_time).total_seconds() < (self.startup_grace_period_minutes * 60):
-                                            self.logger.info(f"⏳ Pivot break detected during grace period - IGNORING to prevent phantom trade")
-                                            continue
-                                    
-                                    self.logger.warning(f"🚨 PIVOT BREAK: Price ${current_price:.0f} broke resistance ${self.pivot_tracker['resistance_level']:.0f}")
-                                    pivot_signal = 1  # Flip to LONG
-                                    pivot_reason = f"Pivot break: above resistance ${self.pivot_tracker['resistance_level']:.0f}"
-                                    
-                                    # Reset levels for next position
-                                    self.pivot_tracker['levels_locked'] = False
-                                    
-                                    # Force immediate execution
-                                    signal_time = df_resampled.index[-1]
-                                    self.signal_history = [pivot_signal] * self.signal_confirmation_bars
-                                    self.last_trade_reason = pivot_reason
-                                    self.logger.warning(f"🎯 PIVOT PROTECTION TRIGGERED: {pivot_reason}")
-                                    self.check_for_signals(pivot_signal, current_price, signal_time)
-                                    continue
+                                    # Check if price broke above resistance
+                                    if current_price > self.pivot_tracker['resistance_level']:
+                                        # Check if we're still in startup grace period
+                                        if hasattr(self, 'startup_time') and hasattr(self, 'startup_grace_period_minutes'):
+                                            if (datetime.now() - self.startup_time).total_seconds() < (self.startup_grace_period_minutes * 60):
+                                                self.logger.info(f"⏳ Pivot break detected during grace period - IGNORING to prevent phantom trade")
+                                                continue
+                                        
+                                        self.logger.warning(f"🚨 PIVOT BREAK: Price ${current_price:.0f} broke resistance ${self.pivot_tracker['resistance_level']:.0f}")
+                                        pivot_signal = 1  # Flip to LONG
+                                        pivot_reason = f"Pivot break: above resistance ${self.pivot_tracker['resistance_level']:.0f}"
+                                        
+                                        # Reset levels for next position
+                                        self.pivot_tracker['levels_locked'] = False
+                                        
+                                        # Force immediate execution
+                                        signal_time = df_resampled.index[-1]
+                                        self.signal_history = [pivot_signal] * self.signal_confirmation_bars
+                                        self.last_trade_reason = pivot_reason
+                                        self.logger.warning(f"🎯 PIVOT PROTECTION TRIGGERED: {pivot_reason}")
+                                        self.check_for_signals(pivot_signal, current_price, signal_time)
+                                        continue
                             
                             # Update trailing pivot protection if enabled
                             if getattr(self, 'enable_trailing_pivots', True):
