@@ -213,6 +213,8 @@ Initializing connection to remote server...
             print(f"✅ Server at {self.server_url} is already initialized")
             self.initialized = True
             self.update_status()
+            # Automatically enable command interface
+            self.do_enable_commands("")
         else:
             # Initialize server with configuration
             print(f"Server not initialized, sending configuration...")
@@ -220,6 +222,8 @@ Initializing connection to remote server...
                 print(f"✅ Successfully initialized TDR server at {self.server_url}")
                 self.initialized = True
                 self.update_status()
+                # Automatically enable command interface
+                self.do_enable_commands("")
             else:
                 print(f"❌ Failed to initialize server at {self.server_url}")
                 print("Some commands may not work properly.")
