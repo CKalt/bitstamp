@@ -212,6 +212,8 @@ Initializing connection to remote server...
         if self.check_server_initialized():
             print(f"✅ Server at {self.server_url} is already initialized")
             self.initialized = True
+            # Wait for server to be fully ready
+            self.wait_for_server_ready()
             self.update_status()
             # Automatically enable command interface
             self.do_enable_commands("")
@@ -221,6 +223,8 @@ Initializing connection to remote server...
             if self.initialize_server():
                 print(f"✅ Successfully initialized TDR server at {self.server_url}")
                 self.initialized = True
+                # Wait for server to be fully ready
+                self.wait_for_server_ready()
                 self.update_status()
                 # Automatically enable command interface
                 self.do_enable_commands("")
@@ -477,6 +481,59 @@ Initializing connection to remote server...
             return False
         except:
             return False
+    
+    def wait_for_server_ready(self):
+        """Wait for server to be fully ready (strategy initialized, history loaded if needed)"""
+        print("\n⏳ Waiting for server to be ready...")
+        
+        spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+        spinner_idx = 0
+        last_status = ""
+        
+        while True:
+            try:
+                response = requests.get(f"{self.server_url}/api/status", timeout=5)
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # Check if auto trader is initialized
+                    auto_trader = data.get('auto_trader', {})
+                    if not auto_trader.get('active', False):
+                        status = "Waiting for trading strategy to initialize"
+                    # Check if history is still loading
+                    elif data.get('history_loading', False):
+                        history_status = data.get('history_status', 'Loading historical data')
+                        status = f"Loading historical data: {history_status}"
+                    # Check if we're waiting for history to load
+                    elif not data.get('history_loaded', False) and data.get('auto_resume', False):
+                        status = "Waiting for historical data to load"
+                    else:
+                        # Server is ready
+                        print("\r✅ Server is ready for commands!" + " " * 50)
+                        
+                        # Note about commands that don't need history
+                        if data.get('history_loading', False) or not data.get('history_loaded', False):
+                            print("\n📌 Note: Some commands work without historical data:")
+                            print("   • whipsaw_stats, show_trade_sequence (use trades.json)")
+                            print("   • status, trades, positions (use current state)")
+                            print("   • Trading commands will wait for history to complete")
+                        return
+                    
+                    # Update status display
+                    if status != last_status:
+                        print(f"\r{spinner[spinner_idx]} {status}" + " " * 20, end='', flush=True)
+                        last_status = status
+                    else:
+                        print(f"\r{spinner[spinner_idx]} {status}", end='', flush=True)
+                    
+                    spinner_idx = (spinner_idx + 1) % len(spinner)
+                else:
+                    print(f"\r⚠️  Server returned status {response.status_code}", end='', flush=True)
+                    
+            except Exception as e:
+                print(f"\r⚠️  Error checking server status: {e}", end='', flush=True)
+            
+            time.sleep(0.5)
     
     def update_status(self):
         """Update cached status from server"""
