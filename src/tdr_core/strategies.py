@@ -435,6 +435,9 @@ class MACrossoverStrategy:
         self.min_balance_usd = self.balance_usd
         self.max_balance_btc = self.balance_btc
         self.min_balance_btc = self.balance_btc
+        
+        # Load recent trades for whipsaw tracking
+        self._load_recent_trades_for_whipsaw()
     
     @property
     def position_cost_basis(self):
@@ -2157,6 +2160,45 @@ class MACrossoverStrategy:
             stats['whipsaw_rate'] = 0.0
             
         return stats
+    
+    def _load_recent_trades_for_whipsaw(self):
+        """Load recent trades from trades.json for whipsaw tracking"""
+        try:
+            if os.path.exists(self.trade_log_file):
+                with open(self.trade_log_file, 'r') as f:
+                    all_trades = json.load(f)
+                
+                # Only load trades from last 24 hours
+                cutoff_time = datetime.utcnow() - timedelta(hours=24)
+                
+                for trade in all_trades:
+                    # Parse trade timestamp
+                    trade_time_str = trade.get('timestamp', '')
+                    if not trade_time_str:
+                        continue
+                        
+                    try:
+                        trade_time = datetime.strptime(trade_time_str, '%Y-%m-%d %H:%M:%S')
+                    except:
+                        continue
+                    
+                    # Only process recent trades
+                    if trade_time > cutoff_time:
+                        # Add to whipsaw tracker
+                        trade_type = trade.get('type', '').lower()
+                        price = float(trade.get('price', 0))
+                        
+                        if trade_type in ['buy', 'sell'] and price > 0:
+                            self.track_trade_for_whipsaw(trade_type, price, trade_time_str)
+                
+                # Run detection on loaded trades
+                if self.whipsaw_tracker['trades']:
+                    self._detect_whipsaws(datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
+                    
+                self.logger.info(f"Loaded {len(self.whipsaw_tracker['trades'])} recent trades for whipsaw tracking")
+                
+        except Exception as e:
+            self.logger.error(f"Error loading trades for whipsaw tracking: {e}")
 
 
 ###############################################################################
