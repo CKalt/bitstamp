@@ -1510,6 +1510,149 @@ class MACrossoverStrategy:
         
         return tracker
     
+    def update_trailing_pivot_protection(self, current_price):
+        """
+        Update pivot levels based on profit to lock in gains while allowing upside.
+        Only moves levels favorably (up for LONG support, down for SHORT resistance).
+        """
+        if not hasattr(self, 'pivot_tracker') or not self.pivot_tracker:
+            return False
+            
+        if not self.pivot_tracker.get('levels_locked', False):
+            return False
+            
+        # Get entry price
+        entry_price = self._get_entry_price()
+        if not entry_price or entry_price <= 0:
+            return False
+            
+        # Get profit tiers configuration
+        profit_tiers = getattr(self, 'pivot_profit_tiers', [
+            {'threshold': 0.05, 'protection_ratio': 0.70},
+            {'threshold': 0.10, 'protection_ratio': 0.80},
+            {'threshold': 0.15, 'protection_ratio': 0.85},
+            {'threshold': 0.20, 'protection_ratio': 0.90}
+        ])
+        
+        if self.position == 1:  # LONG position
+            # Calculate profit percentage
+            profit_pct = (current_price - entry_price) / entry_price
+            
+            if profit_pct <= 0:
+                return False  # No profit to protect
+                
+            # Find applicable protection tier
+            protection_ratio = 0
+            for tier in sorted(profit_tiers, key=lambda x: x['threshold'], reverse=True):
+                if profit_pct >= tier['threshold']:
+                    protection_ratio = tier['protection_ratio']
+                    break
+                    
+            if protection_ratio == 0:
+                return False  # Below minimum threshold
+                
+            # Calculate new support level
+            profit_per_unit = current_price - entry_price
+            min_profit_to_keep = profit_per_unit * protection_ratio
+            new_support = entry_price + min_profit_to_keep
+            
+            # Only raise support, never lower it
+            current_support = self.pivot_tracker.get('support_level', 0)
+            if new_support > current_support:
+                # Find significant support level if configured
+                if getattr(self, 'pivot_respect_technical_levels', True):
+                    # Look for recent support in 24h data
+                    lookback_hours = 24
+                    df = self.data_manager.get_resampled_data()
+                    if df is not None and len(df) > lookback_hours:
+                        recent_data = df.iloc[-lookback_hours:]
+                        recent_lows = recent_data['low'].values
+                        
+                        # Find technical support near our target
+                        technical_support = new_support
+                        for low in sorted(recent_lows, reverse=True):
+                            if low > current_support and low <= new_support:
+                                technical_support = low
+                                break
+                                
+                        new_support = max(technical_support - (self.pivot_buffer / 2), current_support)
+                
+                # Update support level
+                old_support = self.pivot_tracker['support_level']
+                self.pivot_tracker['support_level'] = new_support
+                self.pivot_tracker['profit_locked'] = new_support - entry_price
+                self.pivot_tracker['protection_tier'] = f"{int(protection_ratio * 100)}%"
+                
+                self.logger.warning(f"📈 TRAILING PIVOT UPDATE: Support raised from ${old_support:.0f} to ${new_support:.0f}")
+                self.logger.info(f"   Profit locked: ${self.pivot_tracker['profit_locked']:.0f} ({self.pivot_tracker['protection_tier']} of ${profit_per_unit:.0f} gain)")
+                return True
+                
+        elif self.position == -1:  # SHORT position
+            # Calculate profit percentage
+            profit_pct = (entry_price - current_price) / entry_price
+            
+            if profit_pct <= 0:
+                return False  # No profit to protect
+                
+            # Find applicable protection tier
+            protection_ratio = 0
+            for tier in sorted(profit_tiers, key=lambda x: x['threshold'], reverse=True):
+                if profit_pct >= tier['threshold']:
+                    protection_ratio = tier['protection_ratio']
+                    break
+                    
+            if protection_ratio == 0:
+                return False  # Below minimum threshold
+                
+            # Calculate new resistance level
+            profit_per_unit = entry_price - current_price
+            min_profit_to_keep = profit_per_unit * protection_ratio
+            new_resistance = entry_price - min_profit_to_keep
+            
+            # Only lower resistance, never raise it
+            current_resistance = self.pivot_tracker.get('resistance_level', float('inf'))
+            if new_resistance < current_resistance:
+                # Find significant resistance level if configured
+                if getattr(self, 'pivot_respect_technical_levels', True):
+                    # Look for recent resistance in 24h data
+                    lookback_hours = 24
+                    df = self.data_manager.get_resampled_data()
+                    if df is not None and len(df) > lookback_hours:
+                        recent_data = df.iloc[-lookback_hours:]
+                        recent_highs = recent_data['high'].values
+                        
+                        # Find technical resistance near our target
+                        technical_resistance = new_resistance
+                        for high in sorted(recent_highs):
+                            if high < current_resistance and high >= new_resistance:
+                                technical_resistance = high
+                                break
+                                
+                        new_resistance = min(technical_resistance + (self.pivot_buffer / 2), current_resistance)
+                
+                # Update resistance level
+                old_resistance = self.pivot_tracker['resistance_level']
+                self.pivot_tracker['resistance_level'] = new_resistance
+                self.pivot_tracker['profit_locked'] = entry_price - new_resistance
+                self.pivot_tracker['protection_tier'] = f"{int(protection_ratio * 100)}%"
+                
+                self.logger.warning(f"📉 TRAILING PIVOT UPDATE: Resistance lowered from ${old_resistance:.0f} to ${new_resistance:.0f}")
+                self.logger.info(f"   Profit locked: ${self.pivot_tracker['profit_locked']:.0f} ({self.pivot_tracker['protection_tier']} of ${profit_per_unit:.0f} gain)")
+                return True
+                
+        return False
+    
+    def _get_entry_price(self):
+        """Get the current position's entry price."""
+        if self.position == 1 and self.position_size > 0:
+            return self.position_cost_basis / self.position_size
+        elif self.position == -1 and self.position_size < 0:
+            return self.position_cost_basis / abs(self.position_size)
+        else:
+            # Try to get from calculate_entry_price_from_trades
+            calculated_price, _ = self.calculate_entry_price_from_trades()
+            return calculated_price if calculated_price else self.last_trade_price
+    
     def save_resume_state(self):
         """Save current position state to resume-auto-trade.json for easy restart."""
         import json
@@ -2415,13 +2558,20 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                     self.check_for_signals(pivot_signal, current_price, signal_time)
                                     continue
                             
+                            # Update trailing pivot protection if enabled
+                            if getattr(self, 'enable_trailing_pivots', True):
+                                self.update_trailing_pivot_protection(current_price)
+                            
                             # Log pivot levels periodically
                             if not hasattr(self, '_last_pivot_log') or \
                                (datetime.now() - self._last_pivot_log).total_seconds() > 300:
                                 status = "LOCKED" if self.pivot_tracker.get('levels_locked', False) else "UPDATING"
+                                profit_info = ""
+                                if hasattr(self.pivot_tracker, 'profit_locked') and self.pivot_tracker.get('profit_locked'):
+                                    profit_info = f" (Profit Locked: ${self.pivot_tracker['profit_locked']:.0f})"
                                 self.logger.info(f"📊 Pivot Levels ({status}) - Support: ${self.pivot_tracker['support_level']:.0f}, "
                                                f"Resistance: ${self.pivot_tracker['resistance_level']:.0f}, "
-                                               f"Current: ${current_price:.0f}")
+                                               f"Current: ${current_price:.0f}{profit_info}")
                                 self._last_pivot_log = datetime.now()
                         
                         # 1. Detect market regime

@@ -494,7 +494,19 @@ class CryptoShell(cmd.Cmd):
             bb_std_dev=2.0,
             # Breakout parameters
             volume_threshold=1.5,
-            macd_threshold=0.001
+            macd_threshold=0.001,
+            # Pivot protection parameters
+            enable_pivot_protection=best_strategy_params.get('enable_pivot_protection', True),
+            pivot_buffer=best_strategy_params.get('pivot_buffer', 100),
+            pivot_lookback_hours=best_strategy_params.get('pivot_lookback_hours', 2),
+            enable_trailing_pivots=best_strategy_params.get('enable_trailing_pivots', True),
+            pivot_profit_tiers=best_strategy_params.get('pivot_profit_tiers', [
+                {'threshold': 0.05, 'protection_ratio': 0.70},
+                {'threshold': 0.10, 'protection_ratio': 0.80},
+                {'threshold': 0.15, 'protection_ratio': 0.85},
+                {'threshold': 0.20, 'protection_ratio': 0.90}
+            ]),
+            pivot_respect_technical_levels=best_strategy_params.get('pivot_respect_technical_levels', True)
         )
         
         # Check if we have explicit resume parameters first
@@ -1225,6 +1237,78 @@ class CryptoShell(cmd.Cmd):
         except Exception as e:
             print(f"Error checking pivot alternatives: {e}")
 
+    def do_ratchet_pivot(self, arg):
+        """
+        Manually trigger an update of trailing pivot protection levels.
+        This will check current profit and adjust support/resistance if appropriate.
+        
+        Usage: ratchet_pivot
+        """
+        if not self.auto_trader:
+            print("No auto trader running")
+            return
+            
+        try:
+            # Get current price
+            current_price = self.data_manager.get_current_price(self.auto_trader.symbol) or 0
+            if current_price <= 0:
+                print("Cannot get current price")
+                return
+                
+            # Check if pivot protection is enabled
+            if not getattr(self.auto_trader, 'enable_pivot_protection', False):
+                print("Pivot protection is not enabled")
+                return
+                
+            if not getattr(self.auto_trader, 'enable_trailing_pivots', False):
+                print("Trailing pivot protection is not enabled")
+                return
+                
+            # Get current levels before update
+            if hasattr(self.auto_trader, 'pivot_tracker'):
+                old_support = self.auto_trader.pivot_tracker.get('support_level', 0)
+                old_resistance = self.auto_trader.pivot_tracker.get('resistance_level', 0)
+                old_profit_locked = self.auto_trader.pivot_tracker.get('profit_locked', 0)
+            else:
+                print("No pivot tracker initialized")
+                return
+                
+            print(f"\n🔧 Manually triggering pivot update...")
+            print(f"Current Price: ${current_price:.0f}")
+            print(f"Current Support: ${old_support:.0f}")
+            print(f"Current Resistance: ${old_resistance:.0f}")
+            if old_profit_locked > 0:
+                print(f"Profit Locked: ${old_profit_locked:.0f}")
+            
+            # Trigger the update
+            updated = self.auto_trader.update_trailing_pivot_protection(current_price)
+            
+            if updated:
+                # Get new levels
+                new_support = self.auto_trader.pivot_tracker.get('support_level', 0)
+                new_resistance = self.auto_trader.pivot_tracker.get('resistance_level', 0)
+                new_profit_locked = self.auto_trader.pivot_tracker.get('profit_locked', 0)
+                protection_tier = self.auto_trader.pivot_tracker.get('protection_tier', '')
+                
+                print(f"\n✅ PIVOT LEVELS UPDATED!")
+                print(f"New Support: ${new_support:.0f} (changed by ${new_support - old_support:.0f})")
+                print(f"New Resistance: ${new_resistance:.0f} (changed by ${new_resistance - old_resistance:.0f})")
+                print(f"Profit Locked: ${new_profit_locked:.0f}")
+                print(f"Protection Tier: {protection_tier}")
+                
+                # Save the updated state
+                self.auto_trader.save_resume_state()
+                print("\n💾 Updated levels saved to resume-auto-trade.json")
+            else:
+                print(f"\n❌ No update needed")
+                print("Possible reasons:")
+                print("  • Profit below 5% threshold")
+                print("  • Levels already optimal")
+                print("  • No position or entry price")
+                
+        except Exception as e:
+            print(f"Error updating pivot levels: {e}")
+
     def do_position_history(self, arg):
         """
         Query position history from the server.
@@ -1729,16 +1813,27 @@ class CryptoShell(cmd.Cmd):
                     buffer = getattr(self.auto_trader, 'pivot_buffer', 100)
                     lookback = getattr(self.auto_trader, 'pivot_lookback_hours', 2)
                     levels_locked = self.auto_trader.pivot_tracker.get('levels_locked', False)
+                    profit_locked = self.auto_trader.pivot_tracker.get('profit_locked', 0)
+                    protection_tier = self.auto_trader.pivot_tracker.get('protection_tier', '')
                 else:
                     recent_high = recent_low = buffer = lookback = 0
                     levels_locked = False
+                    profit_locked = 0
+                    protection_tier = ''
                 
+                # Show trailing status if profit is locked
+                trailing_info = ""
+                if profit_locked > 0:
+                    trailing_info = f" 🔥 TRAILING"
+                    
                 print(f"     📊 Calculation Details:")
                 print(f"       • Looking at last {lookback} hours of price data")
                 print(f"       • Recent High: ${recent_high:.0f}")
                 print(f"       • Recent Low: ${recent_low:.0f}")
                 print(f"       • Buffer Zone: ${buffer:.0f} (prevents whipsaws)")
-                print(f"       • Level Status: {'🔒 LOCKED (Sticky)' if levels_locked else '🔄 UPDATING (Dynamic)'}")
+                print(f"       • Level Status: {'🔒 LOCKED (Sticky)' if levels_locked else '🔄 UPDATING (Dynamic)'}{trailing_info}")
+                if profit_locked > 0:
+                    print(f"       • Profit Locked: ${profit_locked:.0f} ({protection_tier} protection)")
                 print(f"       • Calculations:")
                 print(f"         - Support = Recent Low (${recent_low:.0f}) - Buffer/2 (${buffer/2:.0f}) = ${support:.0f}")
                 print(f"         - Resistance = Recent High (${recent_high:.0f}) + Buffer/2 (${buffer/2:.0f}) = ${resistance:.0f}")
@@ -2852,16 +2947,27 @@ class CryptoShell(cmd.Cmd):
                     buffer = getattr(self.auto_trader, 'pivot_buffer', 100)
                     lookback = getattr(self.auto_trader, 'pivot_lookback_hours', 2)
                     levels_locked = self.auto_trader.pivot_tracker.get('levels_locked', False)
+                    profit_locked = self.auto_trader.pivot_tracker.get('profit_locked', 0)
+                    protection_tier = self.auto_trader.pivot_tracker.get('protection_tier', '')
                 else:
                     recent_high = recent_low = buffer = lookback = 0
                     levels_locked = False
+                    profit_locked = 0
+                    protection_tier = ''
                 
+                # Show trailing status if profit is locked
+                trailing_info = ""
+                if profit_locked > 0:
+                    trailing_info = f" 🔥 TRAILING"
+                    
                 print(f"     📊 Calculation Details:")
                 print(f"       • Looking at last {lookback} hours of price data")
                 print(f"       • Recent High: ${recent_high:.0f}")
                 print(f"       • Recent Low: ${recent_low:.0f}")
                 print(f"       • Buffer Zone: ${buffer:.0f} (prevents whipsaws)")
-                print(f"       • Level Status: {'🔒 LOCKED (Sticky)' if levels_locked else '🔄 UPDATING (Dynamic)'}")
+                print(f"       • Level Status: {'🔒 LOCKED (Sticky)' if levels_locked else '🔄 UPDATING (Dynamic)'}{trailing_info}")
+                if profit_locked > 0:
+                    print(f"       • Profit Locked: ${profit_locked:.0f} ({protection_tier} protection)")
                 print(f"       • Calculations:")
                 print(f"         - Support = Recent Low (${recent_low:.0f}) - Buffer/2 (${buffer/2:.0f}) = ${support:.0f}")
                 print(f"         - Resistance = Recent High (${recent_high:.0f}) + Buffer/2 (${buffer/2:.0f}) = ${resistance:.0f}")

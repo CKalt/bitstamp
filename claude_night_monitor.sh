@@ -80,9 +80,23 @@ while true; do
     echo "- Monitoring active for $(ps -p $$ -o etime= | xargs)"
     echo "- Next check in ${MONITOR_INTERVAL} seconds"
     echo "- Log file: $LOG_FILE"
+    # Parse pivot info from latest status
+    if [ -f "$LOG_FILE" ]; then
+        SUPPORT_LEVEL=$(grep -oE "Support: \\\$[0-9]+" "$LOG_FILE" | tail -1 | grep -oE "[0-9]+")
+        PROFIT_LOCKED=$(grep -oE "Profit Locked: \\\$[0-9]+" "$LOG_FILE" | tail -1 | grep -oE "[0-9]+")
+        TRAILING_STATUS=$(grep -oE "TRAILING|LOCKED" "$LOG_FILE" | tail -1)
+    fi
+    
     echo ""
     echo "🛡️ Your position is protected by:"
-    echo "- Pivot support at \$116,187"
+    if [ -n "$SUPPORT_LEVEL" ]; then
+        echo "- Pivot support at \$$SUPPORT_LEVEL"
+        if [ -n "$PROFIT_LOCKED" ] && [ "$PROFIT_LOCKED" -gt 0 ]; then
+            echo "- 🔥 TRAILING MODE: \$$PROFIT_LOCKED profit locked!"
+        elif [ "$TRAILING_STATUS" = "TRAILING" ]; then
+            echo "- 🔥 TRAILING pivot protection active"
+        fi
+    fi
     echo "- Automatic position flips"
     echo "- 10 trade daily limit"
     echo ""
