@@ -1709,3 +1709,37 @@ LONG position at $117,182:
 6. **Night Monitoring**: Integrated with monitoring system for 24/7 awareness
 
 This completes the enhanced pivot protection implementation, providing sophisticated profit protection while maintaining the original system's benefits.
+
+### Deployment Bug Fix (2025-01-16 Evening)
+
+**Issue Discovered**: Server startup failed with `TypeError: MACrossoverStrategy.__init__() got an unexpected keyword argument 'enable_trailing_pivots'`
+
+**Root Cause**: The new trailing pivot parameters were being passed through kwargs to the parent MACrossoverStrategy class, which had a fixed parameter list and didn't accept **kwargs.
+
+**Solution Applied** (Commit: 56677eb):
+1. Modified `MACrossoverStrategy.__init__` to accept `**kwargs` parameter
+2. Updated `AdaptiveMultiStrategy` to properly extract trailing pivot parameters using `kwargs.pop()`:
+   - `enable_trailing_pivots`
+   - `pivot_profit_tiers` 
+   - `pivot_respect_technical_levels`
+
+**Key Learning**: When adding new parameters to a child class that inherits from a parent with a fixed parameter list, ensure:
+- Parent class accepts `**kwargs` for extensibility
+- Child class extracts its specific parameters with `kwargs.pop()` before calling parent
+- This maintains backward compatibility while allowing new features
+
+## Command Response Debugging (2025-01-16 Evening)
+
+**Issue Encountered**: During testing, all Claude commands (status, trades, logs, help) returned empty output strings in the JSON responses.
+
+**Symptoms**:
+- Commands processed successfully (`"success": true`)
+- But `"output": ""` was empty for all commands
+- Position data still returned correctly in some responses
+
+**Possible Causes**:
+1. Client-server communication issue with output capture
+2. Server command handlers not returning output properly
+3. JSON serialization of command results
+
+**Status**: Issue was encountered during trailing pivot testing but didn't prevent deployment of the fix. May require further investigation if commands continue returning empty output.
