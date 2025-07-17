@@ -1867,7 +1867,12 @@ class CryptoShell(cmd.Cmd):
                     print(f"\n     📈 LONG Position Protection:")
                     print(f"     • TAKE PROFIT Level: ${support:.0f}")
                     print(f"       → If price drops below, immediately flip to SHORT")
-                    print(f"       → Locks in profits from current LONG position")
+                    # Check if this actually protects profits
+                    if entry_price > 0 and support > entry_price:
+                        profit_protected = support - entry_price
+                        print(f"       → Locks in ${profit_protected:.0f} profit from LONG position")
+                    else:
+                        print(f"       → ⚠️  WARNING: Below entry price of ${entry_price:.0f}!")
                     print(f"     • Current Price: ${current_price:.0f}")
                     print(f"     • Distance to Profit Lock: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
                     print(f"     • RE-ENTRY Level: ${resistance:.0f}")
@@ -1880,7 +1885,12 @@ class CryptoShell(cmd.Cmd):
                     print(f"\n     📉 SHORT Position Protection:")
                     print(f"     • TAKE PROFIT Level: ${resistance:.0f}")
                     print(f"       → If price rises above, immediately flip to LONG")
-                    print(f"       → Locks in profits from current SHORT position")
+                    # Check if this actually protects profits
+                    if entry_price > 0 and resistance < entry_price:
+                        profit_protected = entry_price - resistance
+                        print(f"       → Locks in ${profit_protected:.0f} profit from SHORT position")
+                    else:
+                        print(f"       → ⚠️  WARNING: Above entry price of ${entry_price:.0f}!")
                     print(f"     • Current Price: ${current_price:.0f}")
                     print(f"     • Distance to Profit Lock: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
                     print(f"     • RE-ENTRY Level: ${support:.0f}")
@@ -3171,7 +3181,12 @@ class CryptoShell(cmd.Cmd):
                     print(f"\n     📈 LONG Position Protection:")
                     print(f"     • TAKE PROFIT Level: ${support:.0f}")
                     print(f"       → If price drops below, immediately flip to SHORT")
-                    print(f"       → Locks in profits from current LONG position")
+                    # Check if this actually protects profits
+                    if entry_price > 0 and support > entry_price:
+                        profit_protected = support - entry_price
+                        print(f"       → Locks in ${profit_protected:.0f} profit from LONG position")
+                    else:
+                        print(f"       → ⚠️  WARNING: Below entry price of ${entry_price:.0f}!")
                     print(f"     • Current Price: ${current_price:.0f}")
                     print(f"     • Distance to Profit Lock: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
                     print(f"     • RE-ENTRY Level: ${resistance:.0f}")
@@ -3184,7 +3199,12 @@ class CryptoShell(cmd.Cmd):
                     print(f"\n     📉 SHORT Position Protection:")
                     print(f"     • TAKE PROFIT Level: ${resistance:.0f}")
                     print(f"       → If price rises above, immediately flip to LONG")
-                    print(f"       → Locks in profits from current SHORT position")
+                    # Check if this actually protects profits
+                    if entry_price > 0 and resistance < entry_price:
+                        profit_protected = entry_price - resistance
+                        print(f"       → Locks in ${profit_protected:.0f} profit from SHORT position")
+                    else:
+                        print(f"       → ⚠️  WARNING: Above entry price of ${entry_price:.0f}!")
                     print(f"     • Current Price: ${current_price:.0f}")
                     print(f"     • Distance to Profit Lock: ${distance_to_flip:.0f} ({percent_to_flip:.1f}%)")
                     print(f"     • RE-ENTRY Level: ${support:.0f}")
