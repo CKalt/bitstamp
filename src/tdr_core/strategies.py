@@ -331,7 +331,8 @@ class MACrossoverStrategy:
         max_trades_per_day=5,
         initial_position=0,
         initial_balance_btc=0.0,
-        initial_balance_usd=0.0
+        initial_balance_usd=0.0,
+        **kwargs  # Accept additional keyword arguments
     ):
         self.data_manager = data_manager
         self.order_placer = data_manager.order_placer
@@ -2068,6 +2069,16 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         self.pivot_buffer = kwargs.pop('pivot_buffer', 100)  # Buffer zone in dollars
         self.pivot_lookback_hours = kwargs.pop('pivot_lookback_hours', 2)  # Hours to look back for pivots
         self.enable_pivot_protection = kwargs.pop('enable_pivot_protection', True)  # Can disable if needed
+        
+        # Trailing pivot parameters (new)
+        self.enable_trailing_pivots = kwargs.pop('enable_trailing_pivots', False)
+        self.pivot_profit_tiers = kwargs.pop('pivot_profit_tiers', [
+            {'threshold': 0.05, 'protection_ratio': 0.70},
+            {'threshold': 0.10, 'protection_ratio': 0.80},
+            {'threshold': 0.15, 'protection_ratio': 0.85},
+            {'threshold': 0.20, 'protection_ratio': 0.90}
+        ])
+        self.pivot_respect_technical_levels = kwargs.pop('pivot_respect_technical_levels', True)
 
         # Initialize parent class
         super().__init__(*args, **kwargs)
