@@ -2694,7 +2694,22 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                     if (not self.pivot_tracker['levels_locked'] or 
                                         self.pivot_tracker['last_position_flip'] != self.position):
                                         # Set sticky support level based on recent low
-                                        self.pivot_tracker['support_level'] = recent_low - (self.pivot_buffer / 2)
+                                        calculated_support = recent_low - (self.pivot_buffer / 2)
+                                        
+                                        # For profit protection: ensure support is above entry price if we're profitable
+                                        entry_price = self.position_cost_basis / abs(self.position_size) if self.position_size != 0 else 0
+                                        if entry_price > 0 and current_price > entry_price:
+                                            # We're profitable - ensure we lock in at least break-even
+                                            min_profit_buffer = 50  # Lock in at least $50 profit
+                                            profit_support = entry_price + min_profit_buffer
+                                            self.pivot_tracker['support_level'] = max(calculated_support, profit_support)
+                                            
+                                            # Log if we're using profit protection
+                                            if self.pivot_tracker['support_level'] == profit_support:
+                                                self.logger.info(f"💰 Profit Protection Active: Support raised to ${profit_support:.0f} (entry: ${entry_price:.0f})")
+                                        else:
+                                            self.pivot_tracker['support_level'] = calculated_support
+                                            
                                         self.pivot_tracker['resistance_level'] = recent_high + (self.pivot_buffer / 2)
                                         self.pivot_tracker['levels_locked'] = True
                                         self.pivot_tracker['last_position_flip'] = self.position
@@ -2728,9 +2743,24 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                     # Check if we need to establish new levels (after position flip or first time)
                                     if (not self.pivot_tracker['levels_locked'] or 
                                         self.pivot_tracker['last_position_flip'] != self.position):
-                                        # Set sticky resistance level based on recent high
+                                        # Set sticky levels based on recent high/low
                                         self.pivot_tracker['support_level'] = recent_low - (self.pivot_buffer / 2)
-                                        self.pivot_tracker['resistance_level'] = recent_high + (self.pivot_buffer / 2)
+                                        calculated_resistance = recent_high + (self.pivot_buffer / 2)
+                                        
+                                        # For profit protection: ensure resistance is below entry price if we're profitable
+                                        entry_price = self.last_trade_price  # For SHORT, entry is the SELL price
+                                        if entry_price > 0 and current_price < entry_price:
+                                            # We're profitable - ensure we lock in at least break-even
+                                            min_profit_buffer = 50  # Lock in at least $50 profit
+                                            profit_resistance = entry_price - min_profit_buffer
+                                            self.pivot_tracker['resistance_level'] = min(calculated_resistance, profit_resistance)
+                                            
+                                            # Log if we're using profit protection
+                                            if self.pivot_tracker['resistance_level'] == profit_resistance:
+                                                self.logger.info(f"💰 Profit Protection Active: Resistance lowered to ${profit_resistance:.0f} (entry: ${entry_price:.0f})")
+                                        else:
+                                            self.pivot_tracker['resistance_level'] = calculated_resistance
+                                            
                                         self.pivot_tracker['levels_locked'] = True
                                         self.pivot_tracker['last_position_flip'] = self.position
                                         self.logger.info(f"📍 SHORT Pivot Levels Established - Support: ${self.pivot_tracker['support_level']:.0f}, "
