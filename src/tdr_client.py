@@ -1229,6 +1229,19 @@ Initializing connection to remote server...
         else:
             print("Command interface is not enabled")
     
+    def do_whipsaw_stats(self, arg):
+        """Show whipsaw statistics and analysis
+        
+        Displays:
+        - Total whipsaws detected
+        - Whipsaw losses
+        - Average whipsaw cost
+        - Recent whipsaw patterns
+        - Whipsaw rate
+        """
+        response = self.send_command("whipsaw_stats")
+        self.print_response(response)
+    
     def do_help(self, arg):
         """Show available commands"""
         if arg:
@@ -1239,7 +1252,7 @@ Available Commands:
 ==================
 
 All standard TDR commands are forwarded to the server:
-  status, buy, sell, auto_trade, stop_auto_trade, positions, etc.
+  status, buy, sell, auto_trade, stop_auto_trade, positions, whipsaw_stats, etc.
 
 Local Client Commands:
   logs [n] [type] [search]  - View server logs
