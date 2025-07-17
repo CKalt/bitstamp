@@ -1900,12 +1900,11 @@ class CryptoShell(cmd.Cmd):
             print("Auto-trading is not running.")
             return
             
-        strategy = self.auto_trader.strategy
-        if not hasattr(strategy, 'get_whipsaw_stats'):
+        if not hasattr(self.auto_trader, 'get_whipsaw_stats'):
             print("Current strategy does not support whipsaw tracking.")
             return
             
-        stats = strategy.get_whipsaw_stats()
+        stats = self.auto_trader.get_whipsaw_stats()
         if not stats:
             print("No whipsaw statistics available.")
             return
