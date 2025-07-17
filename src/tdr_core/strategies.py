@@ -2716,6 +2716,17 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                         self.logger.info(f"📍 LONG Pivot Levels Established - Support: ${self.pivot_tracker['support_level']:.0f}, "
                                                        f"Resistance: ${self.pivot_tracker['resistance_level']:.0f}")
                                     
+                                    # Check if current levels protect profit - if not, recalculate
+                                    entry_price = self.position_cost_basis / abs(self.position_size) if self.position_size != 0 else 0
+                                    if entry_price > 0 and current_price > entry_price:
+                                        # We're profitable - ensure support protects profit
+                                        min_profit_buffer = 50
+                                        min_support = entry_price + min_profit_buffer
+                                        if self.pivot_tracker['support_level'] < min_support:
+                                            self.logger.warning(f"⚠️ Current support ${self.pivot_tracker['support_level']:.0f} doesn't protect profit!")
+                                            self.logger.info(f"💰 Raising support to ${min_support:.0f} to protect ${min_profit_buffer} profit")
+                                            self.pivot_tracker['support_level'] = min_support
+                                    
                                     # Check if price broke below support
                                     if current_price < self.pivot_tracker['support_level']:
                                         # Check if we're still in startup grace period
@@ -2765,6 +2776,17 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                         self.pivot_tracker['last_position_flip'] = self.position
                                         self.logger.info(f"📍 SHORT Pivot Levels Established - Support: ${self.pivot_tracker['support_level']:.0f}, "
                                                        f"Resistance: ${self.pivot_tracker['resistance_level']:.0f}")
+                                    
+                                    # Check if current levels protect profit - if not, recalculate
+                                    entry_price = self.last_trade_price  # For SHORT, entry is the SELL price
+                                    if entry_price > 0 and current_price < entry_price:
+                                        # We're profitable - ensure resistance protects profit
+                                        min_profit_buffer = 50
+                                        max_resistance = entry_price - min_profit_buffer
+                                        if self.pivot_tracker['resistance_level'] > max_resistance:
+                                            self.logger.warning(f"⚠️ Current resistance ${self.pivot_tracker['resistance_level']:.0f} doesn't protect profit!")
+                                            self.logger.info(f"💰 Lowering resistance to ${max_resistance:.0f} to protect ${min_profit_buffer} profit")
+                                            self.pivot_tracker['resistance_level'] = max_resistance
                                     
                                     # Check if price broke above resistance
                                     if current_price > self.pivot_tracker['resistance_level']:

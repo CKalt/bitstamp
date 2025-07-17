@@ -1834,9 +1834,32 @@ class CryptoShell(cmd.Cmd):
                 print(f"       • Level Status: {'🔒 LOCKED (Sticky)' if levels_locked else '🔄 UPDATING (Dynamic)'}{trailing_info}")
                 if profit_locked > 0:
                     print(f"       • Profit Locked: ${profit_locked:.0f} ({protection_tier} protection)")
-                print(f"       • Calculations:")
-                print(f"         - Support = Recent Low (${recent_low:.0f}) - Buffer/2 (${buffer/2:.0f}) = ${support:.0f}")
-                print(f"         - Resistance = Recent High (${recent_high:.0f}) + Buffer/2 (${buffer/2:.0f}) = ${resistance:.0f}")
+                # Show how levels were calculated
+                entry_price = 0
+                if hasattr(self.auto_trader, 'position_cost_basis') and hasattr(self.auto_trader, 'position_size'):
+                    if self.auto_trader.position_size != 0:
+                        entry_price = self.auto_trader.position_cost_basis / abs(self.auto_trader.position_size)
+                
+                print(f"       • Entry Price: ${entry_price:.0f}")
+                print(f"       • Actual Levels:")
+                print(f"         - Support: ${support:.0f}")
+                print(f"         - Resistance: ${resistance:.0f}")
+                
+                # Explain how levels were determined
+                if self.auto_trader.position == 1:  # LONG
+                    technical_support = recent_low - (buffer/2)
+                    if entry_price > 0 and support > technical_support:
+                        print(f"         💰 Profit Protection: Support raised from ${technical_support:.0f} to ${support:.0f}")
+                        print(f"            (Protects ${support - entry_price:.0f} profit)")
+                    else:
+                        print(f"         📊 Technical Level: Support = Recent Low - Buffer/2")
+                else:  # SHORT
+                    technical_resistance = recent_high + (buffer/2)
+                    if entry_price > 0 and resistance < technical_resistance:
+                        print(f"         💰 Profit Protection: Resistance lowered from ${technical_resistance:.0f} to ${resistance:.0f}")
+                        print(f"            (Protects ${entry_price - resistance:.0f} profit)")
+                    else:
+                        print(f"         📊 Technical Level: Resistance = Recent High + Buffer/2")
                 
                 if self.auto_trader.position == 1:  # LONG
                     distance_to_flip = current_price - support
@@ -3115,9 +3138,32 @@ class CryptoShell(cmd.Cmd):
                 print(f"       • Level Status: {'🔒 LOCKED (Sticky)' if levels_locked else '🔄 UPDATING (Dynamic)'}{trailing_info}")
                 if profit_locked > 0:
                     print(f"       • Profit Locked: ${profit_locked:.0f} ({protection_tier} protection)")
-                print(f"       • Calculations:")
-                print(f"         - Support = Recent Low (${recent_low:.0f}) - Buffer/2 (${buffer/2:.0f}) = ${support:.0f}")
-                print(f"         - Resistance = Recent High (${recent_high:.0f}) + Buffer/2 (${buffer/2:.0f}) = ${resistance:.0f}")
+                # Show how levels were calculated
+                entry_price = 0
+                if hasattr(self.auto_trader, 'position_cost_basis') and hasattr(self.auto_trader, 'position_size'):
+                    if self.auto_trader.position_size != 0:
+                        entry_price = self.auto_trader.position_cost_basis / abs(self.auto_trader.position_size)
+                
+                print(f"       • Entry Price: ${entry_price:.0f}")
+                print(f"       • Actual Levels:")
+                print(f"         - Support: ${support:.0f}")
+                print(f"         - Resistance: ${resistance:.0f}")
+                
+                # Explain how levels were determined
+                if self.auto_trader.position == 1:  # LONG
+                    technical_support = recent_low - (buffer/2)
+                    if entry_price > 0 and support > technical_support:
+                        print(f"         💰 Profit Protection: Support raised from ${technical_support:.0f} to ${support:.0f}")
+                        print(f"            (Protects ${support - entry_price:.0f} profit)")
+                    else:
+                        print(f"         📊 Technical Level: Support = Recent Low - Buffer/2")
+                else:  # SHORT
+                    technical_resistance = recent_high + (buffer/2)
+                    if entry_price > 0 and resistance < technical_resistance:
+                        print(f"         💰 Profit Protection: Resistance lowered from ${technical_resistance:.0f} to ${resistance:.0f}")
+                        print(f"            (Protects ${entry_price - resistance:.0f} profit)")
+                    else:
+                        print(f"         📊 Technical Level: Resistance = Recent High + Buffer/2")
                 
                 if self.auto_trader.position == 1:  # LONG
                     distance_to_flip = current_price - support
