@@ -1246,6 +1246,14 @@ Initializing connection to remote server...
         response = self.send_command("whipsaw_stats")
         self.print_response(response)
     
+    def do_show_trade_sequence(self, arg):
+        """Show recent trade sequence for whipsaw analysis
+        Usage: show_trade_sequence [hours]
+        Default: 24 hours
+        """
+        response = self.send_command(f"show_trade_sequence {arg}")
+        self.print_response(response)
+    
     def do_help(self, arg):
         """Show available commands"""
         if arg:

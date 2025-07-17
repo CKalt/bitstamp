@@ -2088,6 +2088,11 @@ class MACrossoverStrategy:
         trades = self.whipsaw_tracker['trades']
         if len(trades) < 3:
             return
+        
+        # Debug: Log trade sequence
+        self.logger.debug(f"Checking {len(trades)} trades for whipsaws")
+        for i, t in enumerate(trades[-5:]):  # Show last 5 trades
+            self.logger.debug(f"  Trade {i}: {t['type']} at ${t['price']} ({t['timestamp']})")
             
         # Look for pattern: BUY -> SELL -> BUY or SELL -> BUY -> SELL
         # within detection window
@@ -2134,6 +2139,8 @@ class MACrossoverStrategy:
                             )
                         
                         self.logger.warning(f"⚡ Whipsaw detected: {whipsaw['pattern']} - Loss: ${loss:.2f}")
+                        self.logger.info(f"  Timestamps: {whipsaw['timestamps']}")
+                        self.logger.info(f"  Prices: ${t1['price']:.0f} → ${t2['price']:.0f} → ${t3['price']:.0f}")
     
     def get_whipsaw_stats(self):
         """Get current whipsaw statistics"""

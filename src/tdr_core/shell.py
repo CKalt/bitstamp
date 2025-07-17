@@ -1949,6 +1949,89 @@ class CryptoShell(cmd.Cmd):
             
         print("\n" + "━" * 50)
 
+    def do_show_trade_sequence(self, arg):
+        """Show recent trade sequence for whipsaw analysis
+        Usage: show_trade_sequence [hours]
+        Default: 24 hours
+        """
+        if not self.auto_trader or not self.auto_trader.running:
+            print("Auto-trading is not running.")
+            return
+            
+        hours = 24
+        if arg.strip():
+            try:
+                hours = int(arg.strip())
+            except ValueError:
+                print("Invalid hours. Using default 24.")
+        
+        if not hasattr(self.auto_trader, 'whipsaw_tracker'):
+            print("Whipsaw tracker not available.")
+            return
+            
+        trades = self.auto_trader.whipsaw_tracker.get('trades', [])
+        if not trades:
+            print("No trades in whipsaw tracker.")
+            return
+            
+        print(f"\n📊 TRADE SEQUENCE (Last {hours} hours)")
+        print("━" * 70)
+        print(f"{'#':>3} {'Type':>6} {'Price':>10} {'Timestamp':>20} {'Gap':>10}")
+        print("━" * 70)
+        
+        cutoff = datetime.utcnow() - timedelta(hours=hours)
+        filtered_trades = []
+        
+        for trade in trades:
+            trade_time = datetime.strptime(trade['timestamp'], '%Y-%m-%d %H:%M:%S')
+            if trade_time > cutoff:
+                filtered_trades.append(trade)
+        
+        # Sort by timestamp
+        filtered_trades.sort(key=lambda x: x['timestamp'])
+        
+        last_time = None
+        for i, trade in enumerate(filtered_trades):
+            trade_time = datetime.strptime(trade['timestamp'], '%Y-%m-%d %H:%M:%S')
+            
+            gap = ""
+            if last_time:
+                time_diff = trade_time - last_time
+                hours_diff = time_diff.total_seconds() / 3600
+                gap = f"{hours_diff:.1f}h"
+            
+            print(f"{i+1:>3} {trade['type'].upper():>6} ${trade['price']:>9.0f} {trade['timestamp']:>20} {gap:>10}")
+            last_time = trade_time
+        
+        print("━" * 70)
+        print(f"Total trades: {len(filtered_trades)}")
+        
+        # Check for potential whipsaws manually
+        print("\n🔍 Potential Whipsaw Patterns:")
+        found_patterns = False
+        
+        for i in range(len(filtered_trades) - 2):
+            t1, t2, t3 = filtered_trades[i], filtered_trades[i+1], filtered_trades[i+2]
+            
+            if t1['type'] == t3['type'] and t1['type'] != t2['type']:
+                t1_time = datetime.strptime(t1['timestamp'], '%Y-%m-%d %H:%M:%S')
+                t3_time = datetime.strptime(t3['timestamp'], '%Y-%m-%d %H:%M:%S')
+                duration = (t3_time - t1_time).total_seconds() / 3600
+                
+                print(f"\n  Pattern: {t1['type'].upper()} → {t2['type'].upper()} → {t3['type'].upper()}")
+                print(f"  Duration: {duration:.1f} hours")
+                print(f"  Prices: ${t1['price']:.0f} → ${t2['price']:.0f} → ${t3['price']:.0f}")
+                
+                if duration <= 4:
+                    print(f"  ✅ Within 4-hour whipsaw window")
+                else:
+                    print(f"  ❌ Outside 4-hour whipsaw window")
+                
+                found_patterns = True
+        
+        if not found_patterns:
+            print("  No whipsaw patterns found in sequence.")
+
     def do_read_server_file(self, arg):
         """
         Read a file on the server with optional line range support.
