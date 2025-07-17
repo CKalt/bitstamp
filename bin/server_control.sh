@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 
 # Function to check if server is running
 check_server() {
-    curl -s http://localhost:4000/api/ping > /dev/null 2>&1
+    curl -s --connect-timeout 2 --max-time 5 http://localhost:4000/api/ping > /dev/null 2>&1
     return $?
 }
 
@@ -25,19 +25,35 @@ get_server_pid() {
 case "$1" in
     status)
         echo "🔍 Checking server status..."
+        
+        # First check if process exists
+        PID=$(get_server_pid)
+        if [ -z "$PID" ]; then
+            echo -e "${RED}❌ No server process found${NC}"
+            exit 1
+        fi
+        
+        echo "📍 Found server process (PID: $PID)"
+        
+        # Check if it's responding to HTTP
+        echo -n "🌐 Checking HTTP response..."
         if check_server; then
-            PID=$(get_server_pid)
-            echo -e "${GREEN}✅ Server is running${NC} (PID: $PID)"
+            echo -e " ${GREEN}✓${NC}"
             
             # Get detailed status
-            STATUS=$(curl -s http://localhost:4000/api/status)
-            if [ $? -eq 0 ]; then
+            STATUS=$(curl -s --connect-timeout 2 --max-time 5 http://localhost:4000/api/status 2>/dev/null)
+            if [ $? -eq 0 ] && [ ! -z "$STATUS" ]; then
                 echo ""
                 echo "📊 Server Details:"
-                echo "$STATUS" | python -m json.tool | grep -E '"auto_trader"|"history_loaded"|"websocket"' | sed 's/^/  /'
+                echo "$STATUS" | python -m json.tool 2>/dev/null | grep -E '"auto_trader"|"history_loaded"|"websocket"' | sed 's/^/  /' || echo "  Unable to parse status"
+            else
+                echo -e "\n${YELLOW}⚠️  Server is running but not responding to status requests${NC}"
             fi
         else
-            echo -e "${RED}❌ Server is not running${NC}"
+            echo -e " ${RED}✗${NC}"
+            echo -e "${YELLOW}⚠️  Server process exists but is not responding${NC}"
+            echo "   The server may be starting up or stuck."
+            echo "   Check logs with: $0 logs"
             exit 1
         fi
         ;;
@@ -79,7 +95,7 @@ case "$1" in
         fi
         
         # Try graceful shutdown first
-        curl -X POST http://localhost:4000/api/shutdown 2>/dev/null
+        curl -s --connect-timeout 2 --max-time 5 -X POST http://localhost:4000/api/shutdown 2>/dev/null
         
         # Wait for graceful shutdown
         echo -n "   Waiting for graceful shutdown"
