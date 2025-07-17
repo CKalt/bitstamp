@@ -499,6 +499,14 @@ Initializing connection to remote server...
                     # Check if auto trader is initialized
                     auto_trader = data.get('auto_trader', {})
                     if not auto_trader.get('active', False):
+                        # Check if we should auto_resume
+                        if data.get('auto_resume', False) and not data.get('history_loading', False):
+                            print("\r📊 Executing auto_resume..." + " " * 30)
+                            response = self.send_command("auto_resume")
+                            if response and response.get('success'):
+                                print("\r✅ Auto-resume executed successfully" + " " * 30)
+                                time.sleep(1)  # Give server a moment to initialize
+                                continue
                         status = "Waiting for trading strategy to initialize"
                     # Check if history is still loading
                     elif data.get('history_loading', False):
