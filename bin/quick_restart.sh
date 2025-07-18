@@ -82,6 +82,9 @@ start_server() {
         echo "   Will load data from scratch (this may take time)"
     fi
     
+    # Source virtual environment first
+    source env/bin/activate
+    
     # Start server in background
     nohup python src/tdr_server.py > logs/server_restart.log 2>&1 &
     
