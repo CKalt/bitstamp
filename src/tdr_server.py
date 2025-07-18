@@ -82,13 +82,12 @@ def auto_load_history():
         if os.path.exists(log_file):
             # Get config parameters
             best_strategy = server_config.get('best_strategy', {})
-            start_back = best_strategy.get('start_window_days_back', 30)
-            end_back = best_strategy.get('end_window_days_back', 0)
-            now = datetime.now()
-            start_date = now - timedelta(days=start_back) if start_back else None
-            end_date = now - timedelta(days=end_back) if end_back else None
             
-            logger.info(f"Loading historical data from {log_file}")
+            # Load ALL data - no date filtering
+            start_date = None
+            end_date = None
+            
+            logger.info(f"Loading ALL historical data from {log_file}")
             
             # Create a custom progress monitoring approach
             import sys
@@ -718,13 +717,9 @@ def load_history():
             
             log_file = 'btcusd.log'
             if os.path.exists(log_file):
-                # Get config parameters
-                best_strategy = server_config.get('best_strategy', {})
-                start_back = best_strategy.get('start_window_days_back', 30)
-                end_back = best_strategy.get('end_window_days_back', 0)
-                now = datetime.now()
-                start_date = now - timedelta(days=start_back) if start_back else None
-                end_date = now - timedelta(days=end_back) if end_back else None
+                # Load ALL data - no date filtering
+                start_date = None
+                end_date = None
                 
                 # Try to load from cache first
                 df = None
