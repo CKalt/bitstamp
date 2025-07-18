@@ -1918,6 +1918,43 @@ class CryptoShell(cmd.Cmd):
         print(f"\nSession Duration: {hours:.1f} hours\n")
         print("━"*50)
 
+    def do_force_pivot_update(self, arg):
+        """Force update pivot levels to protect current profit"""
+        if not self.auto_trader or not self.auto_trader.running:
+            print("Auto-trading is not running.")
+            return
+            
+        try:
+            # Get current price
+            current_price = self.data_manager.get_current_price(self.auto_trader.symbol)
+            strategy = self.auto_trader.strategy
+            
+            # Calculate proper pivot levels
+            position_size = abs(strategy.position_size)
+            entry_price = strategy.position_cost_basis / position_size if position_size != 0 else 0
+            position_value = position_size * current_price
+            
+            # Use 0.5% of position value or $200 minimum
+            min_profit_buffer = max(200, position_value * 0.005)
+            
+            if strategy.position == 1:  # LONG
+                new_support = entry_price + min_profit_buffer
+                # Force update the pivot tracker
+                if hasattr(self.auto_trader, 'pivot_tracker'):
+                    old_support = self.auto_trader.pivot_tracker.get('support_level', 0)
+                    self.auto_trader.pivot_tracker['support_level'] = new_support
+                    print(f"✅ FORCED PIVOT UPDATE:")
+                    print(f"   Entry: ${entry_price:.0f}")
+                    print(f"   Position value: ${position_value:.0f}")
+                    print(f"   Buffer (0.5%): ${min_profit_buffer:.0f}")
+                    print(f"   OLD support: ${old_support:.0f}")
+                    print(f"   NEW support: ${new_support:.0f}")
+                    print(f"   This protects ${new_support - entry_price:.0f} of profit!")
+                else:
+                    print("❌ No pivot_tracker found")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            
     def do_test_pivot(self, arg):
         """Test command to debug pivot issues"""
         print("TEST: This is a test command")
