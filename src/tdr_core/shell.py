@@ -1918,6 +1918,32 @@ class CryptoShell(cmd.Cmd):
         print(f"\nSession Duration: {hours:.1f} hours\n")
         print("━"*50)
 
+    def do_recalc_pivots(self, arg):
+        """
+        Force recalculation of pivot levels. Usage: recalc_pivots
+        
+        Forces the system to recalculate pivot support/resistance levels
+        based on current position and market conditions.
+        """
+        if not self.check_auto_trader():
+            return
+            
+        try:
+            if hasattr(self.auto_trader.strategy, 'pivot_tracker'):
+                # Force unlock and recalculate
+                self.auto_trader.strategy.pivot_tracker['levels_locked'] = False
+                self.auto_trader.strategy.pivot_tracker['last_position_flip'] = None
+                
+                print("🔄 Forcing pivot level recalculation...")
+                print(f"   Previous support: ${self.auto_trader.strategy.pivot_tracker.get('support_level', 0):.0f}")
+                print(f"   Previous resistance: ${self.auto_trader.strategy.pivot_tracker.get('resistance_level', 0):.0f}")
+                print("\n✅ Pivot levels unlocked - will recalculate on next update")
+                print("   Run 'status long' to see new levels")
+            else:
+                print("❌ No pivot tracker found")
+        except Exception as e:
+            print(f"❌ Error recalculating pivots: {e}")
+            
     def do_server_restart(self, arg):
         """
         Restart the server with latest code changes. Usage: server_restart
