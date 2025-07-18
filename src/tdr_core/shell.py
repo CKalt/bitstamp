@@ -1918,6 +1918,35 @@ class CryptoShell(cmd.Cmd):
         print(f"\nSession Duration: {hours:.1f} hours\n")
         print("━"*50)
 
+    def do_check_pivot(self, arg):
+        """
+        Check current pivot levels. Usage: check_pivot
+        
+        Shows current pivot tracker state and values.
+        """
+        if not self.check_auto_trader():
+            return
+            
+        print("🔍 Checking pivot tracker location...")
+        
+        if hasattr(self.auto_trader, 'pivot_tracker'):
+            pt = self.auto_trader.pivot_tracker
+            print("✅ Found pivot_tracker on auto_trader")
+            print(f"   Support: ${pt.get('support_level', 0):.0f}")
+            print(f"   Resistance: ${pt.get('resistance_level', 0):.0f}")
+            print(f"   Locked: {pt.get('levels_locked', False)}")
+        else:
+            print("❌ No pivot_tracker on auto_trader")
+            
+        if hasattr(self.auto_trader, 'strategy') and hasattr(self.auto_trader.strategy, 'pivot_tracker'):
+            pt = self.auto_trader.strategy.pivot_tracker
+            print("✅ Found pivot_tracker on strategy")
+            print(f"   Support: ${pt.get('support_level', 0):.0f}")
+            print(f"   Resistance: ${pt.get('resistance_level', 0):.0f}")
+            print(f"   Locked: {pt.get('levels_locked', False)}")
+        else:
+            print("❌ No pivot_tracker on strategy")
+            
     def do_recalc_pivots(self, arg):
         """
         Force recalculation of pivot levels. Usage: recalc_pivots
@@ -1929,41 +1958,35 @@ class CryptoShell(cmd.Cmd):
             return
             
         try:
-            # Check both locations where pivot_tracker might be
-            if hasattr(self.auto_trader, 'pivot_tracker'):
-                pivot_tracker = self.auto_trader.pivot_tracker
-                strategy = self.auto_trader
-                print("Found pivot_tracker on auto_trader")
-            elif hasattr(self.auto_trader.strategy, 'pivot_tracker'):
-                pivot_tracker = self.auto_trader.strategy.pivot_tracker
-                strategy = self.auto_trader.strategy
-                print("Found pivot_tracker on strategy")
-            else:
-                print("❌ No pivot tracker found on auto_trader or strategy")
+            # The pivot_tracker is on auto_trader, but we need strategy for other values
+            if not hasattr(self.auto_trader, 'pivot_tracker'):
+                print("❌ No pivot tracker found on auto_trader")
                 return
                 
-            if pivot_tracker:
-                # Get current values
-                current_price = strategy.data_manager.get_current_price(strategy.symbol)
-                position_size = abs(strategy.position_size)
-                entry_price = strategy.position_cost_basis / position_size if position_size != 0 else 0
+            pivot_tracker = self.auto_trader.pivot_tracker
+            strategy = self.auto_trader.strategy
+            
+            # Get current values - these are on the strategy
+            current_price = self.data_manager.get_current_price(self.auto_trader.symbol)
+            position_size = abs(strategy.position_size)
+            entry_price = strategy.position_cost_basis / position_size if position_size != 0 else 0
+            
+            print("🔄 Forcing pivot level recalculation...")
+            print(f"   Current price: ${current_price:.0f}")
+            print(f"   Entry price: ${entry_price:.0f}")
+            print(f"   Position value: ${position_size * current_price:.0f}")
+            print(f"   Current profit: ${(current_price - entry_price) * position_size:.0f}")
+            
+            # Calculate new profit buffer
+            position_value = position_size * current_price
+            min_profit_buffer = max(200, position_value * 0.005)
+            
+            print(f"\n📊 New calculation:")
+            print(f"   Position value: ${position_value:.0f}")
+            print(f"   Profit buffer (0.5% or $200): ${min_profit_buffer:.0f}")
                 
-                print("🔄 Forcing pivot level recalculation...")
-                print(f"   Current price: ${current_price:.0f}")
-                print(f"   Entry price: ${entry_price:.0f}")
-                print(f"   Position value: ${position_size * current_price:.0f}")
-                print(f"   Current profit: ${(current_price - entry_price) * position_size:.0f}")
-                
-                # Calculate new profit buffer
-                position_value = position_size * current_price
-                min_profit_buffer = max(200, position_value * 0.005)
-                
-                print(f"\n📊 New calculation:")
-                print(f"   Position value: ${position_value:.0f}")
-                print(f"   Profit buffer (0.5% or $200): ${min_profit_buffer:.0f}")
-                
-                # Force new levels
-                if strategy.position == 1:  # LONG
+            # Force new levels
+            if strategy.position == 1:  # LONG
                     new_support = entry_price + min_profit_buffer
                     old_support = pivot_tracker.get('support_level', 0)
                     
@@ -1977,8 +2000,8 @@ class CryptoShell(cmd.Cmd):
                         print(f"   This protects ${min_profit_buffer:.0f} of profit!")
                     else:
                         print(f"\n⚠️  Current support ${old_support:.0f} already protects more than ${new_support:.0f}")
-                else:  # SHORT
-                    new_resistance = entry_price - min_profit_buffer
+            else:  # SHORT
+                new_resistance = entry_price - min_profit_buffer
                     old_resistance = pivot_tracker.get('resistance_level', 0)
                     
                     if new_resistance < old_resistance:
@@ -1987,10 +2010,8 @@ class CryptoShell(cmd.Cmd):
                         print(f"\n✅ Updated SHORT pivot protection:")
                         print(f"   OLD resistance: ${old_resistance:.0f}")
                         print(f"   NEW resistance: ${new_resistance:.0f}")
-                
-                print("\n   Run 'status long' to see updated levels")
-            else:
-                print("❌ No pivot tracker found")
+            
+            print("\n   Run 'status long' to see updated levels")
         except Exception as e:
             print(f"❌ Error recalculating pivots: {e}")
             
