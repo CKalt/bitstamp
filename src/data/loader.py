@@ -74,7 +74,6 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
         metadata = json.load(file)
 
     total_lines = metadata['total_lines']
-    parsing_progress['total_lines'] = total_lines
     parsing_progress['status'] = 'Starting'
     print(f"Total lines in log file: {total_lines}")
 
@@ -92,13 +91,8 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
     
     # Calculate interval for status updates
     lines_to_process = total_lines - start_line + 1
-    # Update every 1M lines, or for small datasets every 10%
-    if lines_to_process > 1000000:  # More than 1M lines
-        status_interval = 1000000  # Every 1M lines
-    elif lines_to_process > 100000:  # Between 100k and 1M
-        status_interval = 100000  # Every 100k lines
-    else:
-        status_interval = max(10000, lines_to_process // 10)  # 10% intervals for small files
+    # Always update every 1M lines for console output
+    status_interval = 1000000  # Every 1M lines
     next_status_line = start_line + status_interval
     
     print(f"Total lines in file: {total_lines:,}")
@@ -107,6 +101,7 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
     print(f"Progress interval: Every {status_interval:,} lines")
     
     # Update initial progress
+    parsing_progress['total_lines'] = lines_to_process  # Lines we're actually processing, not file total
     parsing_progress['processed_lines'] = 0
     parsing_progress['percent'] = 0
     parsing_progress['status'] = f'Starting to process {lines_to_process:,} lines'
@@ -127,7 +122,8 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
             # Show status updates periodically to console
             if i >= next_status_line:
                 parsing_progress['status'] = f'Processing line {current_line:,} of {lines_to_process:,}'
-                print(f"Status: Reading historical data - {current_line:,} lines processed ({parsing_progress['percent']}%) - Last date: {last_date}")
+                # Show actual line number from file and percentage
+                print(f"Status: Reading historical data - Line {i:,} ({current_line:,}/{lines_to_process:,} processed, {parsing_progress['percent']}%) - Last date: {last_date}")
                 next_status_line += status_interval
 
             try:
