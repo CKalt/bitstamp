@@ -8,7 +8,6 @@ import json
 import logging
 import threading
 import asyncio
-import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 try:
@@ -154,40 +153,23 @@ def auto_load_history():
                 server_config['history_status'] = "Status: Processing DataFrame columns..."
                 logger.info("Processing DataFrame...")
                 
-                # Convert timestamps to datetime index
-                df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
-                df.set_index('datetime', inplace=True)
-                
-                # Aggregate trades to hourly bars to save memory
-                logger.info(f"Aggregating {len(df):,} trades to hourly bars...")
-                server_config['history_status'] = "Status: Aggregating trades to hourly bars..."
-                
-                # Use the configured frequency from best_strategy
-                frequency = best_strategy.get('Frequency', '1H')
-                
-                # Resample to hourly (or configured frequency) bars
-                df_hourly = df.resample(frequency).agg({
-                    'price': ['first', 'max', 'min', 'last'],
-                    'amount': 'sum',
-                    'type': 'count'  # Number of trades
-                })
-                
-                # Flatten column names
-                df_hourly.columns = ['open', 'high', 'low', 'close', 'volume', 'trades']
-                
-                # Remove any rows with no data
-                df_hourly = df_hourly.dropna()
-                
-                logger.info(f"Aggregated to {len(df_hourly):,} {frequency} bars (memory saved: {(1 - len(df_hourly)/len(df))*100:.1f}%)")
+                # Process the dataframe like in main tdr.py (original approach)
+                df.rename(columns={'price': 'close'}, inplace=True)
+                df['open'] = df['close']
+                df['high'] = df['close']
+                df['low'] = df['close']
+                df['trades'] = 1
+                if 'volume' not in df.columns:
+                    df['volume'] = df.get('amount', 0.0)
                 
                 # Loading into data manager
                 server_config['current_phase'] = 'loading_data'
-                server_config['history_status'] = "Status: Loading aggregated data into manager..."
-                logger.info("Loading aggregated data into manager...")
+                server_config['history_status'] = "Status: Loading data into manager..."
+                logger.info("Loading data into manager...")
                 
-                data_manager.load_historical_data({'btcusd': df_hourly})
-                logger.info(f"Loaded {len(df_hourly)} {frequency} bars")
-                server_config['history_record_count'] = len(df_hourly)
+                data_manager.load_historical_data({'btcusd': df})
+                logger.info(f"Loaded {len(df)} historical records")
+                server_config['history_record_count'] = len(df)
         
         # Final completion
         server_config['history_loaded'] = True
@@ -794,34 +776,14 @@ def load_history():
                     df = parse_log_file(log_file, start_date=start_date, end_date=end_date, progress_callback=progress_callback)
                     
                     if not df.empty:
-                        # Convert timestamps to datetime index
-                        df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
-                        df.set_index('datetime', inplace=True)
-                        
-                        # Aggregate trades to hourly bars to save memory
-                        logger.info(f"Aggregating {len(df):,} trades to hourly bars...")
-                        server_config['history_status'] = "Status: Aggregating trades to hourly bars..."
-                        
-                        # Use the configured frequency from best_strategy
-                        frequency = best_strategy.get('Frequency', '1H')
-                        
-                        # Resample to hourly (or configured frequency) bars
-                        df_hourly = df.resample(frequency).agg({
-                            'price': ['first', 'max', 'min', 'last'],
-                            'amount': 'sum',
-                            'type': 'count'  # Number of trades
-                        })
-                        
-                        # Flatten column names
-                        df_hourly.columns = ['open', 'high', 'low', 'close', 'volume', 'trades']
-                        
-                        # Remove any rows with no data
-                        df_hourly = df_hourly.dropna()
-                        
-                        logger.info(f"Aggregated to {len(df_hourly):,} {frequency} bars (memory saved: {(1 - len(df_hourly)/len(df))*100:.1f}%)")
-                        
-                        # Use aggregated data for caching and loading
-                        df = df_hourly
+                        # Process the dataframe like in main tdr.py (original approach)
+                        df.rename(columns={'price': 'close'}, inplace=True)
+                        df['open'] = df['close']
+                        df['high'] = df['close']
+                        df['low'] = df['close']
+                        df['trades'] = 1
+                        if 'volume' not in df.columns:
+                            df['volume'] = df.get('amount', 0.0)
                         
                         # Save to cache for next time
                         if CACHE_ENABLED and not cache_used:
