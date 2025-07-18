@@ -2006,7 +2006,7 @@ class CryptoShell(cmd.Cmd):
             # Use 0.5% of position value or $200 minimum
             min_profit_buffer = max(200, position_value * 0.005)
             
-            if strategy.position == 1:  # LONG
+            if self.auto_trader.position == 1:  # LONG
                 new_support = entry_price + min_profit_buffer
                 # Force update the pivot tracker
                 if hasattr(self.auto_trader, 'pivot_tracker'):
@@ -2107,12 +2107,11 @@ class CryptoShell(cmd.Cmd):
                 return
                 
             pivot_tracker = self.auto_trader.pivot_tracker
-            strategy = self.auto_trader.strategy
             
-            # Get current values - these are on the strategy
+            # Get current values - auto_trader IS the strategy
             current_price = self.data_manager.get_current_price(self.auto_trader.symbol)
-            position_size = abs(strategy.position_size)
-            entry_price = strategy.position_cost_basis / position_size if position_size != 0 else 0
+            position_size = abs(self.auto_trader.position_size)
+            entry_price = self.auto_trader.position_cost_basis / position_size if position_size != 0 else 0
             
             print("🔄 Forcing pivot level recalculation...")
             print(f"   Current price: ${current_price:.0f}")
@@ -2129,7 +2128,7 @@ class CryptoShell(cmd.Cmd):
             print(f"   Profit buffer (0.5% or $200): ${min_profit_buffer:.0f}")
                 
             # Force new levels
-            if strategy.position == 1:  # LONG
+            if self.auto_trader.position == 1:  # LONG
                     new_support = entry_price + min_profit_buffer
                     old_support = pivot_tracker.get('support_level', 0)
                     
