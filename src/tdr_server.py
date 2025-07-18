@@ -23,6 +23,8 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 sys.path.append(current_dir)
+# Add src to path for tdr_core imports
+sys.path.insert(0, os.path.join(parent_dir, 'src'))
 
 # Import core TDR components
 from data.loader import parse_log_file
@@ -32,15 +34,10 @@ from tdr_core.websocket_client import subscribe_to_websocket
 from tdr_core.order_placer import OrderPlacer
 from tdr_core.strategies import MACrossoverStrategy, AdaptiveMultiStrategy
 from tdr_core.shell import CryptoShell
-from tdr_core.auto_trade_monitor import AutoTradeMonitor
+# from tdr_core.auto_trade_monitor import AutoTradeMonitor  # Removed - reverting to simple approach
 
-# Import data persistence for fast restarts
-try:
-    from data_persistence import DataPersistence
-    CACHE_ENABLED = True
-except ImportError:
-    CACHE_ENABLED = False
-    print("Warning: Data caching not available - restarts will be slower")
+# Disable caching - reverting to simple approach
+CACHE_ENABLED = False
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -51,7 +48,7 @@ data_manager = None
 order_placer = None
 shell = None
 auto_trader = None
-auto_trade_monitor = None
+# auto_trade_monitor = None  # Removed - reverting to simple approach
 websocket_thread = None
 stop_event = threading.Event()
 logger = None
@@ -175,13 +172,7 @@ def auto_load_history():
         server_config['history_status'] = f"Status: Complete - {server_config.get('history_record_count', 0):,} records loaded"
         logger.info("Historical data loaded successfully")
         
-        # Start incremental log reader to catch new trades
-        global incremental_reader
-        log_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'btcusd.log')
-        if os.path.exists(log_file):
-            incremental_reader = IncrementalLogReader(log_file, data_manager, check_interval=5)
-            incremental_reader.start()
-            logger.info("Started incremental log reader for real-time data updates")
+        # WebSocket will handle live data updates
         
         # CRITICAL: Sync position tracking after history loads
         # This ensures entry price is preserved when auto-trader is already running
@@ -634,19 +625,15 @@ def execute_command():
             
             # Update global auto_trader reference if changed
             if shell.auto_trader:
-                global auto_trader, auto_trade_monitor
+                global auto_trader
                 auto_trader = shell.auto_trader
                 
-                # Start the auto trade monitor if not already running
-                if auto_trade_monitor is None or not auto_trade_monitor.running:
-                    auto_trade_monitor = AutoTradeMonitor(auto_trader, data_manager, check_interval=30)
-                    auto_trade_monitor.start()
-                    logger.info("Started auto trade monitor for real-time signal checking")
+                # Removed auto trade monitor - keeping it simple
                 
                 result['auto_trader'] = {
                     'active': shell.auto_trader.running if hasattr(shell.auto_trader, 'running') else False,
                     'strategy': type(shell.auto_trader).__name__,
-                    'monitor_active': auto_trade_monitor.running if auto_trade_monitor else False
+                    # 'monitor_active': Removed - keeping it simple
                 }
             
             return jsonify(result), 200
