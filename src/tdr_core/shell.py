@@ -2145,14 +2145,14 @@ class CryptoShell(cmd.Cmd):
                         print(f"\n⚠️  Current support ${old_support:.0f} already protects more than ${new_support:.0f}")
             else:  # SHORT
                 new_resistance = entry_price - min_profit_buffer
-                    old_resistance = pivot_tracker.get('resistance_level', 0)
-                    
-                    if new_resistance < old_resistance:
-                        pivot_tracker['resistance_level'] = new_resistance
-                        pivot_tracker['levels_locked'] = True
-                        print(f"\n✅ Updated SHORT pivot protection:")
-                        print(f"   OLD resistance: ${old_resistance:.0f}")
-                        print(f"   NEW resistance: ${new_resistance:.0f}")
+                old_resistance = pivot_tracker.get('resistance_level', 0)
+                
+                if new_resistance < old_resistance:
+                    pivot_tracker['resistance_level'] = new_resistance
+                    pivot_tracker['levels_locked'] = True
+                    print(f"\n✅ Updated SHORT pivot protection:")
+                    print(f"   OLD resistance: ${old_resistance:.0f}")
+                    print(f"   NEW resistance: ${new_resistance:.0f}")
             
             print("\n   Run 'status long' to see updated levels")
         except Exception as e:
