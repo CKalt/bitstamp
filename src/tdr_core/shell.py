@@ -2013,6 +2013,26 @@ class CryptoShell(cmd.Cmd):
         except Exception as e:
             print(f"❌ Error: {e}")
             
+    def do_unlock_pivots(self, arg):
+        """Unlock pivot levels to allow recalculation"""
+        if not self.auto_trader or not self.auto_trader.running:
+            print("Auto-trading is not running.")
+            return
+            
+        if hasattr(self.auto_trader, 'force_pivot_recalculation'):
+            result = self.auto_trader.force_pivot_recalculation()
+            if result:
+                print("✅ Pivot levels unlocked - will recalculate on next update")
+            else:
+                print("❌ Failed to unlock pivot levels")
+        else:
+            # Direct unlock
+            if hasattr(self.auto_trader, 'pivot_tracker'):
+                self.auto_trader.pivot_tracker['levels_locked'] = False
+                print("✅ Pivot levels unlocked directly")
+            else:
+                print("❌ No pivot tracker found")
+                
     def do_test_pivot(self, arg):
         """Test command to debug pivot issues"""
         print("TEST: This is a test command")

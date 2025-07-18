@@ -2142,6 +2142,14 @@ class MACrossoverStrategy:
                         self.logger.info(f"  Timestamps: {whipsaw['timestamps']}")
                         self.logger.info(f"  Prices: ${t1['price']:.0f} → ${t2['price']:.0f} → ${t3['price']:.0f}")
     
+    def force_pivot_recalculation(self):
+        """Force immediate recalculation of pivot levels"""
+        if hasattr(self, 'pivot_tracker') and self.pivot_tracker:
+            self.pivot_tracker['levels_locked'] = False
+            self.logger.info("🔓 Pivot levels unlocked for recalculation")
+            return True
+        return False
+        
     def get_whipsaw_stats(self):
         """Get current whipsaw statistics"""
         if not hasattr(self, 'whipsaw_tracker'):
@@ -2728,11 +2736,12 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                         # Use 0.5% of position value or $200, whichever is larger
                                         min_profit_buffer = max(200, position_value * 0.005)
                                         min_support = entry_price + min_profit_buffer
-                                        # ALWAYS update if we're not protecting enough profit
-                                        if True:  # Force update to fix stuck pivots
+                                        if self.pivot_tracker['support_level'] < min_support:
                                             self.logger.warning(f"⚠️ Current support ${self.pivot_tracker['support_level']:.0f} doesn't protect profit!")
                                             self.logger.info(f"💰 Raising support to ${min_support:.0f} to protect ${min_profit_buffer} profit")
                                             self.pivot_tracker['support_level'] = min_support
+                                            # CRITICAL FIX: Unlock levels so they can be recalculated
+                                            self.pivot_tracker['levels_locked'] = False
                                     
                                     # Check if price broke below support
                                     if current_price < self.pivot_tracker['support_level']:
