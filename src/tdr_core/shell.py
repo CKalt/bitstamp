@@ -1929,8 +1929,20 @@ class CryptoShell(cmd.Cmd):
             return
             
         try:
-            strategy = self.auto_trader.strategy
-            if hasattr(strategy, 'pivot_tracker'):
+            # Check both locations where pivot_tracker might be
+            if hasattr(self.auto_trader, 'pivot_tracker'):
+                pivot_tracker = self.auto_trader.pivot_tracker
+                strategy = self.auto_trader
+                print("Found pivot_tracker on auto_trader")
+            elif hasattr(self.auto_trader.strategy, 'pivot_tracker'):
+                pivot_tracker = self.auto_trader.strategy.pivot_tracker
+                strategy = self.auto_trader.strategy
+                print("Found pivot_tracker on strategy")
+            else:
+                print("❌ No pivot tracker found on auto_trader or strategy")
+                return
+                
+            if pivot_tracker:
                 # Get current values
                 current_price = strategy.data_manager.get_current_price(strategy.symbol)
                 position_size = abs(strategy.position_size)
@@ -1953,12 +1965,12 @@ class CryptoShell(cmd.Cmd):
                 # Force new levels
                 if strategy.position == 1:  # LONG
                     new_support = entry_price + min_profit_buffer
-                    old_support = strategy.pivot_tracker.get('support_level', 0)
+                    old_support = pivot_tracker.get('support_level', 0)
                     
                     # Only update if new support is higher
                     if new_support > old_support:
-                        strategy.pivot_tracker['support_level'] = new_support
-                        strategy.pivot_tracker['levels_locked'] = True
+                        pivot_tracker['support_level'] = new_support
+                        pivot_tracker['levels_locked'] = True
                         print(f"\n✅ Updated LONG pivot protection:")
                         print(f"   OLD support: ${old_support:.0f}")
                         print(f"   NEW support: ${new_support:.0f}")
@@ -1967,11 +1979,11 @@ class CryptoShell(cmd.Cmd):
                         print(f"\n⚠️  Current support ${old_support:.0f} already protects more than ${new_support:.0f}")
                 else:  # SHORT
                     new_resistance = entry_price - min_profit_buffer
-                    old_resistance = strategy.pivot_tracker.get('resistance_level', 0)
+                    old_resistance = pivot_tracker.get('resistance_level', 0)
                     
                     if new_resistance < old_resistance:
-                        strategy.pivot_tracker['resistance_level'] = new_resistance
-                        strategy.pivot_tracker['levels_locked'] = True
+                        pivot_tracker['resistance_level'] = new_resistance
+                        pivot_tracker['levels_locked'] = True
                         print(f"\n✅ Updated SHORT pivot protection:")
                         print(f"   OLD resistance: ${old_resistance:.0f}")
                         print(f"   NEW resistance: ${new_resistance:.0f}")
