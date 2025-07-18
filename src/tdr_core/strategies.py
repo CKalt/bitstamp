@@ -2728,7 +2728,8 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                         # Use 0.5% of position value or $200, whichever is larger
                                         min_profit_buffer = max(200, position_value * 0.005)
                                         min_support = entry_price + min_profit_buffer
-                                        if self.pivot_tracker['support_level'] < min_support:
+                                        # ALWAYS update if we're not protecting enough profit
+                                        if True:  # Force update to fix stuck pivots
                                             self.logger.warning(f"⚠️ Current support ${self.pivot_tracker['support_level']:.0f} doesn't protect profit!")
                                             self.logger.info(f"💰 Raising support to ${min_support:.0f} to protect ${min_profit_buffer} profit")
                                             self.pivot_tracker['support_level'] = min_support
