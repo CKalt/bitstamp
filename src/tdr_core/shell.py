@@ -1316,7 +1316,7 @@ class CryptoShell(cmd.Cmd):
         
         Usage: position_history
         """
-        if self.mode == 'server':
+        if hasattr(self, 'mode') and self.mode == 'server':
             print("This command is only available in client mode")
             return
             
@@ -1371,7 +1371,8 @@ class CryptoShell(cmd.Cmd):
         
         Note: This command will be ignored if auto-trading is already active.
         """
-        if self.mode == 'server':
+        # Check if we have a mode attribute (client/server architecture)
+        if hasattr(self, 'mode') and self.mode == 'server':
             # For server mode, check local files
             if self.auto_trader:
                 print("Auto-trader is already running. Resume command ignored.")
@@ -1400,6 +1401,36 @@ class CryptoShell(cmd.Cmd):
             except Exception as e:
                 print(f"Error: {e}")
         else:
+            # Server mode without 'mode' attribute - handle auto_resume
+            if not hasattr(self, 'server_url'):
+                # This is a server-side shell without client features
+                if self.auto_trader:
+                    print("Auto-trader is already running. Resume command ignored.")
+                    return
+                    
+                # Try to resume from local file
+                try:
+                    import os
+                    resume_file = os.path.abspath('resume-auto-trade.json')
+                    if os.path.exists(resume_file):
+                        with open(resume_file, 'r') as f:
+                            import json
+                            data = json.load(f)
+                            
+                        # Execute resume based on saved data
+                        if 'command' in data:
+                            parts = data['command'].split()
+                            if len(parts) >= 4 and parts[0] == 'resume_auto_trade':
+                                resume_args = ' '.join(parts[1:])
+                                print(f"Resuming from saved state: {resume_args}")
+                                self.do_resume_auto_trade(resume_args)
+                                return
+                                
+                    print("No resume file found")
+                except Exception as e:
+                    print(f"Error loading resume file: {e}")
+                return
+                
             # Client mode - query server
             if self.auto_trader:
                 print("Auto-trader is already running. Resume command ignored.")
