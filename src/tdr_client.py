@@ -511,7 +511,19 @@ Initializing connection to remote server...
                     # Check if history is still loading
                     elif data.get('history_loading', False):
                         history_status = data.get('history_status', 'Loading historical data')
-                        status = f"Loading historical data: {history_status}"
+                        current_phase = data.get('current_phase', '')
+                        
+                        # Extract progress information if available
+                        if 'Processed' in history_status and 'lines' in history_status:
+                            status = history_status
+                        elif current_phase == 'parsing':
+                            status = "📂 Parsing historical data file..."
+                        elif current_phase == 'creating_dataframe':
+                            status = "📊 Creating DataFrame from parsed data..."
+                        elif current_phase == 'processing':
+                            status = "⚙️ Processing historical data..."
+                        else:
+                            status = f"Loading: {history_status}"
                     # Check if we're waiting for history to load
                     elif not data.get('history_loaded', False) and data.get('auto_resume', False):
                         status = "Waiting for historical data to load"
@@ -527,10 +539,15 @@ Initializing connection to remote server...
                             print("   • Trading commands will wait for history to complete")
                         return
                     
-                    # Update status display
+                    # Update status display with better formatting
                     if status != last_status:
-                        print(f"\r{spinner[spinner_idx]} {status}" + " " * 20, end='', flush=True)
+                        # Clear line and print new status
+                        print(f"\r{spinner[spinner_idx]} {status}" + " " * 30, end='', flush=True)
                         last_status = status
+                        
+                        # If it's a major progress update, also log it on a new line
+                        if 'Processed' in status and 'lines' in status:
+                            print()  # New line for progress updates
                     else:
                         print(f"\r{spinner[spinner_idx]} {status}", end='', flush=True)
                     

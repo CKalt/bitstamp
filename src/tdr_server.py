@@ -135,6 +135,8 @@ def auto_load_history():
             
             try:
                 logger.info("Starting parse_log_file...")
+                logger.info(f"Loading {os.path.getsize(log_file) / 1024 / 1024:.1f}MB of historical data")
+                logger.info("This will take 3-5 minutes, progress will be shown every 100,000 lines")
                 # Parse log file - it will update status messages directly
                 df = parse_log_file(log_file, start_date=start_date, end_date=end_date)
                 logger.info(f"parse_log_file completed with {len(df) if not df.empty else 0} records")
