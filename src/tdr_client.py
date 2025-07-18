@@ -483,111 +483,36 @@ Initializing connection to remote server...
             return False
     
     def wait_for_server_ready(self):
-        """Wait for server to be fully ready (strategy initialized, history loaded if needed)"""
-        print("\n⏳ Waiting for server to be ready...")
+        """Check server status and show current state"""
+        print("\n⏳ Checking server status...")
         
-        spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-        spinner_idx = 0
-        last_status = ""
-        last_progress_check = 0
-        
-        while True:
-            try:
-                response = requests.get(f"{self.server_url}/api/status", timeout=5)
-                if response.status_code == 200:
-                    data = response.json()
-                    
-                    # Check if history is still loading FIRST
-                    if data.get('history_loading', False):
-                        # Check detailed history progress every 3 seconds
-                        current_time = time.time()
-                        time_since_last_check = current_time - last_progress_check
-                        if time_since_last_check >= 3.0:
-                            try:
-                                # Make the history_status API call
-                                history_response = requests.get(f"{self.server_url}/api/history_status", timeout=5)
-                                if history_response.status_code == 200:
-                                    history_data = history_response.json()
-                                    parsing_progress = history_data.get('parsing_progress', {})
-                                    
-                                    if parsing_progress.get('total_lines', 0) > 0:
-                                        total = parsing_progress['total_lines']
-                                        processed = parsing_progress['processed_lines']
-                                        percent = parsing_progress['percent']
-                                        status = f"Processing: {processed:,}/{total:,} lines ({percent}%)"
-                                    else:
-                                        # Fallback to status message
-                                        status = history_data.get('history_status', 'Loading historical data')
-                                        
-                                    last_progress_check = current_time
-                            except:
-                                # If history_status fails, use data from main status
-                                history_status = data.get('history_status', 'Loading historical data')
-                                current_phase = data.get('current_phase', '')
-                                
-                                # Extract progress information if available
-                                if 'Processed' in history_status and 'lines' in history_status:
-                                    status = history_status
-                                elif current_phase == 'parsing':
-                                    status = "📂 Parsing historical data file..."
-                                elif current_phase == 'creating_dataframe':
-                                    status = "📊 Creating DataFrame from parsed data..."
-                                elif current_phase == 'processing':
-                                    status = "⚙️ Processing historical data..."
-                                else:
-                                    status = f"Loading: {history_status}"
-                        else:
-                            # Don't update status between 3-second checks
-                            if not last_status:
-                                status = "Loading historical data..."
-                            else:
-                                status = last_status
-                    # Check if auto trader is initialized
-                    elif not data.get('auto_trader', {}).get('active', False):
-                        # Check if we should auto_resume
-                        if data.get('auto_resume', False) and not data.get('history_loading', False):
-                            print("\r📊 Executing auto_resume..." + " " * 30)
-                            response = self.send_command("auto_resume")
-                            if response and response.get('success'):
-                                print("\r✅ Auto-resume executed successfully" + " " * 30)
-                                time.sleep(1)  # Give server a moment to initialize
-                                continue
-                        status = "Waiting for trading strategy to initialize"
-                    # Check if we're waiting for history to load
-                    elif not data.get('history_loaded', False) and data.get('auto_resume', False):
-                        status = "Waiting for historical data to load"
-                    else:
-                        # Server is ready
-                        print("\r✅ Server is ready for commands!" + " " * 50)
-                        
-                        # Note about commands that don't need history
-                        if data.get('history_loading', False) or not data.get('history_loaded', False):
-                            print("\n📌 Note: Some commands work without historical data:")
-                            print("   • whipsaw_stats, show_trade_sequence (use trades.json)")
-                            print("   • status, trades, positions (use current state)")
-                            print("   • Trading commands will wait for history to complete")
-                        return
-                    
-                    # Update status display with better formatting
-                    if status != last_status:
-                        # Clear line and print new status
-                        print(f"\r{spinner[spinner_idx]} {status}" + " " * 30, end='', flush=True)
-                        last_status = status
-                        
-                        # If it's a major progress update, also log it on a new line
-                        if ('Processed' in status and 'lines' in status) or 'Processing:' in status:
-                            print()  # New line for progress updates
-                    else:
-                        print(f"\r{spinner[spinner_idx]} {status}", end='', flush=True)
-                    
-                    spinner_idx = (spinner_idx + 1) % len(spinner)
+        try:
+            # Check history loading status
+            response = requests.get(f"{self.server_url}/api/history_status", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('history_loading'):
+                    print(f"📚 History is loading: {data.get('history_status', 'Processing...')}")
+                    print("   You can start using commands while history loads in background")
+                elif data.get('history_loaded'):
+                    print(f"✅ History loaded: {data.get('record_count', 0):,} records")
                 else:
-                    print(f"\r⚠️  Server returned status {response.status_code}", end='', flush=True)
-                    
-            except Exception as e:
-                print(f"\r⚠️  Error checking server status: {e}", end='', flush=True)
+                    print("❌ History not loaded yet")
             
-            time.sleep(0.5)
+            # Check auto trader status
+            response = requests.get(f"{self.server_url}/api/status", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('auto_trader', {}).get('active'):
+                    print("✅ Auto trader is running")
+                else:
+                    print("❌ Auto trader not running - use 'resume_auto_trade' to start")
+                    
+        except Exception as e:
+            print(f"⚠️  Could not check server status: {e}")
+        
+        print("\n✅ Server is ready for commands!")
+        return
     
     def update_status(self):
         """Update cached status from server"""
