@@ -1929,16 +1929,54 @@ class CryptoShell(cmd.Cmd):
             return
             
         try:
-            if hasattr(self.auto_trader.strategy, 'pivot_tracker'):
-                # Force unlock and recalculate
-                self.auto_trader.strategy.pivot_tracker['levels_locked'] = False
-                self.auto_trader.strategy.pivot_tracker['last_position_flip'] = None
+            strategy = self.auto_trader.strategy
+            if hasattr(strategy, 'pivot_tracker'):
+                # Get current values
+                current_price = strategy.data_manager.get_current_price(strategy.symbol)
+                position_size = abs(strategy.position_size)
+                entry_price = strategy.position_cost_basis / position_size if position_size != 0 else 0
                 
                 print("🔄 Forcing pivot level recalculation...")
-                print(f"   Previous support: ${self.auto_trader.strategy.pivot_tracker.get('support_level', 0):.0f}")
-                print(f"   Previous resistance: ${self.auto_trader.strategy.pivot_tracker.get('resistance_level', 0):.0f}")
-                print("\n✅ Pivot levels unlocked - will recalculate on next update")
-                print("   Run 'status long' to see new levels")
+                print(f"   Current price: ${current_price:.0f}")
+                print(f"   Entry price: ${entry_price:.0f}")
+                print(f"   Position value: ${position_size * current_price:.0f}")
+                print(f"   Current profit: ${(current_price - entry_price) * position_size:.0f}")
+                
+                # Calculate new profit buffer
+                position_value = position_size * current_price
+                min_profit_buffer = max(200, position_value * 0.005)
+                
+                print(f"\n📊 New calculation:")
+                print(f"   Position value: ${position_value:.0f}")
+                print(f"   Profit buffer (0.5% or $200): ${min_profit_buffer:.0f}")
+                
+                # Force new levels
+                if strategy.position == 1:  # LONG
+                    new_support = entry_price + min_profit_buffer
+                    old_support = strategy.pivot_tracker.get('support_level', 0)
+                    
+                    # Only update if new support is higher
+                    if new_support > old_support:
+                        strategy.pivot_tracker['support_level'] = new_support
+                        strategy.pivot_tracker['levels_locked'] = True
+                        print(f"\n✅ Updated LONG pivot protection:")
+                        print(f"   OLD support: ${old_support:.0f}")
+                        print(f"   NEW support: ${new_support:.0f}")
+                        print(f"   This protects ${min_profit_buffer:.0f} of profit!")
+                    else:
+                        print(f"\n⚠️  Current support ${old_support:.0f} already protects more than ${new_support:.0f}")
+                else:  # SHORT
+                    new_resistance = entry_price - min_profit_buffer
+                    old_resistance = strategy.pivot_tracker.get('resistance_level', 0)
+                    
+                    if new_resistance < old_resistance:
+                        strategy.pivot_tracker['resistance_level'] = new_resistance
+                        strategy.pivot_tracker['levels_locked'] = True
+                        print(f"\n✅ Updated SHORT pivot protection:")
+                        print(f"   OLD resistance: ${old_resistance:.0f}")
+                        print(f"   NEW resistance: ${new_resistance:.0f}")
+                
+                print("\n   Run 'status long' to see updated levels")
             else:
                 print("❌ No pivot tracker found")
         except Exception as e:
