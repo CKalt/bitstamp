@@ -85,9 +85,9 @@ def auto_load_history():
             best_strategy = server_config.get('best_strategy', {})
             
             # Load configured amount of historical data
-            # For auto trading, default to 90 days (enough for indicators)
+            # For auto trading, default to 120 days (enough for indicators and good sample size)
             # Can be overridden with auto_trade_days_back in config
-            auto_trade_days = best_strategy.get('auto_trade_days_back', 90)
+            auto_trade_days = best_strategy.get('auto_trade_days_back', 120)
             
             now = datetime.now()
             start_date = now - timedelta(days=auto_trade_days)
