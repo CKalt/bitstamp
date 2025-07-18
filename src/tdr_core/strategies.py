@@ -2700,7 +2700,10 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                         entry_price = self.position_cost_basis / abs(self.position_size) if self.position_size != 0 else 0
                                         if entry_price > 0 and current_price > entry_price:
                                             # We're profitable - ensure we lock in at least break-even
-                                            min_profit_buffer = 50  # Lock in at least $50 profit
+                                            # Calculate profit buffer based on position size
+                                            position_value = abs(self.position_size) * current_price
+                                            # Use 0.5% of position value or $200, whichever is larger
+                                            min_profit_buffer = max(200, position_value * 0.005)
                                             profit_support = entry_price + min_profit_buffer
                                             self.pivot_tracker['support_level'] = max(calculated_support, profit_support)
                                             
@@ -2720,7 +2723,10 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                     entry_price = self.position_cost_basis / abs(self.position_size) if self.position_size != 0 else 0
                                     if entry_price > 0 and current_price > entry_price:
                                         # We're profitable - ensure support protects profit
-                                        min_profit_buffer = 50
+                                        # Calculate profit buffer based on position size
+                                        position_value = abs(self.position_size) * current_price
+                                        # Use 0.5% of position value or $200, whichever is larger
+                                        min_profit_buffer = max(200, position_value * 0.005)
                                         min_support = entry_price + min_profit_buffer
                                         if self.pivot_tracker['support_level'] < min_support:
                                             self.logger.warning(f"⚠️ Current support ${self.pivot_tracker['support_level']:.0f} doesn't protect profit!")
@@ -2762,7 +2768,10 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                         entry_price = self.last_trade_price  # For SHORT, entry is the SELL price
                                         if entry_price > 0 and current_price < entry_price:
                                             # We're profitable - ensure we lock in at least break-even
-                                            min_profit_buffer = 50  # Lock in at least $50 profit
+                                            # Calculate profit buffer based on position size
+                                            position_value = abs(self.position_size) * current_price
+                                            # Use 0.5% of position value or $200, whichever is larger
+                                            min_profit_buffer = max(200, position_value * 0.005)
                                             profit_resistance = entry_price - min_profit_buffer
                                             self.pivot_tracker['resistance_level'] = min(calculated_resistance, profit_resistance)
                                             
@@ -2781,7 +2790,10 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                                     entry_price = self.last_trade_price  # For SHORT, entry is the SELL price
                                     if entry_price > 0 and current_price < entry_price:
                                         # We're profitable - ensure resistance protects profit
-                                        min_profit_buffer = 50
+                                        # Calculate profit buffer based on position size
+                                        position_value = abs(self.position_size) * current_price
+                                        # Use 0.5% of position value or $200, whichever is larger
+                                        min_profit_buffer = max(200, position_value * 0.005)
                                         max_resistance = entry_price - min_profit_buffer
                                         if self.pivot_tracker['resistance_level'] > max_resistance:
                                             self.logger.warning(f"⚠️ Current resistance ${self.pivot_tracker['resistance_level']:.0f} doesn't protect profit!")
