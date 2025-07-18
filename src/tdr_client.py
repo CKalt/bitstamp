@@ -489,6 +489,7 @@ Initializing connection to remote server...
         spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
         spinner_idx = 0
         last_status = ""
+        last_progress_check = 0
         
         while True:
             try:
@@ -510,20 +511,47 @@ Initializing connection to remote server...
                         status = "Waiting for trading strategy to initialize"
                     # Check if history is still loading
                     elif data.get('history_loading', False):
-                        history_status = data.get('history_status', 'Loading historical data')
-                        current_phase = data.get('current_phase', '')
-                        
-                        # Extract progress information if available
-                        if 'Processed' in history_status and 'lines' in history_status:
-                            status = history_status
-                        elif current_phase == 'parsing':
-                            status = "📂 Parsing historical data file..."
-                        elif current_phase == 'creating_dataframe':
-                            status = "📊 Creating DataFrame from parsed data..."
-                        elif current_phase == 'processing':
-                            status = "⚙️ Processing historical data..."
+                        # Check detailed history progress every 3 seconds
+                        current_time = time.time()
+                        if current_time - last_progress_check >= 3.0:
+                            try:
+                                history_response = requests.get(f"{self.server_url}/api/history_status", timeout=5)
+                                if history_response.status_code == 200:
+                                    history_data = history_response.json()
+                                    parsing_progress = history_data.get('parsing_progress', {})
+                                    
+                                    if parsing_progress.get('total_lines', 0) > 0:
+                                        total = parsing_progress['total_lines']
+                                        processed = parsing_progress['processed_lines']
+                                        percent = parsing_progress['percent']
+                                        status = f"Processing: {processed:,}/{total:,} lines ({percent}%)"
+                                    else:
+                                        # Fallback to status message
+                                        status = history_data.get('history_status', 'Loading historical data')
+                                        
+                                    last_progress_check = current_time
+                            except:
+                                # If history_status fails, use data from main status
+                                history_status = data.get('history_status', 'Loading historical data')
+                                current_phase = data.get('current_phase', '')
+                                
+                                # Extract progress information if available
+                                if 'Processed' in history_status and 'lines' in history_status:
+                                    status = history_status
+                                elif current_phase == 'parsing':
+                                    status = "📂 Parsing historical data file..."
+                                elif current_phase == 'creating_dataframe':
+                                    status = "📊 Creating DataFrame from parsed data..."
+                                elif current_phase == 'processing':
+                                    status = "⚙️ Processing historical data..."
+                                else:
+                                    status = f"Loading: {history_status}"
                         else:
-                            status = f"Loading: {history_status}"
+                            # Don't update status between 3-second checks
+                            if not last_status:
+                                status = "Loading historical data..."
+                            else:
+                                status = last_status
                     # Check if we're waiting for history to load
                     elif not data.get('history_loaded', False) and data.get('auto_resume', False):
                         status = "Waiting for historical data to load"
@@ -546,7 +574,7 @@ Initializing connection to remote server...
                         last_status = status
                         
                         # If it's a major progress update, also log it on a new line
-                        if 'Processed' in status and 'lines' in status:
+                        if ('Processed' in status and 'lines' in status) or 'Processing:' in status:
                             print()  # New line for progress updates
                     else:
                         print(f"\r{spinner[spinner_idx]} {status}", end='', flush=True)
@@ -927,6 +955,16 @@ Initializing connection to remote server...
                     phase = data.get('current_phase', 'unknown')
                     
                     print(f"⏳ {status}")
+                    
+                    # Show detailed parsing progress if available
+                    parsing_progress = data.get('parsing_progress', {})
+                    if parsing_progress.get('total_lines', 0) > 0:
+                        total = parsing_progress['total_lines']
+                        processed = parsing_progress['processed_lines']
+                        percent = parsing_progress['percent']
+                        print(f"   Progress: {processed:,}/{total:,} lines ({percent}%)")
+                        print(f"   Status: {parsing_progress.get('status', 'Processing...')}")
+                    
                     if phase and phase != 'unknown':
                         phase_display = phase.replace('_', ' ').title()
                         print(f"   Phase: {phase_display}")

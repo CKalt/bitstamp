@@ -55,7 +55,16 @@ def get_start_line_from_metadata(metadata_file_path, start_date):
         nearest_date = min(dates, key=lambda x: abs(x - start_date.date()))
         return metadata[str(nearest_date)]['start_line']
 
+# Global variable to track progress
+parsing_progress = {
+    'total_lines': 0,
+    'processed_lines': 0,
+    'status': 'Not started',
+    'percent': 0
+}
+
 def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=None):
+    global parsing_progress
     metadata_file_path = f"{file_path}.metadata"
     if not os.path.exists(metadata_file_path):
         create_metadata_file(file_path, metadata_file_path)
@@ -65,6 +74,8 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
         metadata = json.load(file)
 
     total_lines = metadata['total_lines']
+    parsing_progress['total_lines'] = total_lines
+    parsing_progress['status'] = 'Starting'
     print(f"Total lines in log file: {total_lines}")
 
     start_line = 1
@@ -81,8 +92,8 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
     
     # Calculate interval for status updates
     lines_to_process = total_lines - start_line + 1
-    # Show status updates less frequently to reduce spam
-    status_interval = max(lines_to_process // 5, 500000)  # Every 20% or 500k lines, whichever is larger
+    # Update every 100k lines for consistent progress
+    status_interval = 100000
     next_status_line = start_line + status_interval
 
     with open(file_path, 'r') as file:
@@ -93,7 +104,10 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
             # Show status updates periodically
             if i >= next_status_line:
                 lines_processed = i - start_line + 1
-                print(f"Status: Reading historical data - {lines_processed:,} lines processed - Last date: {last_date}")
+                parsing_progress['processed_lines'] = lines_processed
+                parsing_progress['percent'] = int((lines_processed / lines_to_process) * 100)
+                parsing_progress['status'] = f'Processing line {lines_processed:,} of {total_lines:,}'
+                print(f"Status: Reading historical data - {lines_processed:,} lines processed ({parsing_progress['percent']}%) - Last date: {last_date}")
                 next_status_line += status_interval
 
             try:
@@ -123,6 +137,8 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
                 continue
 
     # Final status update
+    parsing_progress['status'] = 'Creating DataFrame'
+    parsing_progress['percent'] = 100
     print(f"Status: Finished reading {processed_count:,} trades - Last date: {last_date}")
     
     # Log completion details
@@ -133,10 +149,12 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
         logger.info(f"Reached end date: {end_date}")
     
     # Creating DataFrame is a significant operation - signal this
+    parsing_progress['status'] = f'Creating DataFrame from {processed_count:,} trades'
     print(f"Status: Creating DataFrame from {processed_count:,} trades...")
     df = pd.DataFrame(data)
     
     # Signal completion after DataFrame is created
+    parsing_progress['status'] = 'Complete'
     print("Status: DataFrame created successfully")
 
     # Optimize data types

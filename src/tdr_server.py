@@ -824,15 +824,30 @@ def history_status():
     """Check historical data loading status"""
     if not initialization_complete:
         return jsonify({'error': 'Server not initialized'}), 503
-        
-    return jsonify({
+    
+    # Import parsing_progress from loader
+    from data.loader import parsing_progress
+    
+    # Build response with both server config and loader progress
+    response = {
         'history_loaded': server_config.get('history_loaded', False),
         'history_loading': server_config.get('history_loading', False),
         'current_phase': server_config.get('current_phase', 'not_started'),
         'history_status': server_config.get('history_status', ''),
         'history_error': server_config.get('history_error', None),
         'record_count': server_config.get('history_record_count', 0)
-    }), 200
+    }
+    
+    # Add detailed parsing progress if loading
+    if server_config.get('history_loading', False):
+        response['parsing_progress'] = {
+            'total_lines': parsing_progress.get('total_lines', 0),
+            'processed_lines': parsing_progress.get('processed_lines', 0),
+            'percent': parsing_progress.get('percent', 0),
+            'status': parsing_progress.get('status', 'Unknown')
+        }
+    
+    return jsonify(response), 200
 
 @app.route('/api/fix_entry_price', methods=['POST'])
 def fix_entry_price():
