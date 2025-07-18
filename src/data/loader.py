@@ -67,19 +67,10 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
     global parsing_progress
     metadata_file_path = f"{file_path}.metadata"
     
-    # Check if metadata needs to be created or refreshed
-    metadata_needs_refresh = False
+    # Only create metadata if it doesn't exist
+    # Don't refresh just because file is newer - it's ALWAYS being updated
     if not os.path.exists(metadata_file_path):
-        metadata_needs_refresh = True
-    else:
-        # Check if file has been modified since metadata was created
-        file_mtime = os.path.getmtime(file_path)
-        metadata_mtime = os.path.getmtime(metadata_file_path)
-        if file_mtime > metadata_mtime:
-            print(f"Log file has been modified since metadata was created. Refreshing metadata...")
-            metadata_needs_refresh = True
-    
-    if metadata_needs_refresh:
+        print("Creating metadata file for first time...")
         create_metadata_file(file_path, metadata_file_path)
 
     data = []
@@ -112,10 +103,11 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
         status_interval = max(100, lines_to_process // 10)
     next_status_line = start_line + status_interval
     
-    print(f"Total lines in file (from metadata): {total_lines:,}")
+    print(f"Total lines in metadata (may be outdated): {total_lines:,}")
     print(f"Starting from line: {start_line:,}")
-    print(f"Expected lines to process: {lines_to_process:,}")
+    print(f"Minimum lines to process: {lines_to_process:,}")
     print(f"Progress interval: Every {status_interval:,} lines")
+    print(f"Note: File is continuously updated, actual lines will be more")
     
     # If we're processing very few lines from a large file, warn the user
     if lines_to_process < 10000 and total_lines > 1000000:
@@ -141,11 +133,8 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
             current_line = i - start_line + 1
             actual_lines = i  # Track actual line number
             
-            # If we've exceeded expected lines, update the total
-            if i > total_lines:
-                # File has grown since metadata was created
-                parsing_progress['total_lines'] = i  # Update to actual current line
-                lines_to_process = i - start_line + 1
+            # If we've exceeded expected lines, just keep processing
+            # This is normal for a continuously updated log file
             
             # Update parsing progress continuously for API access
             if lines_to_process > 0:
