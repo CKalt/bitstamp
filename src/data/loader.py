@@ -92,22 +92,29 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
     
     # Calculate interval for status updates
     lines_to_process = total_lines - start_line + 1
-    # Update every 100k lines for consistent progress
-    status_interval = 100000
+    # Update every 100k lines or 5% of total, whichever is smaller
+    status_interval = min(100000, max(1000, lines_to_process // 20))
     next_status_line = start_line + status_interval
+    
+    # Update initial progress
+    parsing_progress['processed_lines'] = 0
+    parsing_progress['percent'] = 0
+    parsing_progress['status'] = f'Starting to process {lines_to_process:,} lines'
 
     with open(file_path, 'r') as file:
         for i, line in enumerate(file, 1):
             if i < start_line:
                 continue
 
+            # Update progress counter
+            current_line = i - start_line + 1
+            parsing_progress['processed_lines'] = current_line
+            
             # Show status updates periodically
             if i >= next_status_line:
-                lines_processed = i - start_line + 1
-                parsing_progress['processed_lines'] = lines_processed
-                parsing_progress['percent'] = int((lines_processed / lines_to_process) * 100)
-                parsing_progress['status'] = f'Processing line {lines_processed:,} of {total_lines:,}'
-                print(f"Status: Reading historical data - {lines_processed:,} lines processed ({parsing_progress['percent']}%) - Last date: {last_date}")
+                parsing_progress['percent'] = int((current_line / lines_to_process) * 100)
+                parsing_progress['status'] = f'Processing line {current_line:,} of {lines_to_process:,}'
+                print(f"Status: Reading historical data - {current_line:,} lines processed ({parsing_progress['percent']}%) - Last date: {last_date}")
                 next_status_line += status_interval
 
             try:

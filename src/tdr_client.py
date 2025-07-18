@@ -513,8 +513,10 @@ Initializing connection to remote server...
                     elif data.get('history_loading', False):
                         # Check detailed history progress every 3 seconds
                         current_time = time.time()
-                        if current_time - last_progress_check >= 3.0:
+                        time_since_last_check = current_time - last_progress_check
+                        if time_since_last_check >= 3.0:
                             try:
+                                # Make the history_status API call
                                 history_response = requests.get(f"{self.server_url}/api/history_status", timeout=5)
                                 if history_response.status_code == 200:
                                     history_data = history_response.json()
