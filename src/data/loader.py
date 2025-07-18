@@ -95,15 +95,10 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
     
     # Calculate interval for status updates
     lines_to_process = total_lines - start_line + 1
-    # Always use reasonable intervals regardless of dataset size
-    if lines_to_process >= 1000000:
-        status_interval = 1000000  # Every 1M lines for large datasets
-    elif lines_to_process >= 100000:
-        status_interval = 100000   # Every 100k for medium datasets
-    elif lines_to_process >= 10000:
-        status_interval = 10000    # Every 10k for smaller datasets
-    else:
-        status_interval = lines_to_process + 1  # Just show start and end for tiny datasets
+    
+    # ALWAYS use 1M line intervals for console output
+    # Don't trust the metadata estimate - it's often wrong for live-updating files
+    status_interval = 1000000
     next_status_line = start_line + status_interval
     
     print(f"Total lines in metadata (may be outdated): {total_lines:,}")
