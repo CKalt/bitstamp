@@ -1305,6 +1305,11 @@ def main():
     logger.info(f"Starting TDR Server on {args.host}:{args.port}")
     logger.info("Waiting for client to send configuration...")
     
+    # Suppress werkzeug console logging
+    import logging as werkzeug_logging
+    werkzeug_logger = werkzeug_logging.getLogger('werkzeug')
+    werkzeug_logger.setLevel(werkzeug_logging.WARNING)  # Only show warnings and errors on console
+    
     # Start Flask server
     try:
         app.run(host=args.host, port=args.port, debug=False, threaded=True)

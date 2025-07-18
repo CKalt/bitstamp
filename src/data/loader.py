@@ -92,8 +92,11 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
     
     # Calculate interval for status updates
     lines_to_process = total_lines - start_line + 1
-    # Update every 100k lines or 5% of total, whichever is smaller
-    status_interval = min(100000, max(1000, lines_to_process // 20))
+    # Update every 1M lines for large datasets, or 10% for small ones
+    if lines_to_process > 10000000:  # More than 10M lines
+        status_interval = 1000000  # Every 1M lines
+    else:
+        status_interval = max(1000, lines_to_process // 10)  # 10% intervals
     next_status_line = start_line + status_interval
     
     # Update initial progress
@@ -108,11 +111,14 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
 
             # Update progress counter
             current_line = i - start_line + 1
-            parsing_progress['processed_lines'] = current_line
             
-            # Show status updates periodically
+            # Update parsing progress continuously for API access
+            if lines_to_process > 0:
+                parsing_progress['processed_lines'] = current_line
+                parsing_progress['percent'] = min(100, int((current_line / lines_to_process) * 100))
+            
+            # Show status updates periodically to console
             if i >= next_status_line:
-                parsing_progress['percent'] = int((current_line / lines_to_process) * 100)
                 parsing_progress['status'] = f'Processing line {current_line:,} of {lines_to_process:,}'
                 print(f"Status: Reading historical data - {current_line:,} lines processed ({parsing_progress['percent']}%) - Last date: {last_date}")
                 next_status_line += status_interval
