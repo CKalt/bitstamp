@@ -1806,6 +1806,17 @@ class CryptoShell(cmd.Cmd):
                 support = self.auto_trader.pivot_tracker['support_level']
                 resistance = self.auto_trader.pivot_tracker['resistance_level']
                 
+                # CRITICAL FIX: Check if support protects enough profit
+                if self.auto_trader.position == 1:  # LONG
+                    entry_price = self.auto_trader.position_cost_basis / abs(self.auto_trader.position_size) if self.auto_trader.position_size != 0 else 0
+                    position_value = abs(self.auto_trader.position_size) * current_price
+                    min_profit_buffer = max(200, position_value * 0.005)
+                    min_support = entry_price + min_profit_buffer
+                    if support < min_support:
+                        print(f"       ⚠️ WARNING: Support level ${support:.0f} doesn't protect enough profit!")
+                        print(f"       💰 Should be at least ${min_support:.0f} to protect ${min_profit_buffer:.0f}")
+                        support = min_support  # Use corrected value for display
+                
                 # Get recent high/low for calculation display
                 if hasattr(self.auto_trader, 'pivot_tracker'):
                     recent_high = self.auto_trader.pivot_tracker.get('recent_high', 0)
@@ -3393,6 +3404,17 @@ class CryptoShell(cmd.Cmd):
                 current_price = self.data_manager.get_current_price(self.auto_trader.symbol) or 0
                 support = self.auto_trader.pivot_tracker['support_level']
                 resistance = self.auto_trader.pivot_tracker['resistance_level']
+                
+                # CRITICAL FIX: Check if support protects enough profit
+                if self.auto_trader.position == 1:  # LONG
+                    entry_price = self.auto_trader.position_cost_basis / abs(self.auto_trader.position_size) if self.auto_trader.position_size != 0 else 0
+                    position_value = abs(self.auto_trader.position_size) * current_price
+                    min_profit_buffer = max(200, position_value * 0.005)
+                    min_support = entry_price + min_profit_buffer
+                    if support < min_support:
+                        print(f"       ⚠️ WARNING: Support level ${support:.0f} doesn't protect enough profit!")
+                        print(f"       💰 Should be at least ${min_support:.0f} to protect ${min_profit_buffer:.0f}")
+                        support = min_support  # Use corrected value for display
                 
                 # Get recent high/low for calculation display
                 if hasattr(self.auto_trader, 'pivot_tracker'):
