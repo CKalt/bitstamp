@@ -1918,13 +1918,29 @@ class CryptoShell(cmd.Cmd):
         print(f"\nSession Duration: {hours:.1f} hours\n")
         print("━"*50)
 
+    def do_test_pivot(self, arg):
+        """Test command to debug pivot issues"""
+        print("TEST: This is a test command")
+        print(f"TEST: auto_trader exists: {hasattr(self, 'auto_trader')}")
+        if hasattr(self, 'auto_trader'):
+            print(f"TEST: auto_trader type: {type(self.auto_trader)}")
+            print(f"TEST: has pivot_tracker: {hasattr(self.auto_trader, 'pivot_tracker')}")
+        return "TEST COMPLETE"
+        
     def do_check_pivot(self, arg):
         """
         Check current pivot levels. Usage: check_pivot
         
         Shows current pivot tracker state and values.
         """
-        if not self.check_auto_trader():
+        print("🔍 Starting check_pivot command...")
+        
+        if not hasattr(self, 'auto_trader'):
+            print("❌ No auto_trader object found")
+            return
+            
+        if not self.auto_trader:
+            print("❌ auto_trader is None")
             return
             
         print("🔍 Checking pivot tracker location...")
