@@ -1918,6 +1918,64 @@ class CryptoShell(cmd.Cmd):
         print(f"\nSession Duration: {hours:.1f} hours\n")
         print("━"*50)
 
+    def do_fix_pivot_now(self, arg):
+        """Emergency fix to update pivot levels to protect profit"""
+        print("🚨 EMERGENCY PIVOT FIX")
+        
+        if not self.auto_trader or not self.auto_trader.running:
+            print("❌ Auto-trading is not running.")
+            return
+            
+        # Get the strategy
+        strategy = self.auto_trader.strategy
+        if not hasattr(strategy, 'pivot_tracker'):
+            print("❌ No pivot_tracker on strategy")
+            return
+            
+        # Get current values
+        current_price = self.data_manager.get_current_price(self.auto_trader.symbol)
+        position_size = abs(strategy.position_size)
+        entry_price = strategy.position_cost_basis / position_size if position_size != 0 else 0
+        position_value = position_size * current_price
+        current_profit = (current_price - entry_price) * position_size
+        
+        print(f"📊 Current Status:")
+        print(f"   Entry: ${entry_price:.0f}")
+        print(f"   Current: ${current_price:.0f}")
+        print(f"   Position value: ${position_value:.0f}")
+        print(f"   Current profit: ${current_profit:.0f}")
+        
+        # Calculate proper buffer
+        min_profit_buffer = max(200, position_value * 0.005)
+        
+        if strategy.position == 1:  # LONG
+            old_support = strategy.pivot_tracker.get('support_level', 0)
+            new_support = entry_price + min_profit_buffer
+            
+            print(f"\n🔧 Fixing LONG pivot protection:")
+            print(f"   OLD support: ${old_support:.0f} (only ${old_support - entry_price:.0f} profit protection)")
+            print(f"   NEW support: ${new_support:.0f} (protects ${min_profit_buffer:.0f} profit)")
+            
+            # FORCE UPDATE
+            strategy.pivot_tracker['support_level'] = new_support
+            strategy.pivot_tracker['levels_locked'] = True
+            
+            # Also update if it exists on auto_trader
+            if hasattr(self.auto_trader, 'pivot_tracker'):
+                self.auto_trader.pivot_tracker['support_level'] = new_support
+                
+            print(f"\n✅ PIVOT FIXED! New support level: ${new_support:.0f}")
+            print(f"   This protects ${new_support - entry_price:.0f} of your ${current_profit:.0f} profit")
+            
+            # Save to status for verification
+            self._last_pivot_fix = {
+                'old_support': old_support,
+                'new_support': new_support,
+                'entry_price': entry_price,
+                'current_price': current_price,
+                'profit_protected': new_support - entry_price
+            }
+            
     def do_force_pivot_update(self, arg):
         """Force update pivot levels to protect current profit"""
         if not self.auto_trader or not self.auto_trader.running:
