@@ -1499,18 +1499,36 @@ class MACrossoverStrategy:
                     
                     # Restore pivot tracker with original levels
                     if tracker.get('levels_locked') and tracker.get('support_level') is not None:
+                        # Restore the tracker but check if levels need updating
+                        old_support = tracker.get('support_level', 0)
+                        old_resistance = tracker.get('resistance_level', 0)
+                        
+                        # Check if restored levels protect enough profit
+                        current_price = self.data_manager.get_current_price(self.symbol) or 0
+                        entry_price = self.position_cost_basis / abs(self.position_size) if self.position_size != 0 else 0
+                        position_value = abs(self.position_size) * current_price
+                        min_profit_buffer = max(200, position_value * 0.005)
+                        
+                        # For LONG positions, check if support protects enough
+                        if self.position == 1 and entry_price > 0:
+                            min_support = entry_price + min_profit_buffer
+                            if old_support < min_support:
+                                self.logger.warning(f"🚨 Restored pivot level ${old_support:.0f} doesn't protect enough profit!")
+                                self.logger.info(f"💰 Updating to ${min_support:.0f} to protect ${min_profit_buffer:.0f}")
+                                old_support = min_support
+                        
                         self.pivot_tracker = {
                             'recent_high': tracker.get('recent_high', 0),
                             'recent_low': tracker.get('recent_low', 0),
-                            'last_update': datetime.now(),  # Update timestamp to now
-                            'support_level': tracker.get('support_level'),  # Preserve original
-                            'resistance_level': tracker.get('resistance_level'),  # Preserve original
+                            'last_update': datetime.now(),
+                            'support_level': old_support,
+                            'resistance_level': old_resistance,
                             'buffer_zone': tracker.get('buffer_zone', self.pivot_buffer),
-                            'levels_locked': True,  # Keep locked
+                            'levels_locked': True,
                             'last_position_flip': tracker.get('last_position_flip')
                         }
                         
-                        self.logger.info(f"🔒 RESTORED ORIGINAL PIVOT LEVELS: Support=${self.pivot_tracker['support_level']:.0f}, Resistance=${self.pivot_tracker['resistance_level']:.0f}")
+                        self.logger.info(f"🔒 PIVOT LEVELS SET: Support=${self.pivot_tracker['support_level']:.0f}, Resistance=${self.pivot_tracker['resistance_level']:.0f}")
                         return True
                         
         except Exception as e:
