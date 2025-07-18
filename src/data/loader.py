@@ -91,14 +91,24 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
     
     # Calculate interval for status updates
     lines_to_process = total_lines - start_line + 1
-    # Always update every 1M lines for console output
-    status_interval = 1000000  # Every 1M lines
+    # Update every 1M lines or every 10% for small datasets
+    if lines_to_process >= 1000000:
+        status_interval = 1000000  # Every 1M lines for large datasets
+    else:
+        # For small datasets, update every 10% or at least every 100 lines
+        status_interval = max(100, lines_to_process // 10)
     next_status_line = start_line + status_interval
     
     print(f"Total lines in file: {total_lines:,}")
     print(f"Starting from line: {start_line:,}")
     print(f"Lines to process: {lines_to_process:,}")
     print(f"Progress interval: Every {status_interval:,} lines")
+    
+    # If we're processing very few lines from a large file, warn the user
+    if lines_to_process < 10000 and total_lines > 1000000:
+        print(f"⚠️  WARNING: Only processing {lines_to_process:,} lines from a {total_lines:,} line file!")
+        print(f"   This suggests the start date {start_date} is very recent.")
+        print(f"   Consider using an earlier start date to process more historical data.")
     
     # Update initial progress
     parsing_progress['total_lines'] = lines_to_process  # Lines we're actually processing, not file total
