@@ -1298,6 +1298,11 @@ Initializing connection to remote server...
         else:
             print("Command interface is not enabled")
     
+    def do_recalc_pivots(self, arg):
+        """Force recalculation of pivot levels"""
+        response = self.send_command("recalc_pivots")
+        self.print_response(response)
+        
     def do_server_restart(self, arg):
         """Restart server with latest code changes
         
