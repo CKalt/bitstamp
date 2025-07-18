@@ -1970,7 +1970,8 @@ class CryptoShell(cmd.Cmd):
         Forces the system to recalculate pivot support/resistance levels
         based on current position and market conditions.
         """
-        if not self.check_auto_trader():
+        if not self.auto_trader or not self.auto_trader.running:
+            print("Auto-trading is not running.")
             return
             
         try:
