@@ -66,7 +66,20 @@ parsing_progress = {
 def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=None):
     global parsing_progress
     metadata_file_path = f"{file_path}.metadata"
+    
+    # Check if metadata needs to be created or refreshed
+    metadata_needs_refresh = False
     if not os.path.exists(metadata_file_path):
+        metadata_needs_refresh = True
+    else:
+        # Check if file has been modified since metadata was created
+        file_mtime = os.path.getmtime(file_path)
+        metadata_mtime = os.path.getmtime(metadata_file_path)
+        if file_mtime > metadata_mtime:
+            print(f"Log file has been modified since metadata was created. Refreshing metadata...")
+            metadata_needs_refresh = True
+    
+    if metadata_needs_refresh:
         create_metadata_file(file_path, metadata_file_path)
 
     data = []
@@ -99,9 +112,9 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
         status_interval = max(100, lines_to_process // 10)
     next_status_line = start_line + status_interval
     
-    print(f"Total lines in file: {total_lines:,}")
+    print(f"Total lines in file (from metadata): {total_lines:,}")
     print(f"Starting from line: {start_line:,}")
-    print(f"Lines to process: {lines_to_process:,}")
+    print(f"Expected lines to process: {lines_to_process:,}")
     print(f"Progress interval: Every {status_interval:,} lines")
     
     # If we're processing very few lines from a large file, warn the user
@@ -110,11 +123,14 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
         print(f"   This suggests the start date {start_date} is very recent.")
         print(f"   Consider using an earlier start date to process more historical data.")
     
+    # Initialize for actual line counting
+    actual_lines = 0
+    
     # Update initial progress
-    parsing_progress['total_lines'] = lines_to_process  # Lines we're actually processing, not file total
+    parsing_progress['total_lines'] = lines_to_process  # This will be updated if file is larger
     parsing_progress['processed_lines'] = 0
     parsing_progress['percent'] = 0
-    parsing_progress['status'] = f'Starting to process {lines_to_process:,} lines'
+    parsing_progress['status'] = f'Starting to process lines'
 
     with open(file_path, 'r') as file:
         for i, line in enumerate(file, 1):
@@ -123,6 +139,13 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
 
             # Update progress counter
             current_line = i - start_line + 1
+            actual_lines = i  # Track actual line number
+            
+            # If we've exceeded expected lines, update the total
+            if i > total_lines:
+                # File has grown since metadata was created
+                parsing_progress['total_lines'] = i  # Update to actual current line
+                lines_to_process = i - start_line + 1
             
             # Update parsing progress continuously for API access
             if lines_to_process > 0:
@@ -167,10 +190,16 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
     parsing_progress['percent'] = 100
     print(f"Status: Finished reading {processed_count:,} trades - Last date: {last_date}")
     
+    # Check if file was larger than metadata indicated
+    if actual_lines > total_lines:
+        print(f"⚠️  Note: File has {actual_lines:,} lines (metadata showed {total_lines:,})")
+        print(f"   Consider refreshing metadata by deleting {metadata_file_path}")
+    
     # Log completion details
     logger.info(f"Finished reading log file. Last date: {last_date}")
     logger.info(f"Total entries skipped: {skipped_count}")
     logger.info(f"Total entries processed: {processed_count}")
+    logger.info(f"Actual lines in file: {actual_lines}")
     if end_reached:
         logger.info(f"Reached end date: {end_date}")
     
