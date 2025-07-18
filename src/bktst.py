@@ -339,8 +339,8 @@ class EnhancedBacktester:
         if len(df) < 14:
             return 0, ""
             
-        rsi = calculate_rsi(df, period=14)
-        current_rsi = rsi['rsi'].iloc[-1]
+        rsi = calculate_rsi(df, window=14)
+        current_rsi = rsi['RSI'].iloc[-1]
         
         if current_rsi < 30:
             return 1, f"RSI oversold: {current_rsi:.1f}"
@@ -708,22 +708,29 @@ def main():
         
     # Load data
     print(f"Loading data from {args.data}...")
-    df = parse_log_file(args.data)
+    
+    # Parse dates if provided
+    start_date = pd.to_datetime(args.start_date) if args.start_date else None
+    end_date = pd.to_datetime(args.end_date) if args.end_date else None
+    
+    # Load data with date filtering
+    df = parse_log_file(args.data, start_date=start_date, end_date=end_date)
     
     if df is None or len(df) == 0:
         print("Error: No data loaded")
         return
+    
+    # Convert timestamp to datetime and set as index
+    if 'timestamp' in df.columns:
+        df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
+        df.set_index('datetime', inplace=True)
+        df.sort_index(inplace=True)
+    
+    # Add close column if missing
+    if 'close' not in df.columns and 'price' in df.columns:
+        df['close'] = df['price']
         
     print(f"Loaded {len(df)} data points from {df.index[0]} to {df.index[-1]}")
-    
-    # Filter by date if specified
-    if args.start_date:
-        start_date = pd.to_datetime(args.start_date)
-        df = df[df.index >= start_date]
-        
-    if args.end_date:
-        end_date = pd.to_datetime(args.end_date)
-        df = df[df.index <= end_date]
         
     # Run backtest
     backtester = EnhancedBacktester(config)
