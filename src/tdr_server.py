@@ -83,11 +83,16 @@ def auto_load_history():
             # Get config parameters
             best_strategy = server_config.get('best_strategy', {})
             
-            # Load ALL data - no date filtering
-            start_date = None
-            end_date = None
+            # Load configured amount of historical data
+            # For auto trading, default to 90 days (enough for indicators)
+            # Can be overridden with auto_trade_days_back in config
+            auto_trade_days = best_strategy.get('auto_trade_days_back', 90)
             
-            logger.info(f"Loading ALL historical data from {log_file}")
+            now = datetime.now()
+            start_date = now - timedelta(days=auto_trade_days)
+            end_date = None  # Load up to current
+            
+            logger.info(f"Loading {auto_trade_days} days of historical data for auto trading")
             
             # Create a custom progress monitoring approach
             import sys
@@ -717,9 +722,13 @@ def load_history():
             
             log_file = 'btcusd.log'
             if os.path.exists(log_file):
-                # Load ALL data - no date filtering
-                start_date = None
-                end_date = None
+                # Load configured amount of historical data (default 30 days)
+                best_strategy = server_config.get('best_strategy', {})
+                start_back = best_strategy.get('start_window_days_back', 30)
+                end_back = best_strategy.get('end_window_days_back', 0)
+                now = datetime.now()
+                start_date = now - timedelta(days=start_back) if start_back else None
+                end_date = now - timedelta(days=end_back) if end_back else None
                 
                 # Try to load from cache first
                 df = None
