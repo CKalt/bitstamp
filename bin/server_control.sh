@@ -65,6 +65,9 @@ case "$1" in
             exit 0
         fi
         
+        # Source virtual environment first
+        source env/bin/activate
+        
         # Start server
         nohup python src/tdr_server.py > logs/server.log 2>&1 &
         
