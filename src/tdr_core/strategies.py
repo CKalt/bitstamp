@@ -2512,18 +2512,23 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             signal = 1
             reason = f"Mean Reversion BUY: RSI {current_rsi:.1f} low + below BB middle"
         elif self.position != 0:
-            # Exit positions when price returns to middle or shows reversal
-            if self.position == 1 and current_price > bb_middle:
-                signal = -1
-                reason = f"Mean Reversion EXIT LONG: Price returned to BB middle"
-            elif self.position == -1:
-                # Exit short when price shows strength or approaches our entry
-                if current_price > bb_middle * 1.01:  # Price breaking above middle
+            # Exit positions when price reaches the OPPOSITE band for maximum profit
+            if self.position == 1:  # Currently LONG (bought at bottom)
+                # SELL when price reaches upper band or RSI is overbought
+                if current_price >= bb_upper * 0.995:  # Near upper band
+                    signal = -1
+                    reason = f"Mean Reversion SELL: Price at upper BB (${current_price:.0f})"
+                elif current_rsi > self.rsi_overbought:
+                    signal = -1
+                    reason = f"Mean Reversion SELL: RSI {current_rsi:.1f} overbought"
+            elif self.position == -1:  # Currently SHORT (sold at top)
+                # BUY when price reaches lower band or RSI is oversold
+                if current_price <= bb_lower * 1.005:  # Near lower band
                     signal = 1
-                    reason = f"Mean Reversion EXIT SHORT: Price breaking above BB middle"
-                elif current_rsi < 35:  # Oversold - potential reversal
+                    reason = f"Mean Reversion BUY: Price at lower BB (${current_price:.0f})"
+                elif current_rsi < self.rsi_oversold:
                     signal = 1
-                    reason = f"Mean Reversion EXIT SHORT: RSI {current_rsi:.1f} oversold"
+                    reason = f"Mean Reversion BUY: RSI {current_rsi:.1f} oversold"
 
         return signal, reason
 
