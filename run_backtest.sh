@@ -1,105 +1,128 @@
 #!/bin/bash
-# Helper script to run backtests with common configurations
+# Backtest runner with safety features and common presets
 
 # Colors for output
+RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Default values
-DATA_FILE="btcusd.log"
-CONFIG_FILE="best_strategy.json"
-INITIAL_BALANCE=10000
+CONFIG="config/strategies/adaptive_default.yaml"
+PYTHON="python3"
+
+# Function to display help
+show_help() {
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --quick           Run quick 7-day backtest"
+    echo "  --month           Run 30-day backtest"
+    echo "  --year            Run 365-day backtest"
+    echo "  --full            Run on all available data"
+    echo "  --config FILE     Use specific config file (default: $CONFIG)"
+    echo "  --start DATE      Start date (YYYY-MM-DD)"
+    echo "  --end DATE        End date (YYYY-MM-DD)"
+    echo "  --output FILE     Output file (default: timestamped)"
+    echo "  --trades          Show all trades in output"
+    echo "  --quiet           Minimal output"
+    echo "  --verbose         Verbose output"
+    echo "  --help            Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 --quick                    # Last 7 days with default config"
+    echo "  $0 --month --trades           # Last 30 days, show trades"
+    echo "  $0 --config my_config.yaml    # Use custom config"
+    echo "  $0 --start 2024-01-01 --end 2024-12-31  # Specific date range"
+}
 
 # Parse command line arguments
+ARGS=""
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --help|-h)
+            show_help
+            exit 0
+            ;;
         --quick)
-            # Quick test with last 7 days
-            START_DATE=$(date -v-7d +%Y-%m-%d 2>/dev/null || date -d '7 days ago' +%Y-%m-%d)
-            echo -e "${YELLOW}Running quick backtest (last 7 days)${NC}"
+            ARGS="$ARGS --quick"
+            shift
             ;;
         --month)
-            # Test with last 30 days
-            START_DATE=$(date -v-30d +%Y-%m-%d 2>/dev/null || date -d '30 days ago' +%Y-%m-%d)
-            echo -e "${YELLOW}Running monthly backtest (last 30 days)${NC}"
+            ARGS="$ARGS --month"
+            shift
             ;;
         --year)
-            # Test with last year
-            START_DATE=$(date -v-365d +%Y-%m-%d 2>/dev/null || date -d '365 days ago' +%Y-%m-%d)
-            echo -e "${YELLOW}Running yearly backtest${NC}"
-            ;;
-        --start)
+            ARGS="$ARGS --year"
             shift
-            START_DATE=$1
             ;;
-        --end)
+        --full)
+            # No date args means use all data
             shift
-            END_DATE=$1
-            ;;
-        --balance)
-            shift
-            INITIAL_BALANCE=$1
             ;;
         --config)
-            shift
-            CONFIG_FILE=$1
+            CONFIG="$2"
+            shift 2
             ;;
-        --save)
+        --start)
+            ARGS="$ARGS --start-date $2"
+            shift 2
+            ;;
+        --end)
+            ARGS="$ARGS --end-date $2"
+            shift 2
+            ;;
+        --output)
+            ARGS="$ARGS --output-file $2"
+            shift 2
+            ;;
+        --trades)
+            ARGS="$ARGS --show-trades"
             shift
-            SAVE_FILE=$1
+            ;;
+        --quiet)
+            ARGS="$ARGS --quiet"
+            shift
+            ;;
+        --verbose)
+            ARGS="$ARGS --verbose"
+            shift
             ;;
         *)
-            echo "Unknown option: $1"
-            echo "Usage: $0 [--quick|--month|--year] [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--balance amount] [--config file] [--save output.json]"
+            echo -e "${RED}Unknown option: $1${NC}"
+            show_help
             exit 1
             ;;
     esac
-    shift
 done
 
-# Activate virtual environment
-if [ -f "env/bin/activate" ]; then
-    source env/bin/activate
-else
-    echo -e "${RED}Error: Virtual environment not found${NC}"
+# Check if config file exists
+if [ ! -f "$CONFIG" ]; then
+    echo -e "${RED}Error: Configuration file not found: $CONFIG${NC}"
     exit 1
 fi
 
-# Build command
-CMD="python src/bktst.py --data $DATA_FILE --config $CONFIG_FILE --initial-balance $INITIAL_BALANCE"
-
-if [ ! -z "$START_DATE" ]; then
-    CMD="$CMD --start-date $START_DATE"
+# Check if btcusd.log exists
+if [ ! -f "btcusd.log" ]; then
+    echo -e "${RED}Error: btcusd.log not found in current directory${NC}"
+    echo "Please ensure you're running from the project root directory"
+    exit 1
 fi
 
-if [ ! -z "$END_DATE" ]; then
-    CMD="$CMD --end-date $END_DATE"
-fi
+# Display what we're about to do
+echo -e "${GREEN}Running backtest with configuration: $CONFIG${NC}"
 
-if [ ! -z "$SAVE_FILE" ]; then
-    CMD="$CMD --save-results $SAVE_FILE"
-fi
+# Create results directory if it doesn't exist
+mkdir -p backtest_results
 
-# Show command
-echo -e "${GREEN}Running: $CMD${NC}"
-echo ""
+# Run the backtest
+echo -e "${YELLOW}Starting backtest...${NC}"
+$PYTHON src/backtesting/run_backtest.py --config "$CONFIG" $ARGS
 
-# Run backtest
-$CMD
-
-# If results were saved, show summary
-if [ ! -z "$SAVE_FILE" ] && [ -f "$SAVE_FILE" ]; then
-    echo ""
-    echo -e "${GREEN}Results saved to: $SAVE_FILE${NC}"
-    echo "Key metrics:"
-    cat $SAVE_FILE | jq '{
-        total_return_pct,
-        sharpe_ratio,
-        max_drawdown_pct,
-        win_rate,
-        total_trades,
-        pivot_trades
-    }'
+# Check exit code
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}Backtest completed successfully!${NC}"
+else
+    echo -e "${RED}Backtest failed!${NC}"
+    exit 1
 fi
