@@ -1,3 +1,6 @@
+Here is the planning/backtesting-plan.md document referenced above. You can
+see this file in the planning directory as well.
+
 # Backtesting and Auto Trade System Enhancement Plan
 
 ## CRITICAL: Main Branch vs Current Branch Backtesting Comparison
@@ -438,3 +441,27 @@ python analyze_regimes.py --data btcusd.log --method hmm --states 3
 6. Deploy improved strategies to production
 
 This enhanced system will provide the control and visibility needed to develop consistently profitable trading strategies while minimizing risk and avoiding overfitting.
+
+
+  High Priority Deep Analysis:
+  - How to ensure backtesting EXACTLY matches live trading behavior
+  - Designing the tick simulation algorithm for realistic intra-bar prices
+  - Architecture for configuration system that scales
+  - Metric calculation that handles edge cases properly
+
+  Medium Priority:
+  - Optimization techniques for processing years of tick data
+  - Visualization strategy for results
+  - Testing framework design
+
+  I recommend maximum thinking depth for:
+  1. Initial architecture design (Phase 1)
+  2. Tick simulation algorithm (Phase 3)
+  3. Configuration system design (Phase 4)
+
+  This is a foundational system that will drive all future strategy development,
+so
+  getting it right from the start is critical. The investment in deep thinking
+upfront
+   will save significant time and prevent costly mistakes later.
+
