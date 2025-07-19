@@ -2245,3 +2245,101 @@ Created `/planning/backtesting-plan.md` detailing how to transform the current s
 5. **Transparency**: Clear audit trail
 
 This plan provides the roadmap to evolve from a simple trading bot to a professional-grade quantitative trading system.
+
+## NEXT GOAL: Implement Comprehensive Backtesting System (Added 2025-01-19)
+
+### Objective
+
+Implement the comprehensive backtesting framework described in `/planning/backtesting-plan.md` with special focus on:
+
+1. **Verifying the RANGING Strategy Fix**
+   - Ensure backtesting correctly simulates buying at lower Bollinger Band
+   - Ensure backtesting correctly simulates selling at upper Bollinger Band
+   - Compare results before/after the fix to quantify improvement
+   - Validate that the broken middle-band exit logic is never used
+
+2. **Implementing Intra-Bar Trading**
+   - Current system only trades at bar close (e.g., end of 5-minute candle)
+   - New system should trigger trades immediately when signals occur
+   - This requires tick-by-tick simulation within each bar
+   - Critical for accurate pivot protection testing (triggers don't wait for bar close)
+
+### Implementation Priorities
+
+#### Phase 1: Core Backtesting Engine (Week 1)
+1. Create `src/backtesting/engine.py` with event-driven architecture
+2. Implement tick-by-tick price simulation within bars
+3. Add realistic order execution with Bitstamp fees (0.12%)
+4. Ensure 100% position flip constraint is maintained
+
+#### Phase 2: RANGING Strategy Verification (Week 1-2)
+1. Create specific test cases for RANGING strategy:
+   - Test entry at lower BB, exit at upper BB (correct)
+   - Test entry at lower BB, exit at middle BB (broken - should fail)
+2. Generate comparison reports showing profit difference
+3. Validate RSI overbought/oversold exits also work correctly
+
+#### Phase 3: Intra-Bar Signal Processing (Week 2)
+1. Implement sub-bar price interpolation:
+   ```python
+   def simulate_intra_bar_prices(open, high, low, close):
+       """Generate realistic tick path within a bar"""
+       # Use common patterns: Open->Low->High->Close or Open->High->Low->Close
+       # Add random walk between key points
+   ```
+2. Check signals on each simulated tick, not just at bar close
+3. Accurate pivot trigger timing (immediate execution)
+
+#### Phase 4: Configuration System (Week 3)
+1. Create YAML strategy configs as specified in the plan
+2. Centralize all parameters for easy testing
+3. Version control different strategy variations
+
+#### Phase 5: Enhanced Metrics (Week 3-4)
+1. Implement comprehensive metrics:
+   - Sharpe ratio, Sortino ratio, max drawdown
+   - Performance by market regime
+   - RANGING strategy specific metrics (band touches, mean reversion success rate)
+2. Create visual reports showing entry/exit points on price charts
+
+### Critical Testing Requirements
+
+1. **RANGING Strategy Tests**:
+   ```python
+   def test_ranging_strategy_exits():
+       # Test 1: Correct behavior - exit at opposite band
+       assert exit_price >= upper_band * 0.995  # Should exit near upper band
+       
+       # Test 2: Broken behavior - should NOT exit at middle
+       assert exit_price != middle_band  # Should never exit at middle
+   ```
+
+2. **Intra-Bar Execution Tests**:
+   ```python
+   def test_intra_bar_pivot_trigger():
+       # Pivot at $118,000, bar has High: $118,100, Low: $117,900
+       # Should trigger during bar, not wait for close
+       assert trade_time < bar_close_time
+   ```
+
+3. **Fee Impact Analysis**:
+   - Compare strategies with proper Bitstamp fees
+   - Show how middle-band exits lose money to fees
+   - Demonstrate profit improvement with correct RANGING logic
+
+### Expected Outcomes
+
+1. **Quantifiable Improvement**: Show exact profit increase from RANGING fix
+2. **Faster Execution**: Demonstrate reduced slippage from intra-bar trading
+3. **Better Risk Management**: More accurate pivot protection simulation
+4. **Scientific Validation**: Data-driven proof of strategy effectiveness
+
+### Success Metrics
+
+- [ ] Backtesting engine matches live trading results within 95% accuracy
+- [ ] RANGING strategy shows positive returns (vs losses with broken logic)
+- [ ] Intra-bar execution reduces average slippage by 20%+
+- [ ] All strategies can be tested in parallel for comparison
+- [ ] Results clearly show which parameters drive profitability
+
+This goal directly addresses the need to validate the RANGING fix and evolve the trading system to professional standards with immediate signal execution.
