@@ -2151,3 +2151,97 @@ Added to `best_strategy.json`:
 5. **Compression**: Store historical data compressed, decompress on demand
 
 These optimizations transformed the server from a monolithic slow-starting application to a responsive, efficient trading system that's ready for production use.
+
+## RANGING Strategy Critical Fix (Added 2025-01-19)
+
+### The Problem
+
+The RANGING strategy exit logic was fundamentally broken - it would exit positions at the middle Bollinger Band, guaranteeing zero profit (or losses after fees).
+
+### Original Broken Logic
+
+```python
+# Exit positions when price returns to middle or shows reversal
+if self.position == 1 and current_price > bb_middle:
+    signal = -1
+    reason = f"Mean Reversion EXIT LONG: Price returned to BB middle"
+```
+
+This meant:
+- Buy at lower band when oversold
+- Sell at middle band (breakeven)
+- Never capture the upper half of the range
+
+### The Fix (Commit be03444)
+
+Changed exit logic to wait for opposite band:
+
+```python
+# Exit positions when price reaches the OPPOSITE band for maximum profit
+if self.position == 1:  # Currently LONG (bought at bottom)
+    # SELL when price reaches upper band or RSI is overbought
+    if current_price >= bb_upper * 0.995:  # Near upper band
+        signal = -1
+        reason = f"Mean Reversion SELL: Price at upper BB (${current_price:.0f})"
+```
+
+### Impact
+
+Now the RANGING strategy properly implements mean reversion:
+- **BUY** at lower Bollinger Band (oversold conditions)
+- **SELL** at upper Bollinger Band (overbought conditions)
+- Captures full range movement for maximum profit
+
+### Key Learning
+
+Always verify trading logic makes economic sense. A strategy that exits at breakeven is not just "conservative" - it's fundamentally broken and will lose money to fees.
+
+## Comprehensive Backtesting Plan Created (Added 2025-01-19)
+
+### Overview
+
+Created `/planning/backtesting-plan.md` detailing how to transform the current system into a sophisticated backtesting and optimization framework.
+
+### Key Components Proposed
+
+1. **Dedicated Backtesting Engine**
+   - Separate from live trading logic
+   - Event-driven architecture
+   - Realistic slippage and fee modeling
+
+2. **Centralized Configuration**
+   - YAML-based strategy configs
+   - Version-controlled parameters
+   - Easy A/B testing
+
+3. **Enhanced Metrics**
+   - Sharpe ratio, Sortino ratio, max drawdown
+   - Performance by market regime
+   - Risk-adjusted returns
+
+4. **Parameter Optimization**
+   - Grid search, Bayesian optimization
+   - Walk-forward analysis
+   - Monte Carlo simulations
+
+5. **Multi-Strategy Portfolio**
+   - Partial position sizing
+   - Dynamic allocation
+   - Risk parity approaches
+
+### Implementation Roadmap
+
+- **Phase 1**: Foundation (Weeks 1-2) - Backtesting engine and configs
+- **Phase 2**: Optimization (Weeks 3-4) - Parameter tuning framework
+- **Phase 3**: Advanced (Weeks 5-6) - Monte Carlo, portfolios
+- **Phase 4**: Integration (Weeks 7-8) - Dashboard and automation
+
+### Benefits
+
+1. **Scientific Approach**: Test before risking capital
+2. **Reproducibility**: All parameters in configs
+3. **Risk Management**: Comprehensive metrics
+4. **Scalability**: Easy to add strategies
+5. **Transparency**: Clear audit trail
+
+This plan provides the roadmap to evolve from a simple trading bot to a professional-grade quantitative trading system.
