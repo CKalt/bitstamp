@@ -255,16 +255,21 @@ class BacktestEngine:
     Uses existing strategy classes to ensure exact behavior match
     """
     
-    def __init__(self, config: BacktestConfig):
+    def __init__(self, config: BacktestConfig, strategy_params: Optional[Dict] = None):
         self.config = config
         self.position_tracker = BacktestPositionTracker(config)
         self.exchange_handler = SimulatedExchangeHandler(self.position_tracker)
         
         # Initialize strategy using existing core
+        # Use default values that match the main branch's adaptive strategy
         self.strategy = AdaptiveStrategyCore(
-            short_window=config.short_window if hasattr(config, 'short_window') else 10,
-            long_window=config.long_window if hasattr(config, 'long_window') else 30
+            short_window=10,  # Default from main branch
+            long_window=46   # Default from main branch
         )
+        
+        # Apply strategy parameters if provided
+        if strategy_params:
+            self.strategy.update_parameters(strategy_params)
         
         # Results tracking
         self.equity_curve = []
@@ -293,6 +298,9 @@ class BacktestEngine:
         logger.info(f"Running backtest from {data.index[0]} to {data.index[-1]}")
         logger.info(f"Initial capital: ${self.config.initial_usd:,.2f}")
         
+        # Store historical data for strategy access
+        self._historical_data = data
+        
         # Process each bar
         for timestamp, row in data.iterrows():
             self._process_bar(timestamp, row)
@@ -305,6 +313,23 @@ class BacktestEngine:
         logger.info(f"Total return: {results['total_return']:.2%}")
         
         return results
+    
+    def _generate_signal_from_strategy(self, df: pd.DataFrame, current_position: int) -> Dict[str, Any]:
+        """Adapter method to generate signals from AdaptiveStrategyCore"""
+        # Detect market regime
+        regime, confidence, metrics = self.strategy.detect_market_regime(df)
+        
+        # Generate signal based on regime
+        signal, reason = self.strategy.should_generate_signal(df, regime)
+        
+        # Return in expected format
+        return {
+            'signal': signal,
+            'regime': regime,
+            'reason': reason,
+            'confidence': confidence,
+            'metrics': metrics
+        }
     
     def _process_bar(self, timestamp: datetime, bar: pd.Series):
         """Process a single bar of data"""
@@ -321,9 +346,22 @@ class BacktestEngine:
         # Get current position before signal
         position_before = self.position_tracker.position
         
-        # Generate signal from strategy
-        signal_data = self.strategy.generate_signal(
-            data=bar.to_frame().T,  # Convert to DataFrame format expected by strategy
+        # Need historical data for strategy, not just current bar
+        # Get data up to current timestamp
+        lookback = max(self.strategy.long_window * 2, self.strategy.regime_lookback)
+        if hasattr(self, '_historical_data'):
+            # Find current bar index
+            current_idx = self._historical_data.index.get_loc(timestamp)
+            # Get lookback data
+            start_idx = max(0, current_idx - lookback + 1)
+            strategy_data = self._historical_data.iloc[start_idx:current_idx + 1]
+        else:
+            # Fallback to single bar (will likely not work well)
+            strategy_data = bar.to_frame().T
+        
+        # Generate signal from strategy using adapter method
+        signal_data = self._generate_signal_from_strategy(
+            df=strategy_data,
             current_position=position_before
         )
         

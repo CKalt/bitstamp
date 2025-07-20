@@ -186,9 +186,30 @@ def main():
         logger.info(f"Date range: {data_info['date_range']['start']} to {data_info['date_range']['end']}")
         logger.info(f"Price range: ${data_info['price_range']['min']:.2f} to ${data_info['price_range']['max']:.2f}")
     
+    # Prepare strategy parameters from config
+    strategy_params = {}
+    
+    # Extract parameters based on strategy type
+    if config_schema.strategy and config_schema.strategy.type == "adaptive":
+        # Get trending strategy parameters
+        if hasattr(config_schema, 'trending_strategy'):
+            strategy_params['short_window'] = config_schema.trending_strategy.get('short_window', 10)
+            strategy_params['long_window'] = config_schema.trending_strategy.get('long_window', 46)
+            strategy_params['signal_confirmation_bars'] = config_schema.trending_strategy.get('confirmation_bars', 2)
+        
+        # Get regime detection parameters
+        if hasattr(config_schema, 'regime_detection'):
+            strategy_params['regime_lookback'] = config_schema.regime_detection.get('lookback_bars', 100)
+            strategy_params['whipsaw_threshold'] = config_schema.regime_detection.get('whipsaw_threshold', 0.65)
+            strategy_params['regime_switch_threshold'] = config_schema.regime_detection.get('confidence_threshold', 0.6)
+        
+        # Get ranging strategy parameters
+        if hasattr(config_schema, 'ranging_strategy'):
+            strategy_params['bb_std_dev'] = config_schema.ranging_strategy.get('bb_std_dev', 2.0)
+    
     # Run backtest
     logger.info("Running backtest...")
-    engine = BacktestEngine(backtest_config)
+    engine = BacktestEngine(backtest_config, strategy_params)
     
     try:
         results = engine.run(data)
