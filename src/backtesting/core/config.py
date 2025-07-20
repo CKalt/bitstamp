@@ -4,7 +4,7 @@ Configuration system for backtesting with YAML support
 import yaml
 import json
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 import logging
 

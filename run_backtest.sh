@@ -27,6 +27,8 @@ show_help() {
     echo "  --trades          Show all trades in output"
     echo "  --quiet           Minimal output"
     echo "  --verbose         Verbose output"
+    echo "  --low-frequency   Primary timeframe (default: 15T)"
+    echo "  --high-frequency  Secondary timeframe (default: 1H)"
     echo "  --help            Show this help message"
     echo ""
     echo "Examples:"
@@ -38,6 +40,10 @@ show_help() {
 
 # Parse command line arguments
 ARGS=""
+# Default timeframes matching main branch
+LOW_FREQ="15T"
+HIGH_FREQ="1H"
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         --help|-h)
@@ -88,6 +94,14 @@ while [[ $# -gt 0 ]]; do
             ARGS="$ARGS --verbose"
             shift
             ;;
+        --low-frequency)
+            LOW_FREQ="$2"
+            shift 2
+            ;;
+        --high-frequency)
+            HIGH_FREQ="$2"
+            shift 2
+            ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
             show_help
@@ -117,7 +131,8 @@ mkdir -p backtest_results
 
 # Run the backtest
 echo -e "${YELLOW}Starting backtest...${NC}"
-$PYTHON src/backtesting/run_backtest.py --config "$CONFIG" $ARGS
+echo -e "${GREEN}Using timeframes: ${LOW_FREQ} (primary) and ${HIGH_FREQ} (secondary)${NC}"
+$PYTHON src/backtesting/run_backtest.py --config "$CONFIG" --low-frequency "$LOW_FREQ" --high-frequency "$HIGH_FREQ" $ARGS
 
 # Check exit code
 if [ $? -eq 0 ]; then

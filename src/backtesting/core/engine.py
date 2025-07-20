@@ -15,7 +15,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from tdr_core.strategy_core import AdaptiveStrategyCore
-from strategies import ExchangeHandlerBase
+# from strategies import ExchangeHandlerBase
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +193,7 @@ class BacktestPositionTracker:
         return 0.0
 
 
-class SimulatedExchangeHandler(ExchangeHandlerBase):
+class SimulatedExchangeHandler:
     """Simulates exchange for backtesting using historical data"""
     
     def __init__(self, position_tracker: BacktestPositionTracker):
@@ -262,8 +262,8 @@ class BacktestEngine:
         
         # Initialize strategy using existing core
         self.strategy = AdaptiveStrategyCore(
-            exchange_handler=self.exchange_handler,
-            initial_capital=config.initial_usd
+            short_window=config.short_window if hasattr(config, 'short_window') else 10,
+            long_window=config.long_window if hasattr(config, 'long_window') else 30
         )
         
         # Results tracking

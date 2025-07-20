@@ -1,0 +1,88 @@
+# 15-Minute Equivalent Adaptive Strategy
+# Compensates for 1-hour candles by using much more aggressive parameters
+# Designed to achieve ~1 trade per day despite using 1-hour candles
+
+name: "Adaptive Multi-Strategy - 15min Equivalent"
+description: "Aggressive parameters to compensate for 1-hour candle limitation"
+
+# Data settings
+data_source: "btcusd.log"
+
+# Initial capital
+initial_btc: 0.0
+initial_usd: 100000.0
+always_in_market: true
+
+# Fees and costs
+fee_percentage: 0.0012
+slippage_bps: 0.0
+
+# Trade limits - allow more trades
+max_trades_per_day: 20
+max_trades_per_hour: 5
+min_trade_gap_minutes: 5  # Very short gap
+min_btc_trade_size: 0.00000001
+
+# Risk management
+enable_pivot_protection: true
+enable_trailing_stops: true
+emergency_exit_loss: -2000.0
+pivot_buffer: 100.0
+
+# Strategy configuration
+strategy:
+  name: "Adaptive Multi-Strategy"
+  type: "adaptive"
+  parameters: {}
+
+# Regime detection - extremely responsive
+regime_detection:
+  lookback_bars: 20      # Very short (20 hours)
+  whipsaw_threshold: 0.40    # Very easy switching
+  trend_strength_threshold: 0.10  # Minimal trend needed
+  volatility_window: 15      # Short window
+  confidence_threshold: 0.35  # Very low confidence needed
+
+# TRENDING regime - ultra fast
+trending_strategy:
+  short_window: 2    # Extremely fast
+  long_window: 6     # Very responsive
+  confirmation_bars: 0  # No confirmation
+
+# RANGING regime - extremely sensitive
+ranging_strategy:
+  bb_window: 6       # Very short period (6 hours)
+  bb_std_dev: 0.8    # Very tight bands
+  rsi_window: 5      # Ultra short RSI
+  rsi_oversold: 40   # Less extreme
+  rsi_overbought: 60 # Less extreme
+  exit_at_opposite_band: false  # Exit at middle band for more trades
+
+# VOLATILE regime - very sensitive
+volatile_strategy:
+  macd_fast: 3       # Ultra fast
+  macd_slow: 9       # Very responsive
+  macd_signal: 3     # Quick signal
+  breakout_threshold: 20  # Very low threshold
+
+# Pivot protection settings - tighter for more trades
+pivot_protection:
+  lookback_hours: 12  # Shorter lookback
+  buffer_amount: 50.0  # Smaller buffer
+  sticky_duration_hours: 2  # Shorter sticky period
+  profit_thresholds:
+    - profit_pct: 3
+      protection_pct: 60
+    - profit_pct: 5
+      protection_pct: 70
+    - profit_pct: 10
+      protection_pct: 80
+    - profit_pct: 15
+      protection_pct: 85
+
+# Output settings
+output_dir: "backtest_results"
+save_trades: true
+save_signals: true
+save_equity_curve: true
+generate_plots: false

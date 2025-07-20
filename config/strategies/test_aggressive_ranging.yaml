@@ -1,0 +1,49 @@
+
+name: "Test aggressive_ranging"
+description: "Testing aggressive_ranging configuration"
+data_source: "btcusd.log"
+initial_btc: 0.0
+initial_usd: 100000.0
+always_in_market: true
+fee_percentage: 0.0012
+slippage_bps: 0.0
+max_trades_per_day: 5
+max_trades_per_hour: 3
+min_trade_gap_minutes: 15
+min_btc_trade_size: 0.00000001
+enable_pivot_protection: true
+enable_trailing_stops: true
+emergency_exit_loss: -2000.0
+pivot_buffer: 100.0
+strategy:
+  name: "Adaptive Multi-Strategy"
+  type: "adaptive"
+  parameters: {}
+output_dir: "backtest_results"
+save_trades: true
+save_signals: true
+save_equity_curve: true
+generate_plots: false
+
+regime_detection:
+  lookback_bars: 100
+  whipsaw_threshold: 0.65
+  trend_strength_threshold: 0.3
+  volatility_window: 50
+  confidence_threshold: 0.6
+trending_strategy:
+  short_window: 10
+  long_window: 30
+  confirmation_bars: 2
+ranging_strategy:
+  bb_window: 15
+  bb_std_dev: 1.5
+  rsi_window: 14
+  rsi_oversold: 35
+  rsi_overbought: 65
+  exit_at_opposite_band: true
+volatile_strategy:
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+  breakout_threshold: 100

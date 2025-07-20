@@ -11,7 +11,7 @@ from typing import Optional, Dict, List, Tuple
 import sys
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from data.loader import parse_log_file
+from src.data.loader import parse_log_file
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +21,16 @@ class BacktestDataManager:
     Manages historical data for backtesting, replicating live data flow exactly
     """
     
-    def __init__(self, log_file_path: str = "btcusd.log"):
+    def __init__(self, log_file_path: str = "btcusd.log", 
+                 primary_timeframe: str = "15T",  # Default to 15-minute like main branch
+                 secondary_timeframe: str = "1H"):
         self.log_file_path = log_file_path
+        self.primary_timeframe = primary_timeframe
+        self.secondary_timeframe = secondary_timeframe
         self.raw_trades_df = None
         self.ohlcv_1min_df = None
-        self.ohlcv_1hour_df = None
+        self.ohlcv_primary_df = None  # Was ohlcv_1hour_df
+        self.ohlcv_secondary_df = None
         
     def load_data(self, start_date: Optional[datetime] = None, 
                   end_date: Optional[datetime] = None,
@@ -33,7 +38,7 @@ class BacktestDataManager:
         """
         Load historical data from btcusd.log and prepare for backtesting
         
-        Returns 1-hour OHLCV data matching live system format
+        Returns primary timeframe OHLCV data (default 15-minute like main branch)
         """
         logger.info(f"Loading data from {self.log_file_path}")
         
@@ -57,21 +62,33 @@ class BacktestDataManager:
         # Step 3: Convert raw trades to 1-minute OHLCV (matching live system)
         self.ohlcv_1min_df = self._create_1min_candles(self.raw_trades_df)
         
-        # Step 4: Resample to 1-hour OHLCV (matching strategy expectation)
-        self.ohlcv_1hour_df = self._resample_to_1hour(self.ohlcv_1min_df)
+        # Step 4: Resample to primary timeframe (default 15-minute like main branch)
+        self.ohlcv_primary_df = self._resample_to_timeframe(self.ohlcv_1min_df, self.primary_timeframe)
         
-        # Step 5: Add required fields for strategy
+        # Step 5: If secondary timeframe requested, create that too
+        if self.secondary_timeframe:
+            self.ohlcv_secondary_df = self._resample_to_timeframe(self.ohlcv_1min_df, self.secondary_timeframe)
+        
+        # Step 6: Add required fields for strategy
         self._prepare_strategy_data()
         
-        logger.info(f"Prepared {len(self.ohlcv_1hour_df)} 1-hour candles")
-        logger.info(f"Date range: {self.ohlcv_1hour_df.index[0]} to {self.ohlcv_1hour_df.index[-1]}")
+        logger.info(f"Prepared {len(self.ohlcv_primary_df)} {self.primary_timeframe} candles")
+        logger.info(f"Date range: {self.ohlcv_primary_df.index[0]} to {self.ohlcv_primary_df.index[-1]}")
         
-        return self.ohlcv_1hour_df
+        return self.ohlcv_primary_df
     
     def _filter_by_date(self, df: pd.DataFrame, 
                        start_date: Optional[datetime], 
                        end_date: Optional[datetime]) -> pd.DataFrame:
         """Filter DataFrame by date range"""
+        # Ensure we have a datetime index
+        if not isinstance(df.index, pd.DatetimeIndex):
+            if 'timestamp' in df.columns:
+                df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
+                df.set_index('datetime', inplace=True)
+            elif 'datetime' in df.columns:
+                df.set_index('datetime', inplace=True)
+                
         if start_date:
             df = df[df.index >= start_date]
         if end_date:
@@ -112,12 +129,12 @@ class BacktestDataManager:
         
         return ohlcv
     
-    def _resample_to_1hour(self, df_1min: pd.DataFrame) -> pd.DataFrame:
+    def _resample_to_timeframe(self, df_1min: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """
-        Resample 1-minute data to 1-hour
-        Matches exact resampling in MACrossoverStrategy.run()
+        Resample 1-minute data to specified timeframe
+        Matches exact resampling from main branch
         """
-        df_1hour = df_1min.resample('1H').agg({
+        df_resampled = df_1min.resample(timeframe).agg({
             'open': 'first',
             'high': 'max',
             'low': 'min', 
@@ -127,18 +144,24 @@ class BacktestDataManager:
             'timestamp': 'last'
         }).dropna()
         
-        return df_1hour
+        return df_resampled
     
     def _prepare_strategy_data(self):
         """
         Add fields required by AdaptiveStrategyCore
         """
         # Add source field (all historical for backtesting)
-        self.ohlcv_1hour_df['source'] = 'historical'
+        self.ohlcv_primary_df['source'] = 'historical'
         
         # Ensure timestamp column exists
-        if 'timestamp' not in self.ohlcv_1hour_df.columns:
-            self.ohlcv_1hour_df['timestamp'] = self.ohlcv_1hour_df.index.astype(int) // 10**9
+        if 'timestamp' not in self.ohlcv_primary_df.columns:
+            self.ohlcv_primary_df['timestamp'] = self.ohlcv_primary_df.index.astype(int) // 10**9
+            
+        # Also prepare secondary timeframe if it exists
+        if self.ohlcv_secondary_df is not None:
+            self.ohlcv_secondary_df['source'] = 'historical'
+            if 'timestamp' not in self.ohlcv_secondary_df.columns:
+                self.ohlcv_secondary_df['timestamp'] = self.ohlcv_secondary_df.index.astype(int) // 10**9
     
     def get_data_for_backtest(self, start_idx: int = 0, end_idx: Optional[int] = None) -> pd.DataFrame:
         """
@@ -152,18 +175,18 @@ class BacktestDataManager:
             DataFrame suitable for strategy.generate_signal()
         """
         if end_idx is None:
-            return self.ohlcv_1hour_df.iloc[start_idx:].copy()
+            return self.ohlcv_primary_df.iloc[start_idx:].copy()
         else:
-            return self.ohlcv_1hour_df.iloc[start_idx:end_idx].copy()
+            return self.ohlcv_primary_df.iloc[start_idx:end_idx].copy()
     
     def get_price_at_time(self, timestamp: datetime) -> float:
         """Get the close price at a specific time"""
         # Find the most recent candle before or at timestamp
-        mask = self.ohlcv_1hour_df.index <= timestamp
+        mask = self.ohlcv_primary_df.index <= timestamp
         if mask.any():
-            return self.ohlcv_1hour_df.loc[mask, 'close'].iloc[-1]
+            return self.ohlcv_primary_df.loc[mask, 'close'].iloc[-1]
         else:
-            return self.ohlcv_1hour_df['close'].iloc[0]
+            return self.ohlcv_primary_df['close'].iloc[0]
     
     def simulate_tick_data(self, bar: pd.Series, num_ticks: int = 10) -> List[Tuple[datetime, float]]:
         """
@@ -184,7 +207,16 @@ class BacktestDataManager:
         
         # Generate tick timestamps evenly distributed across the bar
         bar_start = bar.name
-        bar_end = bar_start + timedelta(hours=1)
+        # Get the timeframe duration
+        if self.primary_timeframe.endswith('T'):
+            minutes = int(self.primary_timeframe[:-1])
+            bar_end = bar_start + timedelta(minutes=minutes)
+        elif self.primary_timeframe.endswith('H'):
+            hours = int(self.primary_timeframe[:-1])
+            bar_end = bar_start + timedelta(hours=hours)
+        else:
+            # Default to 15 minutes
+            bar_end = bar_start + timedelta(minutes=15)
         tick_times = pd.date_range(start=bar_start, end=bar_end, periods=num_ticks + 1)[:-1]
         
         # Generate price path that touches high and low
@@ -226,22 +258,22 @@ class BacktestDataManager:
     
     def get_data_info(self) -> Dict[str, any]:
         """Get information about loaded data"""
-        if self.ohlcv_1hour_df is None or self.ohlcv_1hour_df.empty:
+        if self.ohlcv_primary_df is None or self.ohlcv_primary_df.empty:
             return {"status": "No data loaded"}
         
         return {
             "raw_trades": len(self.raw_trades_df) if self.raw_trades_df is not None else 0,
             "1min_candles": len(self.ohlcv_1min_df) if self.ohlcv_1min_df is not None else 0,
-            "1hour_candles": len(self.ohlcv_1hour_df),
+            f"{self.primary_timeframe}_candles": len(self.ohlcv_primary_df),
             "date_range": {
-                "start": str(self.ohlcv_1hour_df.index[0]),
-                "end": str(self.ohlcv_1hour_df.index[-1])
+                "start": str(self.ohlcv_primary_df.index[0]),
+                "end": str(self.ohlcv_primary_df.index[-1])
             },
             "price_range": {
-                "min": self.ohlcv_1hour_df['low'].min(),
-                "max": self.ohlcv_1hour_df['high'].max()
+                "min": self.ohlcv_primary_df['low'].min(),
+                "max": self.ohlcv_primary_df['high'].max()
             },
-            "total_volume": self.ohlcv_1hour_df['volume'].sum()
+            "total_volume": self.ohlcv_primary_df['volume'].sum()
         }
 
 

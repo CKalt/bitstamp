@@ -49,6 +49,12 @@ def main():
     parser.add_argument('--days-back', type=int, 
                       help='Alternative to start-date: backtest last N days')
     
+    # Timeframe options (matching main branch functionality)
+    parser.add_argument('--low-frequency', type=str, default='15T',
+                      help='Primary timeframe for trading signals (default: 15T for 15-minute)')
+    parser.add_argument('--high-frequency', type=str, default='1H',
+                      help='Secondary timeframe for regime detection (default: 1H for 1-hour)')
+    
     # Output options
     parser.add_argument('--output-dir', type=str, help='Output directory for results')
     parser.add_argument('--output-file', type=str, 
@@ -135,7 +141,11 @@ def main():
     
     # Load data
     logger.info("Loading historical data...")
-    data_manager = BacktestDataManager(config_schema.data_source)
+    data_manager = BacktestDataManager(
+        config_schema.data_source,
+        primary_timeframe=args.low_frequency,
+        secondary_timeframe=args.high_frequency
+    )
     
     try:
         # Parse dates if provided
@@ -172,7 +182,7 @@ def main():
     # Display data info
     data_info = data_manager.get_data_info()
     if not args.quiet:
-        logger.info(f"Loaded {data_info['1hour_candles']} hourly candles")
+        logger.info(f"Loaded {data_info.get(f'{args.low_frequency}_candles', 0)} {args.low_frequency} candles")
         logger.info(f"Date range: {data_info['date_range']['start']} to {data_info['date_range']['end']}")
         logger.info(f"Price range: ${data_info['price_range']['min']:.2f} to ${data_info['price_range']['max']:.2f}")
     
