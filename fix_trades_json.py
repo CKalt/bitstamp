@@ -10,14 +10,20 @@ trades_file = "trades.json"
 
 # Create initial structure if file doesn't exist
 if not os.path.exists(trades_file):
-    trades_data = {
-        "strategy": "AdaptiveMultiStrategy",
-        "trades": []
-    }
+    trades_data = []
 else:
     # Read existing trades
     with open(trades_file, 'r') as f:
         trades_data = json.load(f)
+        
+# Handle both formats - array or object with trades array
+if isinstance(trades_data, dict) and 'trades' in trades_data:
+    trades_list = trades_data['trades']
+elif isinstance(trades_data, list):
+    trades_list = trades_data
+else:
+    print(f"❌ Unknown trades.json format")
+    exit(1)
 
 # Create a fake BUY trade with the correct entry price
 fake_trade = {
@@ -36,11 +42,17 @@ fake_trade = {
 }
 
 # Append the fake trade
-trades_data["trades"].append(fake_trade)
+trades_list.append(fake_trade)
 
-# Save back to file
+# Save back to file - preserve original format
+if isinstance(trades_data, dict):
+    trades_data['trades'] = trades_list
+    save_data = trades_data
+else:
+    save_data = trades_list
+
 with open(trades_file, 'w') as f:
-    json.dump(trades_data, f, indent=2)
+    json.dump(save_data, f, indent=2)
 
 print(f"✅ Added fake BUY trade to {trades_file} (appended at end)")
 print(f"   Amount: 1.36 BTC")
