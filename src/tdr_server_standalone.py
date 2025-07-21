@@ -80,23 +80,38 @@ def initialize_server_standalone():
             with open(trades_file, 'r') as f:
                 trades_data = json.load(f)
             
-            # Calculate position from trades
-            total_btc = 0
-            total_cost = 0
-            for trade in trades_data.get('trades', []):
-                if trade['type'] == 'BUY':
-                    total_btc += trade['amount']
-                    total_cost += trade['amount'] * trade['price']
-                elif trade['type'] == 'SELL':
-                    total_btc -= trade['amount']
-                    total_cost -= trade['amount'] * trade['price']
-            
-            # Check if positions match (with tolerance)
-            resume_btc = resume_data['amount'] if resume_data['position'] == 'LONG' else -resume_data['amount']
-            if abs(total_btc - resume_btc) > 0.01:  # More than 1% difference
-                logger.error(f"POSITION MISMATCH: Resume shows {resume_btc} BTC but trades.json shows {total_btc} BTC")
-                logger.error("Please run validate_resume_position.py to fix this before starting")
-                raise ValueError("Position mismatch between resume file and trades.json")
+            # Validate against most recent trades only (last 1-3 BUYs or last SELL)
+            trades = trades_data.get('trades', [])
+            if trades:
+                last_trade = trades[-1]
+                
+                if last_trade['type'] == 'SELL':
+                    # Validate against last SELL
+                    if resume_data['position'] != 'SHORT':
+                        logger.error(f"POSITION MISMATCH: Resume shows {resume_data['position']} but last trade was SELL")
+                        raise ValueError("Position mismatch between resume file and trades.json")
+                
+                elif last_trade['type'] == 'BUY':
+                    # Find last 1-3 consecutive BUYs
+                    consecutive_buys = []
+                    for i in range(len(trades) - 1, -1, -1):
+                        if trades[i]['type'] == 'BUY' and len(consecutive_buys) < 3:
+                            consecutive_buys.insert(0, trades[i])
+                        elif trades[i]['type'] != 'BUY':
+                            break
+                    
+                    total_btc = sum(t['amount'] for t in consecutive_buys)
+                    
+                    if resume_data['position'] != 'LONG':
+                        logger.error(f"POSITION MISMATCH: Resume shows {resume_data['position']} but last trades were BUYs")
+                        raise ValueError("Position mismatch between resume file and trades.json")
+                    
+                    # Allow 1% tolerance for multiple BUY trades
+                    if abs(total_btc - resume_data['amount']) / resume_data['amount'] > 0.01:
+                        logger.error(f"AMOUNT MISMATCH: Resume shows {resume_data['amount']} BTC but last {len(consecutive_buys)} BUYs total {total_btc:.8f} BTC")
+                        raise ValueError("Position mismatch between resume file and trades.json")
+                    
+                    logger.info(f"Position validated: {len(consecutive_buys)} BUY trades totaling {total_btc:.8f} BTC ≈ resume {resume_data['amount']} BTC")
     
     # Create initialization payload
     init_payload = {

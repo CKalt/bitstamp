@@ -37,37 +37,42 @@ def validate_position():
         print("❌ No trades in trades.json")
         return False
     
-    # Calculate position from trades
-    total_btc = 0
-    total_cost = 0
-    position_type = None
+    # Find the most recent position-establishing trades
+    # Look for either: last SELL trade OR last 1-3 consecutive BUY trades
+    last_trade = trades[-1]
     
-    # For BUYs, sum up multiple 90% trades
-    buy_trades = []
-    sell_trades = []
+    if last_trade['type'] == 'SELL':
+        # Validate against last SELL trade only
+        position_type = 'SHORT'
+        calculated_entry = last_trade['price']
+        total_btc = last_trade['amount'] / last_trade['price']  # BTC sold
+        print(f"\nValidating against last SELL trade: {last_trade['amount']} USD @ ${last_trade['price']}")
     
-    for trade in trades:
-        if trade['type'] == 'BUY':
-            buy_trades.append(trade)
-            total_btc += trade['amount']
-            total_cost += trade['amount'] * trade['price']
-        elif trade['type'] == 'SELL':
-            sell_trades.append(trade)
-            total_btc -= trade['amount']
-            total_cost -= trade['amount'] * trade['price']
-    
-    # Determine position
-    if total_btc > 0.01:  # LONG
+    elif last_trade['type'] == 'BUY':
+        # Find last 1-3 consecutive BUY trades
+        consecutive_buys = []
+        for i in range(len(trades) - 1, -1, -1):
+            if trades[i]['type'] == 'BUY':
+                consecutive_buys.insert(0, trades[i])
+                if len(consecutive_buys) >= 3:
+                    break
+            else:
+                break
+        
+        # Sum up the consecutive BUYs
+        total_btc = sum(t['amount'] for t in consecutive_buys)
+        total_cost = sum(t['amount'] * t['price'] for t in consecutive_buys)
         position_type = 'LONG'
         calculated_entry = total_cost / total_btc if total_btc > 0 else 0
-    elif total_btc < -0.01:  # SHORT
-        position_type = 'SHORT'
-        calculated_entry = abs(total_cost / total_btc) if total_btc != 0 else 0
-    else:
-        position_type = 'FLAT'
-        calculated_entry = 0
+        
+        print(f"\nValidating against last {len(consecutive_buys)} consecutive BUY trade(s):")
+        for t in consecutive_buys:
+            print(f"  {t['amount']} BTC @ ${t['price']}")
+        print(f"  Total: {total_btc:.8f} BTC @ average ${calculated_entry:.2f}")
     
-    print(f"\nTrades.json position: {position_type} {abs(total_btc):.8f} BTC @ ${calculated_entry:.2f}")
+    else:
+        print("❌ Unknown trade type")
+        return False
     
     # Validate with tolerance
     tolerance = 0.01  # 1% tolerance for amounts
