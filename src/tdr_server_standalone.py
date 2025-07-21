@@ -81,7 +81,14 @@ def initialize_server_standalone():
                 trades_data = json.load(f)
             
             # Validate against most recent trades only (last 1-3 BUYs or last SELL)
-            trades = trades_data.get('trades', [])
+            # Handle both formats - array or object with trades array
+            if isinstance(trades_data, dict) and 'trades' in trades_data:
+                trades = trades_data['trades']
+            elif isinstance(trades_data, list):
+                trades = trades_data
+            else:
+                trades = []
+            
             if trades:
                 last_trade = trades[-1]
                 
