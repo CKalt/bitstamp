@@ -43,6 +43,14 @@ CACHE_ENABLED = False
 app = Flask(__name__)
 CORS(app)
 
+# Register API blueprint for enhanced monitoring
+try:
+    from tdr_server_api import api_bp, init_api
+    app.register_blueprint(api_bp)
+except ImportError:
+    logger.warning("Enhanced API module not available")
+    api_bp = None
+
 # Global variables for server state
 data_manager = None
 order_placer = None
@@ -431,6 +439,11 @@ def initialize():
         
         initialization_complete = True
         logger.info("Server initialization complete")
+        
+        # Initialize enhanced API if available
+        if 'init_api' in globals():
+            init_api(shell, data_manager, logger)
+            logger.info("Enhanced API endpoints initialized")
         
         # Store best_strategy in server config
         server_config['best_strategy'] = best_strategy

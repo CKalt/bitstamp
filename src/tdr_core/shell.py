@@ -2944,6 +2944,90 @@ class CryptoShell(cmd.Cmd):
         except ValueError:
             print(f"❌ Invalid value: {value_str}")
 
+    def do_signal_monitor(self, arg):
+        """
+        Monitor current signal status and detect missed opportunities.
+        
+        Usage:
+          signal_monitor          # Show current signal status
+          signal_monitor history  # Show signal history (last hour)
+          signal_monitor missed   # Check for missed signals
+        """
+        if not self.auto_trader:
+            print("No auto trader running.")
+            return
+            
+        try:
+            # Import and create signal monitor
+            from tdr_core.signal_monitor import SignalMonitor
+            monitor = SignalMonitor(self.data_manager, self.auto_trader)
+            
+            if arg == "history":
+                history = monitor.get_signal_history(hours=1)
+                print(f"\n📊 SIGNAL HISTORY (Last Hour):")
+                print("="*60)
+                for h in history:
+                    signal_str = "BUY" if h['signal'] == 1 else "SELL"
+                    match_str = "✅" if h['position_matches'] else "❌"
+                    print(f"{h['timestamp'].strftime('%H:%M:%S')} | {signal_str} | MA Diff: {h['ma_diff_pct']:+.2f}% | Match: {match_str}")
+                    
+            elif arg == "missed":
+                missed = monitor.detect_missed_trades()
+                if missed:
+                    print(f"\n❌ MISSED OPPORTUNITIES:")
+                    print("="*60)
+                    for m in missed:
+                        print(f"- {m}")
+                else:
+                    print("✅ No missed trading opportunities detected")
+                    
+            else:
+                # Show current status
+                status = monitor.get_current_signal_status()
+                
+                if "error" in status:
+                    print(f"❌ Error: {status['error']}")
+                    return
+                    
+                print(f"\n🎯 SIGNAL MONITOR STATUS")
+                print("="*60)
+                print(f"Time: {status['timestamp']}")
+                print(f"Price: ${status['current_price']:,.2f}")
+                
+                print(f"\n📊 POSITION:")
+                pos = status['position']
+                print(f"  Side: {pos['side']}")
+                print(f"  Entry: ${pos['entry_price']:,.2f}")
+                print(f"  P&L: ${pos['unrealized_pnl']:,.2f}")
+                
+                print(f"\n📈 MOVING AVERAGES:")
+                ma = status['moving_averages']
+                print(f"  {ma['short_ma']['label']}: ${ma['short_ma']['value']:,.2f}")
+                print(f"  {ma['long_ma']['label']}: ${ma['long_ma']['value']:,.2f}")
+                print(f"  Difference: ${ma['difference']:,.2f} ({ma['difference_pct']:+.2f}%)")
+                
+                print(f"\n🚦 SIGNAL:")
+                sig = status['signal']
+                print(f"  Current: {sig['current']}")
+                print(f"  Matches Position: {'✅ YES' if sig['matches_position'] else '❌ NO'}")
+                print(f"  Distance to Flip: ${sig['distance_to_flip']:,.2f} ({sig['distance_to_flip_pct']:.2f}%)")
+                print(f"  Est. Bars to Signal: {sig['estimated_bars_to_signal']}")
+                
+                print(f"\n✔️  CONFIRMATION:")
+                conf = status['confirmation']
+                print(f"  Bars Confirmed: {conf['bars_confirmed']}/{conf['bars_required']}")
+                print(f"  Is Confirmed: {'✅ YES' if conf['is_confirmed'] else '❌ NO'}")
+                
+                if status['alerts']:
+                    print(f"\n⚠️  ALERTS:")
+                    for alert in status['alerts']:
+                        print(f"  {alert}")
+                        
+        except Exception as e:
+            print(f"Error in signal monitor: {e}")
+            import traceback
+            traceback.print_exc()
+
     def do_force_regime(self, arg):
         """
         Temporarily override regime detection for testing.
