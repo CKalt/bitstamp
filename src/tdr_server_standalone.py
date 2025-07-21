@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""
+Standalone Server Initialization Module
+Loads configuration from server-side files instead of waiting for client
+"""
+import os
+import json
+import logging
+from datetime import datetime
+
+logger = logging.getLogger('TDRServer')
+
+def load_server_config():
+    """Load configuration from server-side files"""
+    config = {
+        'best_strategy': {},
+        'server_config': {},
+        'auto_resume': True,  # Always enable auto-resume
+        'verbose': True
+    }
+    
+    # Load best_strategy.json
+    best_strategy_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'best_strategy.json')
+    if os.path.exists(best_strategy_file):
+        logger.info(f"Loading best_strategy.json from {best_strategy_file}")
+        with open(best_strategy_file, 'r') as f:
+            config['best_strategy'] = json.load(f)
+        logger.info(f"Loaded strategy: {config['best_strategy'].get('Strategy')} "
+                   f"with windows {config['best_strategy'].get('Short_Window')}/{config['best_strategy'].get('Long_Window')}")
+    else:
+        logger.warning("best_strategy.json not found, using defaults")
+        # Default strategy configuration
+        config['best_strategy'] = {
+            "Strategy": "AdaptiveMultiStrategy",
+            "Short_Window": 10,
+            "Long_Window": 46,
+            "do_live_trades": True,
+            "start_window_days_back": 30,
+            "end_window_days_back": 0
+        }
+    
+    # Check for server_config.json
+    server_config_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'server_config.json')
+    if os.path.exists(server_config_file):
+        logger.info(f"Loading server_config.json from {server_config_file}")
+        with open(server_config_file, 'r') as f:
+            server_specific = json.load(f)
+            config.update(server_specific)
+    
+    # Ensure required fields
+    config['best_strategy']['do_live_trades'] = config['best_strategy'].get('do_live_trades', True)
+    config['best_strategy']['start_window_days_back'] = config['best_strategy'].get('start_window_days_back', 30)
+    config['best_strategy']['end_window_days_back'] = config['best_strategy'].get('end_window_days_back', 0)
+    
+    return config
+
+def initialize_server_standalone():
+    """Initialize server using local configuration files"""
+    logger.info("Starting standalone server initialization...")
+    
+    # Load configuration from local files
+    config = load_server_config()
+    
+    # Create initialization payload
+    init_payload = {
+        'best_strategy': config['best_strategy'],
+        'verbose': config.get('verbose', True),
+        'test_mode': False  # Always use live mode for server
+    }
+    
+    logger.info("Server configuration loaded:")
+    logger.info(f"  Strategy: {config['best_strategy'].get('Strategy')}")
+    logger.info(f"  Live Trading: {config['best_strategy'].get('do_live_trades')}")
+    logger.info(f"  Auto Resume: {config.get('auto_resume')}")
+    
+    return init_payload

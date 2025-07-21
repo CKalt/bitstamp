@@ -193,52 +193,52 @@ def auto_load_history():
                           f"size={data_manager.position_size}, cost_basis={data_manager.position_cost_basis}, "
                           f"entry_price=${data_manager.position_cost_basis / abs(data_manager.position_size) if data_manager.position_size != 0 else 0:.2f}")
         
-        # Check if auto_resume is enabled
-        if best_strategy.get('auto_resume', False):
-            logger.info("Auto-resume is enabled, checking for saved position...")
-            
-            # Debug: Log data_manager position state before auto-resume
-            if hasattr(data_manager, 'position_size'):
-                logger.info(f"[POSITION_DEBUG] data_manager state BEFORE auto-resume: position={getattr(data_manager, 'position', 'UNDEFINED')}, size={getattr(data_manager, 'position_size', 'UNDEFINED')}, cost_basis={getattr(data_manager, 'position_cost_basis', 'UNDEFINED')}")
+        # ALWAYS check for auto-resume after history loads
+        # This ensures trading resumes automatically after server restart
+        logger.info("Checking for saved position to auto-resume...")
+        
+        # Debug: Log data_manager position state before auto-resume
+        if hasattr(data_manager, 'position_size'):
+            logger.info(f"[POSITION_DEBUG] data_manager state BEFORE auto-resume: position={getattr(data_manager, 'position', 'UNDEFINED')}, size={getattr(data_manager, 'position_size', 'UNDEFINED')}, cost_basis={getattr(data_manager, 'position_cost_basis', 'UNDEFINED')}")
+        else:
+            logger.info(f"[POSITION_DEBUG] data_manager has NO position tracking attributes before auto-resume")
+        try:
+            # Check if auto-trader is already running
+            if shell and shell.auto_trader:
+                logger.info("Auto-trader is already running, skipping auto-resume")
             else:
-                logger.info(f"[POSITION_DEBUG] data_manager has NO position tracking attributes before auto-resume")
-            try:
-                # Check if auto-trader is already running
-                if shell and shell.auto_trader:
-                    logger.info("Auto-trader is already running, skipping auto-resume")
-                else:
-                    # Load last saved position
-                    resume_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'resume-auto-trade.json')
-                    if os.path.exists(resume_file):
-                        with open(resume_file, 'r') as f:
-                            resume_data = json.load(f)
+                # Load last saved position
+                resume_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'resume-auto-trade.json')
+                if os.path.exists(resume_file):
+                    with open(resume_file, 'r') as f:
+                        resume_data = json.load(f)
+                    
+                    logger.info(f"Found saved position: {resume_data['position']} {resume_data['amount']} {resume_data['unit']} @ ${resume_data['entry_price']}")
+                    
+                    # Extract command arguments
+                    parts = resume_data['command'].split()
+                    if len(parts) >= 4 and parts[0] == 'resume_auto_trade':
+                        resume_args = ' '.join(parts[1:])
+                        logger.info(f"Executing auto-resume: {resume_args}")
                         
-                        logger.info(f"Found saved position: {resume_data['position']} {resume_data['amount']} {resume_data['unit']} @ ${resume_data['entry_price']}")
-                        
-                        # Extract command arguments
-                        parts = resume_data['command'].split()
-                        if len(parts) >= 4 and parts[0] == 'resume_auto_trade':
-                            resume_args = ' '.join(parts[1:])
-                            logger.info(f"Executing auto-resume: {resume_args}")
+                        # Execute resume command
+                        if shell:
+                            shell.do_resume_auto_trade(resume_args)
+                            logger.info("Auto-resume completed successfully")
                             
-                            # Execute resume command
-                            if shell:
-                                shell.do_resume_auto_trade(resume_args)
-                                logger.info("Auto-resume completed successfully")
-                                
-                                # Debug: Log position state after auto-resume
-                                if shell.auto_trader:
-                                    logger.info(f"[POSITION_DEBUG] auto_trader state AFTER auto-resume: position={shell.auto_trader.position}, size={shell.auto_trader.position_size}, cost_basis={shell.auto_trader.position_cost_basis}")
-                                    if shell.auto_trader.position_size != 0:
-                                        entry_price = shell.auto_trader.position_cost_basis / abs(shell.auto_trader.position_size)
-                                        logger.info(f"[POSITION_DEBUG] Calculated entry price: ${entry_price:.2f}")
-                                
-                                if hasattr(data_manager, 'position_size'):
-                                    logger.info(f"[POSITION_DEBUG] data_manager state AFTER auto-resume: position={getattr(data_manager, 'position', 'UNDEFINED')}, size={getattr(data_manager, 'position_size', 'UNDEFINED')}, cost_basis={getattr(data_manager, 'position_cost_basis', 'UNDEFINED')}")
-                            else:
-                                logger.error("Shell not available for auto-resume")
+                            # Debug: Log position state after auto-resume
+                            if shell.auto_trader:
+                                logger.info(f"[POSITION_DEBUG] auto_trader state AFTER auto-resume: position={shell.auto_trader.position}, size={shell.auto_trader.position_size}, cost_basis={shell.auto_trader.position_cost_basis}")
+                                if shell.auto_trader.position_size != 0:
+                                    entry_price = shell.auto_trader.position_cost_basis / abs(shell.auto_trader.position_size)
+                                    logger.info(f"[POSITION_DEBUG] Calculated entry price: ${entry_price:.2f}")
+                            
+                            if hasattr(data_manager, 'position_size'):
+                                logger.info(f"[POSITION_DEBUG] data_manager state AFTER auto-resume: position={getattr(data_manager, 'position', 'UNDEFINED')}, size={getattr(data_manager, 'position_size', 'UNDEFINED')}, cost_basis={getattr(data_manager, 'position_cost_basis', 'UNDEFINED')}")
                         else:
-                            logger.error(f"Invalid resume command format: {resume_data.get('command')}")
+                            logger.error("Shell not available for auto-resume")
+                    else:
+                        logger.error(f"Invalid resume command format: {resume_data.get('command')}")
                     else:
                         logger.info("No saved position found for auto-resume")
             except Exception as e:
@@ -1297,17 +1297,55 @@ def shutdown():
 
 def main():
     """Main server entry point"""
-    parser = argparse.ArgumentParser(description='TDR Trading Server - Configuration from Client')
+    parser = argparse.ArgumentParser(description='TDR Trading Server - Standalone Mode')
     parser.add_argument('--port', type=int, default=4000, help='Server port (default: 4000)')
     parser.add_argument('--host', type=str, default='0.0.0.0', help='Server host (default: 0.0.0.0)')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
+    parser.add_argument('--wait-for-client', action='store_true', help='Wait for client configuration instead of auto-initializing')
     
     args = parser.parse_args()
     
     # Setup logging
     setup_logging(args.verbose)
     logger.info(f"Starting TDR Server on {args.host}:{args.port}")
-    logger.info("Waiting for client to send configuration...")
+    
+    # Auto-initialize unless --wait-for-client is specified
+    if not args.wait_for_client:
+        logger.info("Auto-initializing server with local configuration...")
+        
+        # Import standalone initialization
+        from tdr_server_standalone import initialize_server_standalone
+        
+        # Start a thread to auto-initialize after server starts
+        def auto_init():
+            import time
+            time.sleep(2)  # Wait for Flask to start
+            
+            try:
+                # Load configuration
+                config = initialize_server_standalone()
+                
+                # Initialize server components
+                import requests
+                response = requests.post(
+                    f'http://localhost:{args.port}/api/initialize',
+                    json=config,
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    logger.info("Server auto-initialization completed successfully")
+                else:
+                    logger.error(f"Auto-initialization failed: {response.text}")
+            except Exception as e:
+                logger.error(f"Error during auto-initialization: {e}")
+        
+        import threading
+        init_thread = threading.Thread(target=auto_init)
+        init_thread.daemon = True
+        init_thread.start()
+    else:
+        logger.info("Waiting for client to send configuration...")
     
     # Suppress werkzeug console logging
     import logging as werkzeug_logging

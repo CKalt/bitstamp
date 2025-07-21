@@ -218,19 +218,43 @@ Initializing connection to remote server...
             # Automatically enable command interface
             self.do_enable_commands("")
         else:
-            # Initialize server with configuration
-            print(f"Server not initialized, sending configuration...")
-            if self.initialize_server():
-                print(f"✅ Successfully initialized TDR server at {self.server_url}")
-                self.initialized = True
-                # Wait for server to be fully ready
-                self.wait_for_server_ready()
-                self.update_status()
-                # Automatically enable command interface
-                self.do_enable_commands("")
+            # Check if we should send configuration or let server auto-initialize
+            if hasattr(self, 'send_config') and self.send_config:
+                # Initialize server with configuration
+                print(f"Server not initialized, sending configuration...")
+                if self.initialize_server():
+                    print(f"✅ Successfully initialized TDR server at {self.server_url}")
+                    self.initialized = True
+                    # Wait for server to be fully ready
+                    self.wait_for_server_ready()
+                    self.update_status()
+                    # Automatically enable command interface
+                    self.do_enable_commands("")
+                else:
+                    print(f"❌ Failed to initialize server at {self.server_url}")
+                    print("Some commands may not work properly.")
             else:
-                print(f"❌ Failed to initialize server at {self.server_url}")
-                print("Some commands may not work properly.")
+                # Server will auto-initialize, just wait for it
+                print(f"⏳ Waiting for server to auto-initialize...")
+                time.sleep(3)  # Give server time to auto-init
+                
+                # Check if server is ready
+                max_retries = 10
+                for i in range(max_retries):
+                    if self.check_server_status():
+                        print(f"✅ Server auto-initialized successfully")
+                        self.initialized = True
+                        self.wait_for_server_ready()
+                        self.update_status()
+                        # Automatically enable command interface
+                        self.do_enable_commands("")
+                        break
+                    else:
+                        print(f"⏳ Waiting for server initialization... ({i+1}/{max_retries})")
+                        time.sleep(2)
+                else:
+                    print(f"❌ Server failed to auto-initialize")
+                    print("Some commands may not work properly.")
     
     def emptyline(self):
         """Do nothing on empty line"""
@@ -1380,6 +1404,7 @@ def main():
     parser.add_argument('--config', type=str, default='best_strategy.json', help='Configuration file')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('--command', type=str, help='Execute single command and exit')
+    parser.add_argument('--send-config', action='store_true', help='Send configuration to server (legacy mode)')
     
     args = parser.parse_args()
     
@@ -1397,6 +1422,7 @@ def main():
     
     # Create client
     client = RemoteTDRClient(server_url, config_file=args.config, verbose=args.verbose)
+    client.send_config = args.send_config  # Set whether to send config to server
     
     # Execute single command if provided
     if args.command:
