@@ -10,7 +10,7 @@ logger = logging.getLogger('TDRServer')
 log_api = Blueprint('log_api', __name__)
 
 # Get log file path
-LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tdr_server.log')
+LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs', 'tdr_server.log')
 
 @log_api.route('/api/logs/tail', methods=['GET'])
 def tail_logs():
