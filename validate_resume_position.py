@@ -24,7 +24,7 @@ def validate_position():
     print(f"Resume position: {resume_position} {resume_amount} BTC @ ${resume_entry}")
     
     # Read trades file
-    trades_file = "AdaptiveMultiStrategy.trades"
+    trades_file = "trades.json"
     if not os.path.exists(trades_file):
         print("❌ No trades.json found - cannot validate")
         return False

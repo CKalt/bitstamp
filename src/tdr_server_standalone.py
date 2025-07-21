@@ -74,7 +74,7 @@ def initialize_server_standalone():
             logger.info(f"Resume position: {resume_data['position']} {resume_data['amount']} {resume_data.get('unit', 'btc')} @ ${resume_data['entry_price']}")
         
         # Validate against trades.json
-        trades_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'AdaptiveMultiStrategy.trades')
+        trades_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'trades.json')
         if os.path.exists(trades_file):
             logger.info("Validating resume position against trades.json...")
             with open(trades_file, 'r') as f:

@@ -6,7 +6,7 @@ import json
 import os
 from datetime import datetime
 
-trades_file = "AdaptiveMultiStrategy.trades"
+trades_file = "trades.json"
 
 # Create initial structure if file doesn't exist
 if not os.path.exists(trades_file):
@@ -42,7 +42,7 @@ trades_data["trades"].append(fake_trade)
 with open(trades_file, 'w') as f:
     json.dump(trades_data, f, indent=2)
 
-print(f"✅ Added fake BUY trade to {trades_file}")
+print(f"✅ Added fake BUY trade to {trades_file} (appended at end)")
 print(f"   Amount: 1.36 BTC")
 print(f"   Price: $117,545")
 print(f"   Cost: $159,861.20")
