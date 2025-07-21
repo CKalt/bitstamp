@@ -117,10 +117,10 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
     actual_lines = 0
     
     # Update initial progress
-    parsing_progress['total_lines'] = lines_to_process  # This will be updated if file is larger
+    parsing_progress['total_lines'] = total_lines  # Use actual total lines
     parsing_progress['processed_lines'] = 0
     parsing_progress['percent'] = 0
-    parsing_progress['status'] = f'Starting to process lines'
+    parsing_progress['status'] = f'Starting from line {start_line:,}'
 
     with open(file_path, 'r') as file:
         for i, line in enumerate(file, 1):
@@ -135,15 +135,15 @@ def parse_log_file(file_path, start_date=None, end_date=None, progress_callback=
             # This is normal for a continuously updated log file
             
             # Update parsing progress continuously for API access
-            if lines_to_process > 0:
-                parsing_progress['processed_lines'] = current_line
-                parsing_progress['percent'] = min(100, int((current_line / lines_to_process) * 100))
+            parsing_progress['processed_lines'] = i  # Use actual line number
+            if total_lines > 0:
+                parsing_progress['percent'] = int((i / total_lines) * 100)
             
             # Show status updates periodically to console
             if i >= next_status_line:
-                parsing_progress['status'] = f'Processing line {current_line:,} of {lines_to_process:,}'
-                # Show actual line number from file and percentage
-                print(f"Status: Reading historical data - Line {i:,} ({current_line:,}/{lines_to_process:,} processed, {parsing_progress['percent']}%) - Last date: {last_date}")
+                parsing_progress['status'] = f'Processing line {i:,}'
+                # Just show line number and date - no confusing ratios
+                print(f"Status: Reading historical data - Line {i:,} - Last date: {last_date}")
                 next_status_line += status_interval
 
             try:
