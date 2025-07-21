@@ -241,10 +241,10 @@ def auto_load_history():
                         logger.error(f"Invalid resume command format: {resume_data.get('command')}")
                 else:
                     logger.info("No saved position found for auto-resume")
-            except Exception as e:
-                logger.error(f"Error during auto-resume: {e}")
-                import traceback
-                traceback.print_exc()
+        except Exception as e:
+            logger.error(f"Error during auto-resume: {e}")
+            import traceback
+            traceback.print_exc()
             
     except Exception as e:
         logger.error(f"Error loading history: {e}")
