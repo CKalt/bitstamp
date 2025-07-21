@@ -566,6 +566,9 @@ class MACrossoverStrategy:
                         self.current_trends = self.get_current_trends(df_ma)
                         self.df_ma = df_ma
 
+                        # CRITICAL: Validate position before checking signals
+                        self.validate_position_tracking()
+
                         # Check signals (MA crossover)
 
                         # Diagnostic: Log signal evaluation
@@ -2331,33 +2334,63 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         """Validate and correct position tracking inconsistencies."""
         current_price = self.data_manager.get_current_price(self.symbol) or 0
         
-        # Check for position flag inconsistencies
-        if abs(self.balance_btc) < 1e-6 and self.balance_usd > 10000:
-            if self.position != -1:
-                self.logger.warning("Position tracking error: holding USD but not marked SHORT")
-                self.position = -1
-                self.diagnostic_logger.log_position_anomaly(
-                    "Corrected position flag to SHORT",
-                    {"balance_btc": self.balance_btc, "balance_usd": self.balance_usd}
-                )
+        # Determine actual position from balances
+        actual_position = 0
+        if self.balance_btc > 0.0001:  # More than dust amount
+            actual_position = 1  # LONG
+        elif self.balance_usd > 100:  # More than minimum USD
+            actual_position = -1  # SHORT
+        else:
+            # Neutral/error state
+            self.logger.warning(f"Unusual balance state: BTC={self.balance_btc}, USD={self.balance_usd}")
+            actual_position = 0
         
-        elif self.balance_btc > 1e-6 and abs(self.balance_usd) < 1000:
-            if self.position != 1:
-                self.logger.warning("Position tracking error: holding BTC but not marked LONG")
-                self.position = 1
-                self.diagnostic_logger.log_position_anomaly(
-                    "Corrected position flag to LONG", 
-                    {"balance_btc": self.balance_btc, "balance_usd": self.balance_usd}
-                )
+        # Check if position flag matches actual holdings
+        if self.position != actual_position:
+            self.logger.warning(f"🚨 POSITION MISMATCH DETECTED!")
+            self.logger.warning(f"  Position flag: {self.position} ({'LONG' if self.position == 1 else 'SHORT' if self.position == -1 else 'NEUTRAL'})")
+            self.logger.warning(f"  Actual holdings: BTC={self.balance_btc:.8f}, USD=${self.balance_usd:.2f}")
+            self.logger.warning(f"  Actual position: {actual_position} ({'LONG' if actual_position == 1 else 'SHORT' if actual_position == -1 else 'NEUTRAL'})")
+            
+            # Auto-correct the position flag
+            old_position = self.position
+            self.position = actual_position
+            
+            # Log the correction
+            self.diagnostic_logger.log_position_anomaly(
+                f"Auto-corrected position flag from {old_position} to {actual_position}",
+                {
+                    "balance_btc": self.balance_btc, 
+                    "balance_usd": self.balance_usd,
+                    "old_position": old_position,
+                    "new_position": actual_position,
+                    "position_size": self.position_size,
+                    "cost_basis": self.position_cost_basis
+                }
+            )
+            
+            self.logger.info(f"✅ Position flag corrected from {old_position} to {actual_position}")
+            
+            # Also validate position size matches
+            if actual_position == 1 and abs(self.position_size - self.balance_btc) > 0.0001:
+                self.logger.warning(f"Position size mismatch: {self.position_size} vs actual {self.balance_btc}")
+                self.position_size = self.balance_btc
+            elif actual_position == -1 and self.position_size >= 0:
+                # For SHORT positions, position_size should be negative
+                self.position_size = -self.balance_btc if self.balance_btc > 0 else 0
         
-        # DISABLED: This validation was incorrectly resetting valid entry prices
-        # # Validate cost basis reasonableness
-        # if self.position == 1 and self.position_size > 0 and current_price > 0:
-        #     avg_entry = self.position_cost_basis / self.position_size
-        #     if avg_entry > current_price * 1.5:
-        #         self.logger.error(f"Unrealistic entry price: ${avg_entry:.2f} vs current ${current_price:.2f}")
-        #         self.position_cost_basis = self.position_size * current_price * 0.95
-        #         self.logger.info(f"Reset cost basis to ${self.position_cost_basis:.2f}")
+        # Additional validation: ensure position_size sign matches position
+        if self.position == 1 and self.position_size < 0:
+            self.logger.warning(f"LONG position but negative size: {self.position_size}")
+            self.position_size = abs(self.position_size)
+        elif self.position == -1 and self.position_size > 0:
+            self.logger.warning(f"SHORT position but positive size: {self.position_size}")
+            self.position_size = -abs(self.position_size)
+            
+        # Log current validated state
+        self.logger.debug(f"Position validation complete: pos={self.position}, btc={self.balance_btc:.8f}, usd=${self.balance_usd:.2f}, size={self.position_size}")
+        
+        return actual_position
         
         # Validate short position tracking
         if self.position == -1 and self.position_size >= 0 and self.balance_usd > 50000:
@@ -2934,6 +2967,9 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                         else:
                             self.logger.debug(f"Keeping {self.active_strategy} strategy (regime: {regime}, confidence: {confidence:.1%})")
 
+                        # 3.5 CRITICAL: Validate position before generating signals
+                        self.validate_position_tracking()
+                        
                         # 4. Generate signal using active strategy
                         if self.active_strategy == "trending":
                             signal, signal_reason = self.generate_trending_signal(
@@ -3039,6 +3075,12 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
 
     def check_for_signals(self, latest_signal, current_price, signal_time):
         """Execute trades with adaptive strategy logic."""
+        
+        # Always validate position first
+        actual_position = self.validate_position_tracking()
+        
+        # Log signal evaluation details
+        self.logger.info(f"📊 Signal Evaluation: signal={latest_signal}, position={self.position}, btc={self.balance_btc:.8f}, usd=${self.balance_usd:.2f}")
         
         # Check startup grace period
         if (datetime.now() - self.startup_time).total_seconds() < (self.startup_grace_period_minutes * 60):
