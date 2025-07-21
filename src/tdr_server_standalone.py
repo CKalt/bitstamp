@@ -72,6 +72,31 @@ def initialize_server_standalone():
         with open(resume_file, 'r') as f:
             resume_data = json.load(f)
             logger.info(f"Resume position: {resume_data['position']} {resume_data['amount']} {resume_data.get('unit', 'btc')} @ ${resume_data['entry_price']}")
+        
+        # Validate against trades.json
+        trades_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'AdaptiveMultiStrategy.trades')
+        if os.path.exists(trades_file):
+            logger.info("Validating resume position against trades.json...")
+            with open(trades_file, 'r') as f:
+                trades_data = json.load(f)
+            
+            # Calculate position from trades
+            total_btc = 0
+            total_cost = 0
+            for trade in trades_data.get('trades', []):
+                if trade['type'] == 'BUY':
+                    total_btc += trade['amount']
+                    total_cost += trade['amount'] * trade['price']
+                elif trade['type'] == 'SELL':
+                    total_btc -= trade['amount']
+                    total_cost -= trade['amount'] * trade['price']
+            
+            # Check if positions match (with tolerance)
+            resume_btc = resume_data['amount'] if resume_data['position'] == 'LONG' else -resume_data['amount']
+            if abs(total_btc - resume_btc) > 0.01:  # More than 1% difference
+                logger.error(f"POSITION MISMATCH: Resume shows {resume_btc} BTC but trades.json shows {total_btc} BTC")
+                logger.error("Please run validate_resume_position.py to fix this before starting")
+                raise ValueError("Position mismatch between resume file and trades.json")
     
     # Create initialization payload
     init_payload = {
