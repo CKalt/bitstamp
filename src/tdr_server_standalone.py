@@ -61,16 +61,33 @@ def initialize_server_standalone():
     # Load configuration from local files
     config = load_server_config()
     
+    # Check if resume file exists
+    import os
+    import json
+    resume_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'resume-auto-trade.json')
+    has_resume_file = os.path.exists(resume_file)
+    
+    if has_resume_file:
+        logger.info(f"Found resume file at {resume_file}")
+        with open(resume_file, 'r') as f:
+            resume_data = json.load(f)
+            logger.info(f"Resume position: {resume_data['position']} {resume_data['amount']} {resume_data.get('unit', 'btc')} @ ${resume_data['entry_price']}")
+    
     # Create initialization payload
     init_payload = {
         'best_strategy': config['best_strategy'],
         'verbose': config.get('verbose', True),
-        'test_mode': False  # Always use live mode for server
+        'test_mode': False,  # Always use live mode for server
+        'auto_resume': True  # Force auto-resume to load position
     }
+    
+    # Force auto_resume in best_strategy
+    init_payload['best_strategy']['auto_resume'] = True
     
     logger.info("Server configuration loaded:")
     logger.info(f"  Strategy: {config['best_strategy'].get('Strategy')}")
     logger.info(f"  Live Trading: {config['best_strategy'].get('do_live_trades')}")
-    logger.info(f"  Auto Resume: {config.get('auto_resume')}")
+    logger.info(f"  Auto Resume: True (forced)")
+    logger.info(f"  Resume File: {'FOUND' if has_resume_file else 'NOT FOUND'}")
     
     return init_payload
