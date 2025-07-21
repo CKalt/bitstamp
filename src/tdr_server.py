@@ -51,6 +51,13 @@ except ImportError:
     logger.warning("Enhanced API module not available")
     api_bp = None
 
+# Register log API blueprint
+try:
+    from tdr_log_api import log_api
+    app.register_blueprint(log_api)
+except ImportError:
+    log_api = None
+
 # Global variables for server state
 data_manager = None
 order_placer = None
