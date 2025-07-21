@@ -58,6 +58,13 @@ try:
 except ImportError:
     log_api = None
 
+# Register monitoring API blueprint
+try:
+    from tdr_monitoring_api import monitoring_api
+    app.register_blueprint(monitoring_api)
+except ImportError:
+    monitoring_api = None
+
 # Global variables for server state
 data_manager = None
 order_placer = None
