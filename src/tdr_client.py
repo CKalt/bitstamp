@@ -189,7 +189,7 @@ Initializing connection to remote server...
 """
     prompt = 'tdr> '
     
-    def __init__(self, server_url: str, config_file: str = 'best_strategy.json', verbose: bool = False):
+    def __init__(self, server_url: str, config_file: str = None, verbose: bool = False):
         super().__init__()
         self.server_url = server_url.rstrip('/')
         self.verbose = verbose
@@ -205,8 +205,8 @@ Initializing connection to remote server...
         self.initialized = False
         self.logger = logging.getLogger("TDRClient")
         
-        # Load local configuration
-        self.config = self.load_configuration()
+        # Don't load any configuration - server handles everything
+        self.config = {'best_strategy': {}, 'test_mode': False}
         
         # Check if server is already initialized
         if self.check_server_initialized():
@@ -265,7 +265,7 @@ Initializing connection to remote server...
         dotext = 'do_' + text
         return [a[3:] for a in self.get_names() if a.startswith(dotext)]
     
-    def load_configuration(self, sync_from_server=True) -> Dict[str, Any]:
+    def load_configuration(self, sync_from_server=False) -> Dict[str, Any]:
         """Load configuration from local files
         
         Args:
@@ -1401,7 +1401,7 @@ def main():
     """Main entry point for TDR client"""
     parser = argparse.ArgumentParser(description='TDR Trading Client')
     parser.add_argument('--server', type=str, help='Server URL (default: http://localhost:4000)')
-    parser.add_argument('--config', type=str, default='best_strategy.json', help='Configuration file')
+    parser.add_argument('--config', type=str, default=None, help='Configuration file (deprecated - server handles config)')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('--command', type=str, help='Execute single command and exit')
     parser.add_argument('--send-config', action='store_true', help='Send configuration to server (legacy mode)')
