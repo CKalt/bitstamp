@@ -471,43 +471,67 @@ class CryptoShell(cmd.Cmd):
         elif desired_position == -1:
             initial_balance_usd = amount_num
 
-        self.auto_trader = AdaptiveMultiStrategy(
-            self.data_manager,
-            short_window,
-            long_window,
-            amount_num,
-            'btcusd',
-            self.logger,
-            live_trading=do_live,
-            max_trades_per_day=max_trades_day,
-            initial_position=desired_position,
-            initial_balance_btc=initial_balance_btc,
-            initial_balance_usd=initial_balance_usd,
-            # Adaptive strategy parameters
-            regime_lookback=regime_lookback,  # From config or default 50
-            signal_confirmation_bars=confirmation_bars,  # From config or default 2
-            min_trade_gap_minutes=min_trade_gap,  # From config or default 30
-            regime_switch_threshold=regime_threshold,  # From config or default 0.7
-            # Mean reversion for your whipsaw situation
-            rsi_oversold=35,                 # Your RSI is 35.66!
-            rsi_overbought=65,
-            bb_std_dev=2.0,
-            # Breakout parameters
-            volume_threshold=1.5,
-            macd_threshold=0.001,
-            # Pivot protection parameters
-            enable_pivot_protection=best_strategy_params.get('enable_pivot_protection', True),
-            pivot_buffer=best_strategy_params.get('pivot_buffer', 100),
-            pivot_lookback_hours=best_strategy_params.get('pivot_lookback_hours', 2),
-            enable_trailing_pivots=best_strategy_params.get('enable_trailing_pivots', True),
-            pivot_profit_tiers=best_strategy_params.get('pivot_profit_tiers', [
-                {'threshold': 0.05, 'protection_ratio': 0.70},
-                {'threshold': 0.10, 'protection_ratio': 0.80},
-                {'threshold': 0.15, 'protection_ratio': 0.85},
-                {'threshold': 0.20, 'protection_ratio': 0.90}
-            ]),
-            pivot_respect_technical_levels=best_strategy_params.get('pivot_respect_technical_levels', True)
-        )
+        # CRITICAL FIX: Respect strategy configuration from best_strategy.json
+        # Check if we should use adaptive strategy or pure MA strategy
+        strategy_type = best_strategy_params.get('strategy_type', 'MA')
+        enable_adaptive = best_strategy_params.get('enable_adaptive_strategy', False)
+        
+        if enable_adaptive or strategy_type == 'AdaptiveMulti':
+            # Use adaptive multi-strategy with regime detection
+            self.logger.info("🎯 Using AdaptiveMultiStrategy with market regime detection")
+            self.auto_trader = AdaptiveMultiStrategy(
+                self.data_manager,
+                short_window,
+                long_window,
+                amount_num,
+                'btcusd',
+                self.logger,
+                live_trading=do_live,
+                max_trades_per_day=max_trades_day,
+                initial_position=desired_position,
+                initial_balance_btc=initial_balance_btc,
+                initial_balance_usd=initial_balance_usd,
+                # Adaptive strategy parameters
+                regime_lookback=regime_lookback,  # From config or default 50
+                signal_confirmation_bars=confirmation_bars,  # From config or default 2
+                min_trade_gap_minutes=min_trade_gap,  # From config or default 30
+                regime_switch_threshold=regime_threshold,  # From config or default 0.7
+                # Mean reversion for your whipsaw situation
+                rsi_oversold=35,                 # Your RSI is 35.66!
+                rsi_overbought=65,
+                bb_std_dev=2.0,
+                # Breakout parameters
+                volume_threshold=1.5,
+                macd_threshold=0.001,
+                # Pivot protection parameters
+                enable_pivot_protection=best_strategy_params.get('enable_pivot_protection', True),
+                pivot_buffer=best_strategy_params.get('pivot_buffer', 100),
+                pivot_lookback_hours=best_strategy_params.get('pivot_lookback_hours', 2),
+                enable_trailing_pivots=best_strategy_params.get('enable_trailing_pivots', True),
+                pivot_profit_tiers=best_strategy_params.get('pivot_profit_tiers', [
+                    {'threshold': 0.05, 'protection_ratio': 0.70},
+                    {'threshold': 0.10, 'protection_ratio': 0.80},
+                    {'threshold': 0.15, 'protection_ratio': 0.85},
+                    {'threshold': 0.20, 'protection_ratio': 0.90}
+                ]),
+                pivot_respect_technical_levels=best_strategy_params.get('pivot_respect_technical_levels', True)
+            )
+        else:
+            # Use pure MA crossover strategy for consistency with backtesting
+            self.logger.info(f"📊 Using pure MACrossoverStrategy (MA {short_window}/{long_window})")
+            self.auto_trader = MACrossoverStrategy(
+                self.data_manager,
+                short_window,
+                long_window,
+                amount_num,
+                'btcusd',
+                self.logger,
+                live_trading=do_live,
+                max_trades_per_day=max_trades_day,
+                initial_position=desired_position,
+                initial_balance_btc=initial_balance_btc,
+                initial_balance_usd=initial_balance_usd
+            )
         
         # Check if we have explicit resume parameters first
         is_resume = hasattr(self, '_resume_entry_price') and self._resume_entry_price
