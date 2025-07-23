@@ -2335,13 +2335,18 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
         current_price = self.data_manager.get_current_price(self.symbol) or 0
         
         # Determine actual position from balances
+        # CRITICAL: In a 100% flip system, we're either LONG (holding BTC) or SHORT (holding USD)
         actual_position = 0
+        
+        # Check BTC balance first - if we have BTC, we're LONG
         if self.balance_btc > 0.0001:  # More than dust amount
             actual_position = 1  # LONG
-        elif self.balance_usd > 100:  # More than minimum USD
+            # Even if we also have USD, having BTC means we're LONG
+        elif self.balance_usd > 100 and self.balance_btc < 0.0001:  
+            # Only SHORT if we have USD AND no BTC
             actual_position = -1  # SHORT
         else:
-            # Neutral/error state
+            # This should rarely happen in a 100% position system
             self.logger.warning(f"Unusual balance state: BTC={self.balance_btc}, USD={self.balance_usd}")
             actual_position = 0
         
@@ -2377,7 +2382,11 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                 self.position_size = self.balance_btc
             elif actual_position == -1 and self.position_size >= 0:
                 # For SHORT positions, position_size should be negative
-                self.position_size = -self.balance_btc if self.balance_btc > 0 else 0
+                # Don't change position_size if we're already tracking a short position
+                if abs(self.position_size) < 0.0001:
+                    # Only set to 0 if we truly have no position tracked
+                    self.position_size = 0
+                    self.logger.warning("SHORT position but no position size tracked - may need to validate from trades")
         
         # Additional validation: ensure position_size sign matches position
         if self.position == 1 and self.position_size < 0:
