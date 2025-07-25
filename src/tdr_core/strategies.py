@@ -620,8 +620,8 @@ class MACrossoverStrategy:
                             eval_data["blocked_reason"] = "; ".join(why_not)
                         
                         # Log EVERY evaluation to both logger and diagnostic file
-                        self.logger.info(f"📊 SIGNAL_EVAL: MA{self.short_window}={short_ma:.0f} MA{self.long_window}={long_ma:.0f} "
-                                       f"Diff={ma_diff:.0f} Prox={ma_proximity:.2%} Sig={latest_signal} Pos={self.position} "
+                        self.logger.info(f"📊 SIGNAL_EVAL v2: MA{self.short_window}={short_ma:.0f} MA{self.long_window}={long_ma:.0f} "
+                                       f"Diff={ma_diff:.0f} Prox={ma_proximity:.2f}% Sig={latest_signal} Pos={self.position} "
                                        f"Action={eval_data.get('action', 'NO_TRADE')}")
                         
                         # Also log to diagnostic file
