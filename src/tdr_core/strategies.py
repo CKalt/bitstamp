@@ -401,6 +401,9 @@ class MACrossoverStrategy:
 
         # For storing an initial theoretical trade if hist_position matches user request
         self.theoretical_trade = None
+        
+        # MA separation threshold (default 0.3%)
+        self.ma_separation_threshold = 0.3
 
         # Initialize diagnostic logger
         self.diagnostic_logger = DiagnosticLogger(f"MA_{short_window}_{long_window}")
