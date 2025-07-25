@@ -17,7 +17,7 @@ while true; do
     # Extract key values
     PROXIMITY=$(echo "$STATUS" | grep -o "MA Crossover Proximity: [0-9.]*%" | grep -o "[0-9.]*")
     PRICE=$(echo "$STATUS" | grep -o "Current Price:.*\$[0-9,]*" | grep -o "\$[0-9,]*" | head -1)
-    PNL=$(echo "$STATUS" | grep -o "Unrealized PnL:.*" | awk -F'PnL:' '{print $2}' | sed 's/^[[:space:]]*//' | cut -d' ' -f1)
+    PNL=$(echo "$STATUS" | grep -o "Unrealized PnL:.*" | awk -F'PnL:' '{print $2}' | sed 's/^[[:space:]]*//' | tr -d '\n' | awk '{print $1}')
     
     # Display with timestamp
     echo "[$(date +%H:%M:%S)] Price: $PRICE | Proximity: ${PROXIMITY}% | PnL: $PNL"
