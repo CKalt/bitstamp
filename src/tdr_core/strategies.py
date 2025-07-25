@@ -576,7 +576,7 @@ class MACrossoverStrategy:
                         short_ma = df_ma.iloc[-1]['Short_MA']
                         long_ma = df_ma.iloc[-1]['Long_MA']
                         ma_diff = short_ma - long_ma
-                        ma_proximity = abs(ma_diff) / current_price * 100
+                        ma_proximity = abs(ma_diff) / long_ma * 100
                         
                         # Log comprehensive signal evaluation data
                         eval_data = {
