@@ -624,6 +624,10 @@ class MACrossoverStrategy:
                                        f"Diff={ma_diff:.0f} Prox={ma_proximity:.2f}% Sig={latest_signal} Pos={self.position} "
                                        f"Action={eval_data.get('action', 'NO_TRADE')}")
                         
+                        # CRITICAL: Log when we're in trigger zone
+                        if ma_proximity <= self.ma_separation_threshold:
+                            self.logger.warning(f"🚨 IN TRIGGER ZONE! Proximity {ma_proximity:.3f}% <= {self.ma_separation_threshold}% threshold")
+                        
                         # Also log to diagnostic file
                         self.diagnostic_logger.log_event("SIGNAL_EVALUATION", eval_data)
                         
@@ -837,6 +841,11 @@ class MACrossoverStrategy:
         if self.last_signal_time == signal_time:
             self.logger.debug(f"⏭️ Skipping - same signal time as last: {signal_time}")
             return
+
+        # CRITICAL TRADE DECISION LOG
+        self.logger.warning(f"🎯 TRADE DECISION: Signal={latest_signal} vs Position={self.position} | "
+                          f"Will trade? {(latest_signal == 1 and self.position <= 0) or (latest_signal == -1 and self.position >= 0)} | "
+                          f"Live={self.live_trading} | Today's trades={self.trade_count_today}/{self.max_trades_per_day}")
 
         # If we see a BUY signal
         if latest_signal == 1 and self.position <= 0:
