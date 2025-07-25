@@ -570,37 +570,63 @@ class MACrossoverStrategy:
                         self.validate_position_tracking()
 
                         # Check signals (MA crossover)
-
-                        # Diagnostic: Log signal evaluation
-                        if self.diagnostic_logger.should_snapshot():
-                            self._log_diagnostic_snapshot()
-                            
-                        # Always log signal evaluations
+                        
+                        # ENHANCED LOGGING: Log EVERY signal evaluation for debugging
+                        short_ma = df_ma.iloc[-1]['Short_MA']
+                        long_ma = df_ma.iloc[-1]['Long_MA']
+                        ma_diff = short_ma - long_ma
+                        ma_proximity = abs(ma_diff) / current_price * 100
+                        
+                        # Log comprehensive signal evaluation data
+                        eval_data = {
+                            "timestamp": current_time.strftime('%Y-%m-%d %H:%M:%S'),
+                            "current_price": current_price,
+                            "short_ma": round(short_ma, 2),
+                            "long_ma": round(long_ma, 2),
+                            "ma_diff": round(ma_diff, 2),
+                            "ma_proximity": round(ma_proximity, 4),
+                            "signal": latest_signal,
+                            "position": self.position,
+                            "balance_btc": self.balance_btc,
+                            "balance_usd": self.balance_usd,
+                            "trades_today": self.trade_count_today,
+                            "live_trading": self.live_trading
+                        }
+                        
+                        # Determine if trade would happen
                         will_trade = False
                         why_not = []
-                        signal_desc = f"Short MA: {df_ma.iloc[-1]['Short_MA']:.2f}, Long MA: {df_ma.iloc[-1]['Long_MA']:.2f}"
                         
                         if latest_signal == 1 and self.position <= 0:
-                            will_trade = self.trade_count_today < self.max_trades_per_day
-                            if not will_trade:
-                                why_not.append(f"Daily limit reached: {self.trade_count_today}/{self.max_trades_per_day}")
+                            # Signal says go LONG but we're SHORT or NEUTRAL
+                            if self.trade_count_today >= self.max_trades_per_day:
+                                why_not.append(f"Daily limit: {self.trade_count_today}/{self.max_trades_per_day}")
+                            else:
+                                will_trade = True
+                                eval_data["action"] = "WILL_BUY"
                         elif latest_signal == -1 and self.position >= 0:
-                            will_trade = self.trade_count_today < self.max_trades_per_day
-                            if not will_trade:
-                                why_not.append(f"Daily limit reached: {self.trade_count_today}/{self.max_trades_per_day}")
+                            # Signal says go SHORT but we're LONG or NEUTRAL
+                            if self.trade_count_today >= self.max_trades_per_day:
+                                why_not.append(f"Daily limit: {self.trade_count_today}/{self.max_trades_per_day}")
+                            else:
+                                will_trade = True
+                                eval_data["action"] = "WILL_SELL"
                         else:
-                            why_not.append(f"Signal {latest_signal} matches current position {self.position}")
-                            
-                        # Only log if something interesting might happen or it's been a while
-                        if will_trade or self.diagnostic_logger.should_snapshot() or latest_signal != getattr(self, '_last_logged_signal', None):
-                            self.diagnostic_logger.log_signal_evaluation(
-                                signal_type="MA_CROSSOVER",
-                                signal_value=latest_signal,
-                                reason=signal_desc,
-                                will_trade=will_trade,
-                                why_not=why_not if why_not else None
-                            )
-                            self._last_logged_signal = latest_signal
+                            why_not.append(f"Signal({latest_signal}) matches position({self.position})")
+                            eval_data["action"] = "NO_TRADE"
+                        
+                        if why_not:
+                            eval_data["blocked_reason"] = "; ".join(why_not)
+                        
+                        # Log EVERY evaluation to both logger and diagnostic file
+                        self.logger.info(f"📊 SIGNAL_EVAL: MA{self.short_window}={short_ma:.0f} MA{self.long_window}={long_ma:.0f} "
+                                       f"Diff={ma_diff:.0f} Prox={ma_proximity:.2%} Sig={latest_signal} Pos={self.position} "
+                                       f"Action={eval_data.get('action', 'NO_TRADE')}")
+                        
+                        # Also log to diagnostic file
+                        self.diagnostic_logger.log_event("SIGNAL_EVALUATION", eval_data)
+                        
+                        # Execute check_for_signals
                         self.check_for_signals(
                             latest_signal, current_price, signal_time)
                     else:
@@ -792,6 +818,10 @@ class MACrossoverStrategy:
         If the new MA signal differs from our current position, place trades.
         Also checks daily trade-limit; if at max, it skips.
         """
+        # ENHANCED LOGGING: Log entry to check_for_signals
+        self.logger.info(f"🔍 CHECK_FOR_SIGNALS: signal={latest_signal}, price=${current_price:.0f}, "
+                        f"position={self.position}, time={signal_time}, live={self.live_trading}")
+        
         today = datetime.utcnow().date()
         if today != self.current_day:
             self.current_day = today
@@ -804,6 +834,7 @@ class MACrossoverStrategy:
                 self.logger.debug("New day, resetting daily trade count.")
 
         if self.last_signal_time == signal_time:
+            self.logger.debug(f"⏭️ Skipping - same signal time as last: {signal_time}")
             return
 
         # If we see a BUY signal
