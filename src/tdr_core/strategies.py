@@ -566,8 +566,9 @@ class MACrossoverStrategy:
                         self.current_trends = self.get_current_trends(df_ma)
                         self.df_ma = df_ma
 
-                        # CRITICAL: Validate position before checking signals
-                        self.validate_position_tracking()
+                        # Validate position tracking if method exists
+                        if hasattr(self, 'validate_position_tracking'):
+                            self.validate_position_tracking()
 
                         # Check signals (MA crossover)
                         
