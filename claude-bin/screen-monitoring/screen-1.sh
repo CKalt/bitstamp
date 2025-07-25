@@ -14,8 +14,6 @@ echo "=================================="
 echo "This monitors signal evaluations on the server"
 echo "You should see SIGNAL_EVAL entries every ~30 seconds"
 echo ""
-echo "Starting log monitor..."
-echo ""
 
 # Show last 5 matching entries first
 echo "Recent entries:"
@@ -23,10 +21,7 @@ echo "---------------"
 tail -100 logs/tdr_server.log | grep -E "SIGNAL_EVAL|CHECK_FOR_SIGNALS|trigger|Executing trade|Buy signal|Sell signal" | tail -5
 echo ""
 echo "Now monitoring for new entries..."
-echo ""
+echo "==============================================="
 
-# Then monitor for new ones
-tail -f logs/tdr_server.log | grep --line-buffered -E "SIGNAL_EVAL|CHECK_FOR_SIGNALS|trigger|Executing trade|Buy signal|Sell signal" | while read line; do
-    # Add timestamp for clarity
-    echo "[$(date +%H:%M:%S)] $line"
-done
+# Use stdbuf to disable all buffering
+stdbuf -o0 -e0 tail -f logs/tdr_server.log | stdbuf -o0 -e0 grep -E "SIGNAL_EVAL|CHECK_FOR_SIGNALS|trigger|Executing trade|Buy signal|Sell signal"
