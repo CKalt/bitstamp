@@ -1808,11 +1808,9 @@ class MACrossoverStrategy:
                 'unrealized_pnl': round(position_info.get('unrealized_pnl', 0), 2),
                 'command': f"resume_auto_trade {amount:.8f}{unit} {position_type} {entry_price:.0f}",
                 'strategy': {
-                    'type': 'AdaptiveMultiStrategy',
+                    'type': 'MACrossoverStrategy',
                     'short_window': self.short_window,
-                    'long_window': self.long_window,
-                    'current_regime': getattr(self, 'current_regime', 'unknown'),
-                    'active_strategy': getattr(self, 'active_strategy', 'unknown')
+                    'long_window': self.long_window
                 },
                 'balances': {
                     'btc': round(self.balance_btc, 8),
@@ -1831,6 +1829,8 @@ class MACrossoverStrategy:
             resume_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'resume-auto-trade.json')
             with open(resume_file, 'w') as f:
                 json.dump(resume_data, f, indent=2)
+            
+            self.logger.info(f"✅ Resume state saved: {position_type.upper()} {amount:.8f}{unit} @ ${entry_price:.2f}")
                 
             # Also append to position history
             history_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'position-history.json')

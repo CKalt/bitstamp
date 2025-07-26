@@ -232,9 +232,13 @@ def auto_load_history():
                 with open(resume_file, 'r') as f:
                     resume_data = json.load(f)
                 
-                logger.info(f"Found saved position: {resume_data['position']} {resume_data['amount']} {resume_data['unit']} @ ${resume_data['entry_price']}")
+                logger.info(f"Found saved position: {resume_data.get('position', 'UNKNOWN')} {resume_data.get('amount', 0)} {resume_data.get('unit', 'usd')} @ ${resume_data.get('entry_price', 0)}")
                 
                 # Extract command arguments
+                if 'command' not in resume_data:
+                    logger.error(f"Resume file missing 'command' field. Keys found: {list(resume_data.keys())}")
+                    return
+                    
                 parts = resume_data['command'].split()
                 if len(parts) >= 4 and parts[0] == 'resume_auto_trade':
                     resume_args = ' '.join(parts[1:])
@@ -242,15 +246,23 @@ def auto_load_history():
                     
                     # Execute resume command
                     if shell:
+                        logger.info(f"[RESUME_DEBUG] Executing shell.do_resume_auto_trade('{resume_args}')")
                         shell.do_resume_auto_trade(resume_args)
-                        logger.info("Auto-resume completed successfully")
+                        logger.info("Auto-resume command executed")
+                        
+                        # Wait a moment for auto_trader to be created
+                        import time
+                        time.sleep(0.5)
                         
                         # Debug: Log position state after auto-resume
-                        if shell.auto_trader:
-                            logger.info(f"[POSITION_DEBUG] auto_trader state AFTER auto-resume: position={shell.auto_trader.position}, size={shell.auto_trader.position_size}, cost_basis={shell.auto_trader.position_cost_basis}")
-                            if shell.auto_trader.position_size != 0:
+                        if hasattr(shell, 'auto_trader') and shell.auto_trader:
+                            logger.info(f"[POSITION_DEBUG] auto_trader state AFTER auto-resume: position={shell.auto_trader.position}, size={getattr(shell.auto_trader, 'position_size', 0)}, cost_basis={getattr(shell.auto_trader, 'position_cost_basis', 0)}")
+                            if hasattr(shell.auto_trader, 'position_size') and shell.auto_trader.position_size != 0:
                                 entry_price = shell.auto_trader.position_cost_basis / abs(shell.auto_trader.position_size)
                                 logger.info(f"[POSITION_DEBUG] Calculated entry price: ${entry_price:.2f}")
+                            logger.info("✅ Auto-trading resumed successfully")
+                        else:
+                            logger.warning("⚠️ Auto-trader not created after resume - may need manual start")
                         
                         if hasattr(data_manager, 'position_size'):
                             logger.info(f"[POSITION_DEBUG] data_manager state AFTER auto-resume: position={getattr(data_manager, 'position', 'UNDEFINED')}, size={getattr(data_manager, 'position_size', 'UNDEFINED')}, cost_basis={getattr(data_manager, 'position_cost_basis', 'UNDEFINED')}")
