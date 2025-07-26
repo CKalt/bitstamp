@@ -215,8 +215,11 @@ def auto_load_history():
                           f"size={data_manager.position_size}, cost_basis={data_manager.position_cost_basis}, "
                           f"entry_price=${data_manager.position_cost_basis / abs(data_manager.position_size) if data_manager.position_size != 0 else 0:.2f}")
         
-        # ALWAYS check for auto-resume after history loads
-        # This ensures trading resumes automatically after server restart
+        # Check if auto-resume is enabled in config
+        if not server_config.get('best_strategy', {}).get('auto_resume', False):
+            logger.info("Auto-resume is disabled in configuration - skipping auto-resume check")
+            return
+            
         logger.info("Checking for saved position to auto-resume...")
         
         # Debug: Log data_manager position state before auto-resume
@@ -588,16 +591,16 @@ def execute_command():
             if any(cmd in command for cmd in history_required_commands):
                 if not server_config.get('history_loaded', False):
                     if server_config.get('history_loading', False):
-                        # Special handling for resume_auto_trade - enable auto_resume instead of blocking
+                        # Special handling for resume_auto_trade - respect auto_resume config
                         if 'resume_auto_trade' in command and server_config.get('best_strategy'):
                             if not server_config['best_strategy'].get('auto_resume', False):
-                                server_config['best_strategy']['auto_resume'] = True
-                                logger.info("Enabled auto_resume - will resume automatically when history loads")
+                                # Don't force auto_resume if it's explicitly set to False in config
+                                logger.info("Auto-resume is disabled in config. Resume command must be executed manually after history loads.")
                                 return jsonify({
                                     'command': command,
-                                    'success': True,
-                                    'message': 'Auto-resume enabled. Trading will start automatically when history finishes loading.',
-                                    'auto_resume': True,
+                                    'success': False,
+                                    'message': 'Auto-resume is disabled. Please wait for history to load then execute command manually.',
+                                    'auto_resume': False,
                                     'history_loading': True,
                                     'history_progress': server_config.get('history_progress', 0)
                                 }), 200
