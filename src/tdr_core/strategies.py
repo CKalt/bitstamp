@@ -444,6 +444,17 @@ class MACrossoverStrategy:
         
         # Load recent trades for whipsaw tracking
         self._load_recent_trades_for_whipsaw()
+        
+        # Initialize System Verifier for continuous regression detection
+        self.system_verifier = None
+        self.last_verification_time = None
+        self.verification_interval = 30  # seconds
+        try:
+            from tdr_core.system_verifier import SystemVerifier
+            self.system_verifier = SystemVerifier(self, data_manager, logger)
+            self.logger.info("✅ System Verifier initialized for continuous regression detection")
+        except Exception as e:
+            self.logger.warning(f"Could not initialize System Verifier: {e}")
     
     @property
     def position_cost_basis(self):
@@ -542,6 +553,21 @@ class MACrossoverStrategy:
             if evaluation_count % 5 == 0 or (current_time - last_evaluation_log).total_seconds() > 300:
                 self.logger.info(f"📊 Strategy evaluation #{evaluation_count} at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 last_evaluation_log = current_time
+            
+            # Run System Verifier checks every 30 seconds
+            if self.system_verifier and (self.last_verification_time is None or 
+                                        (current_time - self.last_verification_time).total_seconds() >= self.verification_interval):
+                try:
+                    verification_results = self.system_verifier.run_all_checks()
+                    self.last_verification_time = current_time
+                    
+                    # Log errors if any found
+                    if verification_results.get('errors'):
+                        self.logger.error(f"🚨 SYSTEM VERIFIER DETECTED {len(verification_results['errors'])} ISSUES!")
+                        for error in verification_results['errors']:
+                            self.logger.error(f"  ❌ {error}")
+                except Exception as e:
+                    self.logger.error(f"System Verifier failed: {e}")
             
             df = self.data_manager.get_price_dataframe(self.symbol)
             if not df.empty:
@@ -2371,6 +2397,17 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             f"   Will switch between TRENDING → RANGING → VOLATILE strategies")
         self.logger.info(
             f"   Regime lookback: {self.regime_lookback}, Gap: {self.min_trade_gap_minutes}min")
+        
+        # Initialize System Verifier for continuous regression detection
+        self.system_verifier = None
+        self.last_verification_time = None
+        self.verification_interval = 30  # seconds
+        try:
+            from tdr_core.system_verifier import SystemVerifier
+            self.system_verifier = SystemVerifier(self, data_manager, logger)
+            self.logger.info("✅ System Verifier initialized for continuous regression detection")
+        except Exception as e:
+            self.logger.warning(f"Could not initialize System Verifier: {e}")
 
         # BUG FIX: Use actual config parameters instead of hardcoded values
         self.logger.info(f"   Confidence threshold: {self.regime_switch_threshold:.1%}")
@@ -2743,6 +2780,21 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                     self.save_resume_state()
                 except Exception as e:
                     self.logger.error(f"Failed to save resume state: {e}")
+            
+            # Run System Verifier checks every 30 seconds
+            if self.system_verifier and (self.last_verification_time is None or 
+                                        (current_time - self.last_verification_time).total_seconds() >= self.verification_interval):
+                try:
+                    verification_results = self.system_verifier.run_all_checks()
+                    self.last_verification_time = current_time
+                    
+                    # Log errors if any found
+                    if verification_results.get('errors'):
+                        self.logger.error(f"🚨 SYSTEM VERIFIER DETECTED {len(verification_results['errors'])} ISSUES!")
+                        for error in verification_results['errors']:
+                            self.logger.error(f"  ❌ {error}")
+                except Exception as e:
+                    self.logger.error(f"System Verifier failed: {e}")
 
             df = self.data_manager.get_price_dataframe(self.symbol)
             if not df.empty:
