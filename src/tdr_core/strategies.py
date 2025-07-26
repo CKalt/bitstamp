@@ -404,6 +404,9 @@ class MACrossoverStrategy:
         
         # MA separation threshold (default 0.3%)
         self.ma_separation_threshold = 0.3
+        
+        # Initialize last_trade_time to prevent save_resume_state errors
+        self.last_trade_time = None
 
         # Initialize diagnostic logger
         self.diagnostic_logger = DiagnosticLogger(f"MA_{short_window}_{long_window}")
