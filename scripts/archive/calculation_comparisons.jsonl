@@ -1,0 +1,5 @@
+{"timestamp": "2025-07-26T11:56:02.647411", "old": 116666.66666666667, "new": 116666.67, "difference": 0.003333333326736465, "position_size": 1.5, "cost_basis": 175000}
+{"timestamp": "2025-07-26T11:56:02.647525", "old": 100000.0, "new": 100000.0, "difference": 0.0, "position_size": 1.5, "cost_basis": 150000}
+{"timestamp": "2025-07-26T11:56:02.647565", "old": 100000.0, "new": 100000.0, "difference": 0.0, "position_size": 0.001, "cost_basis": 100}
+{"timestamp": "2025-07-26T11:56:02.647607", "old": 100000.0, "new": 100000.0, "difference": 0.0, "position_size": 2.0, "cost_basis": 200000}
+{"timestamp": "2025-07-26T11:56:02.647716", "old": 100000000.0, "new": 0, "difference": 100000000.0, "position_size": 1e-07, "cost_basis": 10, "significant": true}
