@@ -714,6 +714,15 @@ class CryptoShell(cmd.Cmd):
                     }
                 self.logger.info(
                     f"Case 1: LONG matches system. Theoretical entry: {amount_num:.8f} BTC @ ${effective_entry_price:.2f}")
+                
+                # Sync to data_manager
+                if hasattr(self, 'data_manager'):
+                    self.data_manager.position = self.auto_trader.position
+                    self.data_manager.position_size = self.auto_trader.position_size
+                    self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
+                    self.data_manager.balance_btc = self.auto_trader.balance_btc
+                    self.data_manager.balance_usd = self.auto_trader.balance_usd
+                    self.logger.info(f"[POSITION_DEBUG] Synced LONG position to data_manager: position={self.data_manager.position}")
 
             elif desired_position == -1 and not has_real_trades:  # Case 3: Both short
                 # Use resume entry price if available, otherwise current market price
@@ -738,6 +747,15 @@ class CryptoShell(cmd.Cmd):
                     }
                 self.logger.info(
                     f"Case 3: SHORT matches system. Theoretical entry: ${amount_num:.2f} @ ${effective_entry_price:.2f}")
+                
+                # Sync to data_manager
+                if hasattr(self, 'data_manager'):
+                    self.data_manager.position = self.auto_trader.position
+                    self.data_manager.position_size = self.auto_trader.position_size
+                    self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
+                    self.data_manager.balance_btc = self.auto_trader.balance_btc
+                    self.data_manager.balance_usd = self.auto_trader.balance_usd
+                    self.logger.info(f"[POSITION_DEBUG] Synced SHORT position to data_manager: position={self.data_manager.position}")
 
         else:
 # ------------------------------------------------------------------------

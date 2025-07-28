@@ -638,7 +638,11 @@ Initializing connection to remote server...
                     elif position_val == -1:
                         print(f"  Direction: SHORT")
                     else:
-                        print(f"  Direction: NEUTRAL (Error - should not happen)")
+                        # Check if auto trader is active but waiting for signal
+                        if 'auto_trader' in response and response['auto_trader'].get('active'):
+                            print(f"  Direction: NEUTRAL (Waiting for MA crossover signal)")
+                        else:
+                            print(f"  Direction: NEUTRAL")
                 
                 print(f"  BTC: {pos['btc_balance']:.8f}")
                 print(f"  USD: ${pos['usd_balance']:.2f}")
