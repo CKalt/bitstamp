@@ -1,57 +1,56 @@
-# bitstamp
-src/triangular.py 
+# Documentation Index
 
-In the provided code, the triangular arbitrage strategy is being used to explore profit opportunities by trading across three pairs: BTC to BCH (bchbtc), BCH to USD (bchusd), and USD back to BTC (btcusd). For each of these trades, there's a transaction fee applied. Let's break down the calculations with respect to fees:
+## Primary Documents
 
-    Trading BTC for BCH:
-        Initial amount: 1 BTC.
-        Conversion formula: amount_in_bch = (1.0 / price_in_bchbtc) * (1 - transaction_fee)
-        This essentially says that you take the inverse of the bchbtc price to get the amount in BCH you would receive for 1 BTC. You then subtract the transaction fee from this amount.
+### 📋 [SYSTEM_DOCUMENTATION.md](SYSTEM_DOCUMENTATION.md)
+**Main consolidated reference & USK** - Start here!
+- System architecture and component locations
+- Current trading positions and status  
+- Development environment setup
+- Critical operations and commands
+- Recent work and future plans
+- **USK (Update Session Knowledge) section at bottom**
 
-    Trading BCH for USD:
-        Conversion formula: amount_in_usd = amount_in_bch * price_in_bchusd * (1 - transaction_fee)
-        Here, you're multiplying the amount of BCH you have by the bchusd price to get the equivalent amount in USD. You then account for the transaction fee by subtracting it.
+### 🏗️ [ARCHITECTURE.md](ARCHITECTURE.md)
+Technical architecture details
+- Data flow between components
+- Network configuration
+- Directory structures
+- Process architecture
 
-    Trading USD back to BTC:
-        Conversion formula: final_btc_amount = amount_in_usd / price_in_btcusd * (1 - transaction_fee)
-        You divide the amount in USD by the btcusd price to convert back to BTC, then subtract the transaction fee.
+### 📊 [LIVE_VS_BACKTEST_COMPARISON_PLAN.md](../btc-testing/docs/LIVE_VS_BACKTEST_COMPARISON_PLAN.md)
+Plan for verifying backtest accuracy
+- Comparison logging infrastructure
+- Daily verification workflow
+- Success criteria
 
-Finally, the profit or loss is calculated by subtracting the original amount (1 BTC) from the final_btc_amount.
+## Legacy/Detailed Documents
 
-Profit/Loss Calculation:
+These have been consolidated into SYSTEM_DOCUMENTATION.md but retained for reference:
 
-    profit_or_loss = final_btc_amount - 1.0
+### 🚨 `prompts/in-case-I-crash-details.md`
+Emergency recovery information (now in SYSTEM_DOCUMENTATION.md)
 
-If profit_or_loss is positive and above the defined profit_threshold, then it's a profitable arbitrage opportunity.
+### 🛠️ `prompts/dev-plan.md`  
+Development process details (now in SYSTEM_DOCUMENTATION.md Section 5)
 
-Regarding the transaction fees:
+### 📝 `prompts/resume-claude-session.md`
+Detailed session history (very long, kept for reference)
 
-    The transaction_fee is taken as a percentage (in the code, it's set to 0.002, which is 0.2%).
-    For each of the trades, this fee is applied, which means the actual amount being traded gets reduced by this fee.
+## Quick Reference
 
-In real-world scenarios, the fee structures might be more complex, with variable fees based on trade volumes, specific platforms, or other factors. However, this code assumes a constant fee for simplicity. If you're planning to implement this in a real-world scenario, it's essential to account for these nuances.
+### Need to...
+- **Check system status?** → See [SYSTEM_DOCUMENTATION.md#current-trading-status](SYSTEM_DOCUMENTATION.md#current-trading-status)
+- **Start/stop servers?** → See [SYSTEM_DOCUMENTATION.md#critical-operations](SYSTEM_DOCUMENTATION.md#critical-operations)
+- **Deploy changes?** → See [SYSTEM_DOCUMENTATION.md#git-workflow](SYSTEM_DOCUMENTATION.md#git-workflow)
+- **Understand architecture?** → See [ARCHITECTURE.md](ARCHITECTURE.md)
+- **Run backtest comparison?** → See [LIVE_VS_BACKTEST_COMPARISON_PLAN.md](../btc-testing/docs/LIVE_VS_BACKTEST_COMPARISON_PLAN.md)
 
+## Updates
 
-# bktst
-src/
-├── backtesting/
-│   ├── __init__.py
-│   └── backtester.py
-├── data/
-│   ├── __init__.py
-│   └── loader.py
-├── indicators/
-│   ├── __init__.py
-│   └── technical_indicators.py
-├── optimization/
-│   ├── __init__.py
-│   └── optimizer.py
-├── strategies/
-│   ├── __init__.py
-│   └── ramm_strategy.py
-├── utils/
-│   ├── __init__.py
-│   ├── analysis.py
-│   └── helpers.py
-└── bktst.py
+When making significant changes:
+1. Update `SYSTEM_DOCUMENTATION.md` first
+2. Update specialized docs if needed
+3. Note the date at bottom of updated files
 
+*Last Updated: 2025-07-28*
