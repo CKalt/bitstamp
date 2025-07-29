@@ -789,6 +789,16 @@ class CryptoShell(cmd.Cmd):
                     self.auto_trader.position_cost_basis = amount_num * effective_entry_price
                     self.auto_trader.balance_btc = amount_num
                     self.auto_trader.balance_usd = 0.0
+                    
+                    # Sync to data_manager
+                    if hasattr(self, 'data_manager'):
+                        self.data_manager.position = self.auto_trader.position
+                        self.data_manager.position_size = self.auto_trader.position_size
+                        self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
+                        self.data_manager.balance_btc = self.auto_trader.balance_btc
+                        self.data_manager.balance_usd = self.auto_trader.balance_usd
+                        self.logger.info(f"[POSITION_DEBUG] Synced LONG position to data_manager: position={self.data_manager.position}")
+                    
                     if not is_resumed:
                         self.auto_trader.theoretical_trade = {
                             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -808,6 +818,16 @@ class CryptoShell(cmd.Cmd):
                     self.auto_trader.position_cost_basis = amount_num
                     self.auto_trader.balance_btc = 0.0
                     self.auto_trader.balance_usd = amount_num
+                    
+                    # Sync to data_manager
+                    if hasattr(self, 'data_manager'):
+                        self.data_manager.position = self.auto_trader.position
+                        self.data_manager.position_size = self.auto_trader.position_size
+                        self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
+                        self.data_manager.balance_btc = self.auto_trader.balance_btc
+                        self.data_manager.balance_usd = self.auto_trader.balance_usd
+                        self.logger.info(f"[POSITION_DEBUG] Synced SHORT position to data_manager: position={self.data_manager.position}")
+                    
                     if not is_resumed:
                         self.auto_trader.theoretical_trade = {
                             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),

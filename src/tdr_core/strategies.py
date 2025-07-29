@@ -895,11 +895,16 @@ class MACrossoverStrategy:
                 "position": self.position
             }
 
-            self.position = 1
+            # Store reason before trade
             self.last_trade_reason = "MA Crossover: short above long."
+            
+            # Execute trade FIRST
             self.buy_in_three_parts(
                 current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time
             )
+            
+            # Update position AFTER successful trade execution
+            self.position = 1
             self.trade_count_today += 1
             self.last_signal_time = signal_time
             
@@ -932,9 +937,11 @@ class MACrossoverStrategy:
                 "position": self.position
             }
  
-            self.position = -1
+            # Store reason before trade
             self.last_trade_reason = "MA Crossover: short below long."
             trade_btc = round(self.balance_btc, 8)
+            
+            # Execute trade FIRST
             self.execute_trade(
                 "sell",
                 current_price,
@@ -942,6 +949,9 @@ class MACrossoverStrategy:
                 signal_time,
                 trade_btc
             )
+            
+            # Update position AFTER successful trade execution
+            self.position = -1
             self.trade_count_today += 1
             self.last_signal_time = signal_time
             
@@ -3230,13 +3240,17 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                 "position": self.position
             }
             
-            self.position = 1
             # Don't overwrite pivot protection reasons
             if "Pivot break:" not in self.last_trade_reason:
                 self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed long"
             self.last_trade_time = datetime.now()
+            
+            # Execute trade FIRST
             self.buy_in_three_parts(current_price, datetime.now().strftime(
                 '%Y-%m-%d %H:%M:%S'), signal_time)
+            
+            # Update position AFTER successful trade execution
+            self.position = 1
             self.trade_count_today += 1
             self.last_signal_time = signal_time
             self.strategy_performance[self.active_strategy]["trades"] += 1
@@ -3265,7 +3279,6 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                 "position": self.position
             }
             
-            self.position = -1
             # Don't overwrite pivot protection reasons
             if "Pivot break:" not in self.last_trade_reason:
                 self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed short"
@@ -3274,11 +3287,14 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             
             # Only execute if we have BTC to sell
             if trade_btc > 1e-8:
+                # Execute trade FIRST
                 self.execute_trade("sell", current_price, datetime.now().strftime(
                     '%Y-%m-%d %H:%M:%S'), signal_time, trade_btc)
+                
+                # Update position AFTER successful trade execution
+                self.position = -1
             else:
                 self.logger.warning(f"Cannot sell - insufficient BTC balance: {trade_btc}")
-                self.position = self.position  # Reset position flag
                 return
                 
             self.trade_count_today += 1

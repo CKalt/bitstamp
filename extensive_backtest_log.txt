@@ -1,14 +1,14 @@
 ================================================================================
 EXTENSIVE BACKTEST - SEARCHING FOR ROBUST STRATEGIES
 ================================================================================
-Start time: 2025-07-28 15:59:42.794465
+Start time: 2025-07-28 21:06:42.902605
 Target runtime: ~10 minutes
 Minimum trades filter: 10 trades in 30 days
 ================================================================================
 Loading 30 days of data...
-Loaded 1,195,641 ticks
+Loaded 1,191,223 ticks
 Resampling to hourly bars...
-Created 714 hourly bars
+Created 709 hourly bars
 
 Generating test configurations...
 MA combinations: 1190
@@ -25,16 +25,16 @@ Phase 1: Testing MA strategies...
   💎 MA 3/18: Return=5.3%, Trades=52, Sharpe=6.68
   💎 MA 3/20: Return=8.0%, Trades=44, Sharpe=8.07
   💎 MA 3/22: Return=8.6%, Trades=42, Sharpe=6.70
-  💎 MA 3/24: Return=5.1%, Trades=48, Sharpe=5.08
-  💎 MA 3/26: Return=6.1%, Trades=40, Sharpe=5.61
+  💎 MA 3/24: Return=5.8%, Trades=46, Sharpe=5.41
+  💎 MA 3/26: Return=6.8%, Trades=38, Sharpe=6.02
   💎 MA 3/28: Return=7.9%, Trades=32, Sharpe=6.80
   💎 MA 3/30: Return=7.0%, Trades=34, Sharpe=6.19
   💎 MA 4/16: Return=3.2%, Trades=50, Sharpe=6.11
   💎 MA 4/18: Return=5.4%, Trades=46, Sharpe=7.41
   💎 MA 4/20: Return=5.7%, Trades=40, Sharpe=7.93
   💎 MA 4/22: Return=5.7%, Trades=40, Sharpe=5.50
-  💎 MA 4/24: Return=5.1%, Trades=40, Sharpe=5.18
-  💎 MA 4/26: Return=4.9%, Trades=42, Sharpe=4.83
+  💎 MA 4/24: Return=6.1%, Trades=38, Sharpe=5.73
+  💎 MA 4/26: Return=6.0%, Trades=40, Sharpe=5.39
   💎 MA 4/28: Return=6.1%, Trades=32, Sharpe=5.91
   💎 MA 4/30: Return=6.3%, Trades=28, Sharpe=5.85
   💎 MA 4/32: Return=4.7%, Trades=32, Sharpe=5.03
@@ -44,254 +44,3 @@ Phase 1: Testing MA strategies...
   💎 MA 4/40: Return=2.1%, Trades=31, Sharpe=3.12
   💎 MA 5/14: Return=4.0%, Trades=54, Sharpe=6.78
   💎 MA 5/16: Return=2.9%, Trades=52, Sharpe=5.92
-  💎 MA 5/18: Return=5.3%, Trades=44, Sharpe=7.37
-  💎 MA 5/20: Return=2.2%, Trades=40, Sharpe=5.26
-  💎 MA 5/22: Return=3.7%, Trades=38, Sharpe=4.37
-  💎 MA 5/24: Return=4.1%, Trades=38, Sharpe=4.63
-  💎 MA 5/26: Return=3.8%, Trades=38, Sharpe=4.34
-  💎 MA 5/28: Return=5.0%, Trades=32, Sharpe=5.12
-  💎 MA 5/30: Return=4.4%, Trades=28, Sharpe=4.89
-  💎 MA 5/32: Return=5.3%, Trades=28, Sharpe=5.43
-  💎 MA 5/34: Return=5.4%, Trades=25, Sharpe=5.13
-  💎 MA 5/36: Return=4.0%, Trades=29, Sharpe=4.12
-  💎 MA 5/38: Return=3.4%, Trades=27, Sharpe=3.88
-  💎 MA 5/48: Return=2.6%, Trades=23, Sharpe=3.17
-  💎 MA 6/14: Return=2.9%, Trades=58, Sharpe=5.67
-  💎 MA 6/16: Return=2.8%, Trades=48, Sharpe=5.53
-  💎 MA 6/18: Return=3.6%, Trades=42, Sharpe=5.80
-  💎 MA 6/22: Return=3.4%, Trades=38, Sharpe=4.20
-  💎 MA 6/24: Return=2.7%, Trades=38, Sharpe=3.86
-  💎 MA 6/28: Return=3.2%, Trades=30, Sharpe=4.16
-  💎 MA 6/30: Return=4.0%, Trades=28, Sharpe=4.69
-  💎 MA 6/32: Return=4.5%, Trades=25, Sharpe=4.56
-  💎 MA 6/34: Return=4.5%, Trades=25, Sharpe=4.55
-  💎 MA 6/36: Return=4.0%, Trades=25, Sharpe=4.18
-  💎 MA 6/38: Return=2.5%, Trades=27, Sharpe=3.25
-  💎 MA 6/46: Return=2.4%, Trades=21, Sharpe=2.80
-  💎 MA 6/54: Return=2.2%, Trades=21, Sharpe=2.86
-  💎 MA 7/18: Return=2.6%, Trades=42, Sharpe=5.53
-  💎 MA 7/22: Return=2.1%, Trades=38, Sharpe=3.55
-  💎 MA 7/24: Return=2.7%, Trades=38, Sharpe=3.89
-  💎 MA 7/28: Return=4.3%, Trades=32, Sharpe=4.67
-  💎 MA 7/30: Return=3.6%, Trades=28, Sharpe=4.44
-  💎 MA 7/32: Return=3.4%, Trades=27, Sharpe=3.76
-  💎 MA 7/34: Return=3.1%, Trades=25, Sharpe=3.58
-  💎 MA 7/36: Return=2.7%, Trades=25, Sharpe=3.32
-  💎 MA 7/38: Return=2.6%, Trades=23, Sharpe=3.03
-  💎 MA 8/16: Return=2.9%, Trades=52, Sharpe=5.71
-  💎 MA 8/18: Return=2.1%, Trades=44, Sharpe=5.18
-  💎 MA 8/22: Return=2.5%, Trades=36, Sharpe=3.73
-  💎 MA 8/24: Return=2.4%, Trades=36, Sharpe=3.65
-  💎 MA 8/26: Return=2.5%, Trades=36, Sharpe=3.72
-  💎 MA 8/28: Return=2.6%, Trades=32, Sharpe=3.71
-  💎 MA 8/30: Return=4.2%, Trades=27, Sharpe=4.37
-  💎 MA 8/32: Return=3.3%, Trades=25, Sharpe=3.71
-  💎 MA 8/34: Return=3.7%, Trades=23, Sharpe=4.04
-  💎 MA 8/36: Return=2.9%, Trades=23, Sharpe=3.28
-  💎 MA 8/38: Return=2.8%, Trades=23, Sharpe=3.16
-  💎 MA 9/24: Return=2.1%, Trades=34, Sharpe=3.52
-
-📊 PROGRESS UPDATE [16:00:00]
-   Current test: MA 9/32
-   Progress: 145/1407 (10.3%)
-   Speed: 860.3 tests/minute
-   Elapsed: 0.2 minutes
-   ETA: 16:01:28
-------------------------------------------------------------
-  💎 MA 9/34: Return=2.0%, Trades=23, Sharpe=2.58
-  💎 MA 11/46: Return=2.0%, Trades=19, Sharpe=2.59
-  💎 MA 13/29: Return=3.3%, Trades=27, Sharpe=3.33
-
-📊 PROGRESS UPDATE [16:00:10]
-   Current test: MA 13/80
-   Progress: 297/1407 (21.1%)
-   Speed: 878.9 tests/minute
-   Elapsed: 0.3 minutes
-   ETA: 16:01:26
-------------------------------------------------------------
-  💎 MA 14/28: Return=3.3%, Trades=27, Sharpe=3.28
-
-📊 PROGRESS UPDATE [16:00:20]
-   Current test: MA 17/103
-   Progress: 459/1407 (32.6%)
-   Speed: 904.6 tests/minute
-   Elapsed: 0.5 minutes
-   ETA: 16:01:23
-------------------------------------------------------------
-
-📊 PROGRESS UPDATE [16:00:30]
-   Current test: MA 20/178
-   Progress: 628/1407 (44.6%)
-   Speed: 927.7 tests/minute
-   Elapsed: 0.7 minutes
-   ETA: 16:01:21
-------------------------------------------------------------
-
-📊 PROGRESS UPDATE [16:00:41]
-   Current test: MA 26/97
-   Progress: 802/1407 (57.0%)
-   Speed: 947.7 tests/minute
-   Elapsed: 0.8 minutes
-   ETA: 16:01:19
-------------------------------------------------------------
-  💎 MA 32/64: Return=2.8%, Trades=15, Sharpe=3.95
-  💎 MA 33/66: Return=2.2%, Trades=15, Sharpe=3.29
-
-📊 PROGRESS UPDATE [16:00:51]
-   Current test: MA 33/176
-   Progress: 979/1407 (69.6%)
-   Speed: 964.1 tests/minute
-   Elapsed: 1.0 minutes
-   ETA: 16:01:17
-------------------------------------------------------------
-  💎 MA 35/70: Return=2.7%, Trades=15, Sharpe=4.64
-  💎 MA 45/130: Return=2.3%, Trades=17, Sharpe=3.57
-  💎 MA 46/92: Return=2.3%, Trades=15, Sharpe=3.20
-
-📊 PROGRESS UPDATE [16:01:01]
-   Current test: MA 48/136
-   Progress: 1161/1407 (82.5%)
-   Speed: 979.7 tests/minute
-   Elapsed: 1.2 minutes
-   ETA: 16:01:16
-------------------------------------------------------------
-
-MA Results: 826 successful, 364 filtered (too few trades)
-
-
-Phase 2: Testing RSI strategies...
-------------------------------------------------------------
-  💎 RSI 9 (30/70): Return=2.0%, Trades=34
-  💎 RSI 9 (30/75): Return=3.8%, Trades=28
-  💎 RSI 9 (30/80): Return=3.4%, Trades=20
-  💎 RSI 9 (40/75): Return=3.8%, Trades=35
-  💎 RSI 9 (40/80): Return=2.0%, Trades=25
-  💎 RSI 14 (35/70): Return=4.2%, Trades=18
-  💎 RSI 14 (35/75): Return=6.5%, Trades=18
-  💎 RSI 14 (40/70): Return=3.2%, Trades=21
-  💎 RSI 14 (40/75): Return=4.6%, Trades=19
-  💎 RSI 21 (35/55): Return=3.5%, Trades=16
-  💎 RSI 21 (35/60): Return=4.8%, Trades=16
-  💎 RSI 21 (35/65): Return=6.9%, Trades=16
-  💎 RSI 21 (40/60): Return=2.2%, Trades=18
-  💎 RSI 21 (40/65): Return=3.6%, Trades=16
-
-📊 PROGRESS UPDATE [16:01:11]
-   Current test: RSI 28 (35/60)
-   Progress: 1325/1407 (94.2%)
-   Speed: 978.6 tests/minute
-   Elapsed: 1.4 minutes
-   ETA: 16:01:16
-------------------------------------------------------------
-
-RSI Results: 95 successful, 50 filtered
-
-
-Phase 3: Testing Hybrid strategies...
-------------------------------------------------------------
-  💎 Hybrid MA5/15 RSI14@25: Return=3.1%, Trades=56
-  💎 Hybrid MA5/15 RSI21@25: Return=3.8%, Trades=54
-  💎 Hybrid MA5/15 RSI21@30: Return=3.8%, Trades=54
-  💎 Hybrid MA5/15 RSI21@35: Return=4.3%, Trades=54
-  💎 Hybrid MA5/15 RSI21@40: Return=5.3%, Trades=52
-  💎 Hybrid MA6/34 RSI9@25: Return=4.1%, Trades=25
-  💎 Hybrid MA6/34 RSI9@30: Return=3.1%, Trades=27
-  💎 Hybrid MA6/34 RSI9@35: Return=2.2%, Trades=27
-  💎 Hybrid MA6/34 RSI9@40: Return=2.2%, Trades=27
-  💎 Hybrid MA6/34 RSI14@25: Return=4.5%, Trades=25
-  💎 Hybrid MA6/34 RSI14@30: Return=4.5%, Trades=25
-  💎 Hybrid MA6/34 RSI14@35: Return=3.4%, Trades=25
-  💎 Hybrid MA6/34 RSI14@40: Return=2.4%, Trades=27
-  💎 Hybrid MA6/34 RSI21@25: Return=4.5%, Trades=25
-  💎 Hybrid MA6/34 RSI21@30: Return=4.5%, Trades=25
-  💎 Hybrid MA6/34 RSI21@35: Return=4.8%, Trades=25
-  💎 Hybrid MA6/34 RSI21@40: Return=5.3%, Trades=25
-  💎 Hybrid MA10/30 RSI9@25: Return=3.4%, Trades=29
-  💎 Hybrid MA10/30 RSI9@40: Return=2.9%, Trades=29
-  💎 Hybrid MA12/26 RSI9@40: Return=2.3%, Trades=35
-
-Hybrid Results: 72 successful, 0 filtered
-
-================================================================================
-TOP 30 STRATEGIES BY RETURN (min 10 trades)
-================================================================================
-Rank  Strategy                              Return  Trades  T/Day   MaxDD  Sharpe
----------------------------------------------------------------------------
-1     MA_3_22                                8.64%      42   1.40    4.5%    6.70
-2     RSI_28_40_65                           8.14%      10   0.33    4.2%   26.46
-3     MA_3_20                                7.99%      44   1.47    5.1%    8.07
-4     MA_3_28                                7.90%      32   1.07    6.8%    6.80
-5     RSI_28_40_60                           7.49%      14   0.47    2.2%   31.67
-6     MA_3_30                                6.97%      34   1.13    7.5%    6.19
-7     RSI_21_35_65                           6.93%      16   0.53    2.2%   24.30
-8     RSI_14_35_75                           6.46%      18   0.60    3.5%   12.75
-9     MA_4_30                                6.28%      28   0.93    7.4%    5.85
-10    RSI_14_35_80                           6.13%      12   0.40    4.7%   14.11
-11    MA_4_28                                6.12%      32   1.07    7.1%    5.91
-12    MA_3_26                                6.08%      40   1.33    6.6%    5.61
-13    RSI_21_35_70                           5.87%      12   0.40    4.2%   20.28
-14    MA_4_20                                5.70%      40   1.33    5.0%    7.93
-15    MA_4_22                                5.69%      40   1.33    5.7%    5.50
-16    RSI_14_40_80                           5.54%      13   0.43    4.7%   14.87
-17    MA_5_34                                5.44%      25   0.83    7.9%    5.13
-18    RSI_21_40_70                           5.44%      12   0.40    4.2%   19.22
-19    MA_4_18                                5.39%      46   1.53    4.8%    7.41
-20    RSI_28_35_60                           5.34%      10   0.33    1.7%   35.19
-21    Hybrid_MA5_15_RSI21_40                 5.34%      52   1.73    5.1%    7.44
-22    MA_3_18                                5.32%      52   1.73    6.2%    6.68
-23    MA_5_32                                5.31%      28   0.93    7.8%    5.43
-24    Hybrid_MA6_34_RSI21_40                 5.28%      25   0.83    8.0%    5.09
-25    MA_5_18                                5.26%      44   1.47    4.6%    7.37
-26    MA_4_34                                5.21%      30   1.00    7.8%    5.40
-27    MA_4_24                                5.10%      40   1.33    6.2%    5.18
-28    MA_3_24                                5.08%      48   1.60    6.3%    5.08
-29    MA_5_28                                4.99%      32   1.07    8.0%    5.12
-30    MA_4_26                                4.91%      42   1.40    7.0%    4.83
-
-================================================================================
-TOP 10 BY SHARPE RATIO (risk-adjusted returns)
-================================================================================
-1     RSI_14_20_75                        Sharpe= 55.44 Return=  4.63% Trades= 10
-2     RSI_14_20_70                        Sharpe= 36.50 Return=  3.65% Trades= 10
-3     RSI_28_35_60                        Sharpe= 35.19 Return=  5.34% Trades= 10
-4     RSI_28_40_60                        Sharpe= 31.67 Return=  7.49% Trades= 14
-5     RSI_28_40_65                        Sharpe= 26.46 Return=  8.14% Trades= 10
-6     RSI_21_35_65                        Sharpe= 24.30 Return=  6.93% Trades= 16
-7     RSI_14_20_65                        Sharpe= 20.78 Return=  2.24% Trades= 10
-8     RSI_28_35_55                        Sharpe= 20.73 Return=  3.02% Trades= 10
-9     RSI_21_35_70                        Sharpe= 20.28 Return=  5.87% Trades= 12
-10    RSI_21_35_60                        Sharpe= 19.86 Return=  4.79% Trades= 16
-
-================================================================================
-BEST FREQUENT TRADERS (20+ trades)
-================================================================================
-1     MA_3_22                                8.64%      42   1.40
-2     MA_3_20                                7.99%      44   1.47
-3     MA_3_28                                7.90%      32   1.07
-4     MA_3_30                                6.97%      34   1.13
-5     MA_4_30                                6.28%      28   0.93
-6     MA_4_28                                6.12%      32   1.07
-7     MA_3_26                                6.08%      40   1.33
-8     MA_4_20                                5.70%      40   1.33
-9     MA_4_22                                5.69%      40   1.33
-10    MA_5_34                                5.44%      25   0.83
-
-✅ Saved detailed results to: extensive_backtest_results.json
-
-================================================================================
-SUMMARY
-================================================================================
-Total runtime: 1.5 minutes
-Tests completed: 1,407
-Valid strategies (10+ trades): 993
-Tests per minute: 965.7
-
-🏆 OVERALL WINNER: MA_3_22
-   Return: 8.64%
-   Trades: 42 (1.40 per day)
-   Max Drawdown: 4.5%
-   Sharpe Ratio: 6.70
-
-================================================================================
-NOTE: All results based on HOURLY bars matching the live system
-================================================================================
