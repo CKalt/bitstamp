@@ -530,7 +530,8 @@ class CryptoShell(cmd.Cmd):
                 max_trades_per_day=max_trades_day,
                 initial_position=desired_position,
                 initial_balance_btc=initial_balance_btc,
-                initial_balance_usd=initial_balance_usd
+                initial_balance_usd=initial_balance_usd,
+                enable_comparison_logging=best_strategy_params.get('enable_comparison_logging', False)
             )
         
         # Check if we have explicit resume parameters first

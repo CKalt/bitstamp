@@ -415,6 +415,23 @@ class MACrossoverStrategy:
             "parameters": {"short": short_window, "long": long_window, "live": live_trading}
         })
         
+        # Initialize comparison logger if enabled
+        self.comparison_logger = None
+        enable_comparison = kwargs.get('enable_comparison_logging', False)
+        self.logger.info(f"[COMPARISON_DEBUG] enable_comparison_logging = {enable_comparison}")
+        
+        if enable_comparison:
+            try:
+                self.logger.info("[COMPARISON_DEBUG] Attempting to import BacktestComparisonLogger...")
+                from tdr_core.backtest_comparison_logger import BacktestComparisonLogger
+                self.logger.info("[COMPARISON_DEBUG] Import successful, creating instance...")
+                self.comparison_logger = BacktestComparisonLogger()
+                self.logger.info("✅ Initialized BacktestComparisonLogger for live/backtest comparison")
+            except Exception as e:
+                self.logger.error(f"[COMPARISON_DEBUG] Could not initialize comparison logger: {e}")
+                import traceback
+                self.logger.error(f"[COMPARISON_DEBUG] Traceback: {traceback.format_exc()}")
+        
         # Initialize whipsaw tracking
         self.whipsaw_tracker = {
             'trades': [],  # List of all trades with timestamps
@@ -610,6 +627,10 @@ class MACrossoverStrategy:
                         ma_diff = short_ma - long_ma
                         ma_proximity = abs(ma_diff) / long_ma * 100
                         
+                        # Store MA values for use in trade execution
+                        self._last_ma_short = short_ma
+                        self._last_ma_long = long_ma
+                        
                         # Log comprehensive signal evaluation data
                         eval_data = {
                             "timestamp": current_time.strftime('%Y-%m-%d %H:%M:%S'),
@@ -655,6 +676,25 @@ class MACrossoverStrategy:
                         self.logger.info(f"📊 SIGNAL_EVAL v2: MA{self.short_window}={short_ma:.0f} MA{self.long_window}={long_ma:.0f} "
                                        f"Diff={ma_diff:.0f} Prox={ma_proximity:.2f}% Sig={latest_signal} Pos={self.position} "
                                        f"Action={eval_data.get('action', 'NO_TRADE')}")
+                        
+                        # Log to comparison logger if available
+                        if self.comparison_logger:
+                            try:
+                                self.comparison_logger.log_signal_evaluation(
+                                    timestamp=current_time,
+                                    current_price=float(current_price),
+                                    ma_short_value=float(short_ma),
+                                    ma_long_value=float(long_ma),
+                                    previous_signal=int(getattr(self, 'last_logged_signal', 0)),
+                                    current_signal=int(latest_signal),
+                                    will_trade=bool(will_trade),
+                                    reason=eval_data.get('action', 'NO_TRADE')
+                                )
+                                self.last_logged_signal = latest_signal
+                            except Exception as e:
+                                self.logger.error(f"[COMPARISON_LOG] Error logging signal: {e}")
+                                import traceback
+                                self.logger.error(f"[COMPARISON_LOG] Traceback: {traceback.format_exc()}")
                         
                         # CRITICAL: Log when we're in trigger zone
                         if ma_proximity <= self.ma_separation_threshold:
@@ -908,6 +948,11 @@ class MACrossoverStrategy:
             self.trade_count_today += 1
             self.last_signal_time = signal_time
             
+            # Sync position to data_manager
+            if hasattr(self, 'data_manager') and self.data_manager:
+                self.data_manager.position = self.position
+                self.logger.info(f"[POSITION_SYNC] After BUY: synced position={self.position} to data_manager")
+            
             # Log position after trade
             self.diagnostic_logger.log_trade_execution(
                 trade_type="BUY",
@@ -917,6 +962,24 @@ class MACrossoverStrategy:
                 position_after={"btc": self.balance_btc, "usd": self.balance_usd, "position": self.position},
                 pnl=self.total_profit_loss
             )
+            
+            # Log to comparison logger if available
+            if self.comparison_logger:
+                try:
+                    self.comparison_logger.log_trade_decision(
+                        timestamp=signal_time,
+                        trade_type="BUY",
+                        price=float(current_price),
+                        amount=float(self.position_size),
+                        position_before=int(position_before["position"]),
+                        position_after=int(self.position),
+                        ma_short=int(self.short_window),
+                        ma_long=int(self.long_window),
+                        hourly_bar_time=signal_time,
+                        exact_trigger_time=datetime.now()
+                    )
+                except Exception as e:
+                    self.logger.error(f"[COMPARISON_LOG] Error logging trade: {e}")
             
             # Log full status after trade
             self._log_trade_status()
@@ -955,6 +1018,11 @@ class MACrossoverStrategy:
             self.trade_count_today += 1
             self.last_signal_time = signal_time
             
+            # Sync position to data_manager
+            if hasattr(self, 'data_manager') and self.data_manager:
+                self.data_manager.position = self.position
+                self.logger.info(f"[POSITION_SYNC] After SELL: synced position={self.position} to data_manager")
+            
             # Log position after trade
             self.diagnostic_logger.log_trade_execution(
                 trade_type="SELL",
@@ -964,6 +1032,24 @@ class MACrossoverStrategy:
                 position_after={"btc": self.balance_btc, "usd": self.balance_usd, "position": self.position},
                 pnl=self.total_profit_loss
             )
+            
+            # Log to comparison logger if available
+            if self.comparison_logger:
+                try:
+                    self.comparison_logger.log_trade_decision(
+                        timestamp=signal_time,
+                        trade_type="SELL",
+                        price=float(current_price),
+                        amount=float(trade_btc),
+                        position_before=int(position_before["position"]),
+                        position_after=int(self.position),
+                        ma_short=int(self.short_window),
+                        ma_long=int(self.long_window),
+                        hourly_bar_time=signal_time,
+                        exact_trigger_time=datetime.now()
+                    )
+                except Exception as e:
+                    self.logger.error(f"[COMPARISON_LOG] Error logging trade: {e}")
             
             # Log full status after trade
             self._log_trade_status()
@@ -1078,7 +1164,7 @@ class MACrossoverStrategy:
         """
         Execute a single trade. 
         (NEW) If trade_btc < 1e-8, skip to avoid confusion with 0.0 updates.
-        (NEW) If live_trading=True, append to trades.json immediately.
+        (NEW) If live_trading=True, append to trades.json immediately in JSONL format.
         """
         if trade_btc < 1e-8:
             self.logger.debug(
@@ -1130,45 +1216,91 @@ class MACrossoverStrategy:
 
         # Place order with the exchange if live.
         if self.live_trading:
+            # JSONL Format: Write pre-trade entry BEFORE placing order
+            try:
+                file_path = os.path.abspath(self.trade_log_file)
+                pre_trade_entry = {
+                    "event_type": "PRE_TRADE",
+                    "timestamp": datetime.now().isoformat(),
+                    "signal_timestamp": signal_time.strftime('%Y-%m-%d %H:%M:%S'),
+                    "trade_type": trade_type,
+                    "symbol": self.symbol,
+                    "amount_btc": trade_btc,
+                    "signal_price": price,
+                    "reason": self.last_trade_reason,
+                    "trade_group_id": getattr(self, '_current_trade_group_id', None),
+                    "multi_part_sequence": getattr(self, '_current_multi_part_sequence', None),
+                    "multi_part_total": getattr(self, '_multi_part_total', None),
+                    "position_before": self.position,
+                    "ma_values": {
+                        "short_window": self.ma_short_window,
+                        "long_window": self.ma_long_window,
+                        "short_value": getattr(self, '_last_ma_short', None),
+                        "long_value": getattr(self, '_last_ma_long', None)
+                    }
+                }
+                
+                # Append to JSONL file
+                with open(file_path, 'a') as f:
+                    f.write(json.dumps(pre_trade_entry) + '\n')
+                    
+                self.logger.debug(f"Logged PRE_TRADE to {self.trade_log_file}")
+            except Exception as e:
+                self.logger.error(f"Failed to log PRE_TRADE: {e}")
+            
+            # Place the actual order
             result = self.order_placer.place_order(
                 f"market-{trade_type}", self.symbol, trade_btc)
             self.logger.info(f"Executed LIVE {trade_type} order: {result}")
             trade_info.order_result = result
+            
+            # JSONL Format: Write post-trade entry with Bitstamp results
+            try:
+                # Extract actual values from Bitstamp response
+                fill_price = price  # Default to signal price
+                trade_id = None
+                if result.get("price"):
+                    try:
+                        fill_price = float(result["price"])
+                        self.logger.info(f"Using actual fill price: ${fill_price:.2f} (vs signal price ${price:.2f})")
+                    except:
+                        pass
+                
+                if result.get("id"):
+                    trade_id = result.get("id")
+                
+                post_trade_entry = {
+                    "event_type": "POST_TRADE",
+                    "timestamp": datetime.now().isoformat(),
+                    "signal_timestamp": signal_time.strftime('%Y-%m-%d %H:%M:%S'),
+                    "trade_type": trade_type,
+                    "symbol": self.symbol,
+                    "amount_btc": trade_btc,
+                    "signal_price": price,
+                    "fill_price": fill_price,
+                    "bitstamp_trade_id": trade_id,
+                    "bitstamp_response": result,
+                    "status": "success" if result.get("status") != "error" else "failed",
+                    "trade_group_id": getattr(self, '_current_trade_group_id', None),
+                    "multi_part_sequence": getattr(self, '_current_multi_part_sequence', None),
+                    "multi_part_total": getattr(self, '_multi_part_total', None)
+                }
+                
+                # Append to JSONL file
+                with open(file_path, 'a') as f:
+                    f.write(json.dumps(post_trade_entry) + '\n')
+                    
+                self.logger.debug(f"Logged POST_TRADE to {self.trade_log_file}")
+            except Exception as e:
+                self.logger.error(f"Failed to log POST_TRADE: {e}")
+            
             if result.get("status") == "error":
                 self.logger.error(f"Trade failed: {result}")
                 self._log_failed_trade(trade_info)
                 return
             
-            # Use actual fill price from order result if available
-            fill_price = price  # Default to signal price
-            if result.get("price"):
-                try:
-                    fill_price = float(result["price"])
-                    self.logger.info(f"Using actual fill price: ${fill_price:.2f} (vs signal price ${price:.2f})")
-                except:
-                    pass
-            
             # Update balances & cost basis with actual fill price
             self.update_balance(trade_type, fill_price, trade_btc)
-
-            # (NEW) Append to trades.json right away for live trades
-            try:
-                file_path = os.path.abspath(self.trade_log_file)
-                if not os.path.exists(file_path):
-                    existing_trades = []
-                else:
-                    with open(file_path, 'r') as f:
-                        try:
-                            existing_trades = json.load(f)
-                        except json.JSONDecodeError:
-                            existing_trades = []
-                existing_trades.append(trade_info.to_dict())
-                with open(file_path, 'w') as f:
-                    json.dump(existing_trades, f, indent=2)
-                self.logger.debug(
-                    f"Appended live trade to {self.trade_log_file}")
-            except Exception as e:
-                self.logger.error(f"Failed to write live trade: {e}")
 
         else:
             # Dry-run => no actual exchange order, just local simulation
@@ -1396,31 +1528,65 @@ class MACrossoverStrategy:
         )
         
         # Sync position tracking to data_manager for consistent display
-        if hasattr(self.data_manager, 'position_size'):
-            self.data_manager.position_size = self.position_size
-            self.data_manager.position_cost_basis = self.position_cost_basis
+        if hasattr(self, 'data_manager') and self.data_manager:
+            # Always sync position
             self.data_manager.position = self.position
-            self.logger.debug(f"Synced position to data_manager: size={self.position_size}, cost_basis={self.position_cost_basis}")
+            self.data_manager.balance_btc = self.balance_btc
+            self.data_manager.balance_usd = self.balance_usd
+            
+            # Sync additional tracking if available
+            if hasattr(self.data_manager, 'position_size'):
+                self.data_manager.position_size = self.position_size
+                self.data_manager.position_cost_basis = self.position_cost_basis
+            
+            self.logger.info(f"[POSITION_SYNC] Synced to data_manager: position={self.position}, btc={self.balance_btc:.8f}, usd={self.balance_usd:.2f}")
+        else:
+            self.logger.warning("[POSITION_SYNC] No data_manager available for position sync")
         
         # Automatically save resume state after each trade (unless in multi-part trade)
         if not getattr(self, '_in_multi_part_trade', False):
             self.save_resume_state()
 
+    def _read_trades_jsonl(self):
+        """Read trades from JSONL format file, extracting only successful POST_TRADE entries"""
+        trades = []
+        try:
+            trades_file = os.path.abspath(self.trade_log_file)
+            if not os.path.exists(trades_file):
+                return trades
+                
+            with open(trades_file, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        try:
+                            entry = json.loads(line)
+                            # Only include successful POST_TRADE entries for backward compatibility
+                            if entry.get('event_type') == 'POST_TRADE' and entry.get('status') == 'success':
+                                # Convert to old format for compatibility
+                                trade = {
+                                    'type': entry['trade_type'],
+                                    'symbol': entry['symbol'],
+                                    'amount': entry['amount_btc'],
+                                    'price': entry.get('fill_price', entry['signal_price']),
+                                    'timestamp': entry['signal_timestamp'],
+                                    'reason': entry.get('reason', ''),
+                                    'trade_group_id': entry.get('trade_group_id'),
+                                    'multi_part_sequence': entry.get('multi_part_sequence'),
+                                    'multi_part_total': entry.get('multi_part_total')
+                                }
+                                trades.append(trade)
+                        except json.JSONDecodeError:
+                            continue
+        except Exception as e:
+            self.logger.error(f"Error reading trades JSONL: {e}")
+        return trades
+    
     def validate_position_from_trades(self):
         """Validate and fix position tracking based on recent trades from trades.json"""
         self.logger.info(f"[POSITION_DEBUG] Starting validate_position_from_trades")
         self.logger.info(f"[POSITION_DEBUG] Current position before: size={self.position_size}, cost_basis={self.position_cost_basis}")
         try:
-            import json
-            import os
-            
-            trades_file = os.path.abspath(self.trade_log_file)
-            if not os.path.exists(trades_file):
-                self.logger.warning("No trades.json file found")
-                return False
-                
-            with open(trades_file, 'r') as f:
-                trades = json.load(f)
+            trades = self._read_trades_jsonl()
                 
             if not trades:
                 self.logger.warning("No trades found in trades.json")
@@ -1512,16 +1678,8 @@ class MACrossoverStrategy:
         """Calculate the correct entry price from trades.json based on position type.
         Returns: (entry_price, position_trades)
         """
-        import json
-        import os
-        
         try:
-            trades_file = os.path.abspath(self.trade_log_file)
-            if not os.path.exists(trades_file):
-                return None, []
-                
-            with open(trades_file, 'r') as f:
-                trades = json.load(f)
+            trades = self._read_trades_jsonl()
                 
             if not trades:
                 return None, []
@@ -2284,8 +2442,7 @@ class MACrossoverStrategy:
         """Load recent trades from trades.json for whipsaw tracking"""
         try:
             if os.path.exists(self.trade_log_file):
-                with open(self.trade_log_file, 'r') as f:
-                    all_trades = json.load(f)
+                all_trades = self._read_trades_jsonl()
                 
                 # Only load trades from last 24 hours
                 cutoff_time = datetime.utcnow() - timedelta(hours=24)
