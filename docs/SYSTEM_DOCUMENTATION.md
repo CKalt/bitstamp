@@ -280,13 +280,72 @@ When starting a new Claude session, reference this document to understand:
 - Active development work and plans
 - Critical operations and procedures
 
+### Directory Structure Convention
+- **`src/*`** - Core Python application code and general-use Python scripts
+- **`bin/*`** - General-use shell scripts for operations
+- **`claude-bin/*`** - Claude Code-specific scripts (both .py and .sh) for analysis, monitoring, and verification
+- **`docs/*`** - All documentation (see Documentation Layout below)
+
+**Important**: All scripts should be run from the project root directory:
+- `python3 src/tdr.py`
+- `bash bin/quick_restart.sh`
+- `python3 claude-bin/check_change_status.py`
+
 Key points for new session:
-1. Live system is SHORT ~1.444 BTC @ ~$118k (MA 6/34)
-2. Test system is LONG 0.001 BTC @ ~$118,200 (MA 3/22) - executed 1 trade today
+1. Live system is SHORT ~1.41 BTC @ ~$119k (MA 6/34)
+2. Test system is SHORT position @ ~$118,200 (MA 3/22) with JSONL logging
 3. Dual environment: btc (live) and tst (test) directories
 4. Never copy files to server - use git deployment only
 5. Always specify "ON MAC" or "ON SERVER" for commands
-6. Current focus: Verifying backtest accuracy with live comparison
+6. Current focus: Verifying JSONL trade logging and backtest accuracy
+
+### Documentation Layout
+
+#### Core Documentation
+- **SYSTEM_DOCUMENTATION.md** - Primary USK and system overview (this file)
+- **README.md** - Project overview and quick start
+- **SECURITY_NOTICE.md** - Security considerations and API key handling
+
+#### Development & Deployment
+- **DEPLOYMENT_CHECKLIST.md** - Step-by-step deployment procedures
+- **QUICK_DEPLOY_GUIDE.md** - Rapid deployment reference
+- **development-process-summary.md** - Development workflow and best practices
+- **development-process-and-complexity-management.md** - Managing system complexity
+
+#### Change Tracking
+- **CODE_CHANGE_LOG.md** - Git commit tracking and verification status
+- **CHANGE_TRACKING.md** - Detailed change verification procedures
+- **daily_tracking_template.md** - Template for daily progress tracking
+- **session_updates/** - Session-specific change logs
+- **weekly_reviews/** - Weekly progress summaries
+
+#### System Behavior & Features
+- **SYSTEM_KEY_BEHAVIORS.md** - Critical system behaviors to preserve
+- **auto-resume-flow.md** - Auto-resume feature documentation
+- **signal-timing-improvement-plan.md** - Signal evaluation improvements
+- **whipsaw_features.md** - Whipsaw protection features
+
+#### Operations & Monitoring
+- **server_management.md** - Server operations guide
+- **server-user-guide.md** - Using the TDR server
+- **tdr-user-guide.md** - TDR client usage
+- **monitoring-guide.md** - System monitoring procedures
+- **monitoring-setup-howto.md** - Setting up monitoring
+- **screen-architecture.md** - Screen session management
+- **safe-restart-procedure.md** - Safe system restart procedures
+
+#### Trading & Strategy
+- **backtesting-user-guide.md** - Comprehensive backtesting guide
+- **backtesting-quick-reference.md** - Quick backtesting commands
+- **ENHANCED_BACKTESTING_SUMMARY.md** - Advanced backtesting features
+- **LIVE_VS_BACKTEST_COMPARISON_PLAN.md** - Verifying backtest accuracy
+- **trading_diagnostics_guide.md** - Debugging trading issues
+- **strategy-8-hour.md** - 8-hour strategy documentation
+
+#### API & Technical
+- **bitstamp-api-doc.yaml** - Bitstamp API reference
+- **dual-version-setup.md** - Running live and test systems
+- **deployment-early-warning-and-fixes.md** - Early warning system
 
 ### Recent Session Work (2025-07-29)
 1. **Fixed critical bug**: Position was being updated BEFORE trade execution
@@ -294,19 +353,59 @@ Key points for new session:
    - Fixed in both MACrossoverStrategy and AdaptiveMultiStrategy
    - Deployed to test server
 
-2. **Test server status**:
-   - Running with MA 3/22 strategy
-   - Successfully resumed LONG position from resume file
-   - Executed one SELL trade when MA3 < MA22
-   - Position tracking bug is fixed - position updates after trades
-   - API position sync partially fixed but needs more work
+2. **Enabled comparison logging**:
+   - Integrated BacktestComparisonLogger into strategies.py
+   - Added enable_comparison_logging parameter to shell.py
+   - Fixed method signatures (log_signal_evaluation, log_trade_decision)
+   - Deployed to test server - logs are being created
+   - Still debugging JSON serialization issues with numpy int64 types
 
-3. **Outstanding issues**:
-   - Comparison logging not yet enabled (BacktestComparisonLogger not integrated)
+3. **Test server status**:
+   - Running with MA 3/22 strategy
+   - Successfully executing trades (1-2 trades today)
+   - Position tracking bug is fixed
+   - Comparison logging partially working (session logs created)
+   - Signal logs not yet populating due to serialization errors
+
+4. **Outstanding issues**:
+   - JSON serialization errors with numpy int64 types in comparison logging
    - API sometimes shows stale position data from data_manager
    - Test server using different git repo than Mac development
 
-4. **Next steps**:
-   - Enable comparison logging by integrating BacktestComparisonLogger
-   - Run daily backtest comparisons once logging is working
-   - Fix remaining API position sync issues
+5. **Implemented JSONL trade logging**:
+   - Changed trades.json from JSON array to JSONL format
+   - PRE_TRADE entries logged before order placement
+   - POST_TRADE entries logged with Bitstamp response
+   - Deployed to test server, awaiting trade to verify
+   - Added claude-bin/check_change_status.py for verification
+
+6. **API Monitoring Tools** (Added 2025-07-29):
+   - Created claude-bin/api_monitor.py for direct API access
+   - Alternative to file-based command system for Claude
+   - Provides real-time dashboard and signal monitoring
+   - Does NOT change human user workflow (still use src/tdr.py)
+   - Commands:
+     ```bash
+     # Dashboard mode
+     python3 claude-bin/api_monitor.py --dashboard
+     
+     # Single command
+     python3 claude-bin/api_monitor.py --command "status"
+     
+     # Show curl equivalent
+     python3 claude-bin/api_monitor.py --command "status" --curl
+     ```
+
+7. **Documentation Consolidation** (Added 2025-07-29):
+   - Created `/Users/chris/projects/python/btc-testing/prompts/CLAUDE-START-HERE.md`
+   - Central navigation guide for all TDR documentation
+   - Organizes docs by category and use case
+   - Provides quick reference for common tasks
+   - Essential starting point for new Claude sessions
+
+8. **Next steps**:
+   - Verify JSONL logging when first trade occurs
+   - Add MA values to server API for better signal tracking
+   - Fix JSON serialization by converting all numpy types
+   - Run daily backtest comparisons once logging fully works
+   - Monitor for MA crossover signals

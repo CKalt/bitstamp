@@ -166,3 +166,100 @@ EC2 t3.large instance (8GB RAM):
 - Never read or expose these files
 - All trading requires explicit `do_live_trades: true`
 - Test environment limited to 0.001 BTC ($100)
+
+## Development Workflow
+
+### The gg Navigation System
+The `gg` system provides consistent navigation shortcuts across both Mac and EC2:
+
+- `gg btc` → Navigate to live/production directory
+  - Mac: `/Users/chris/projects/python/btc`
+  - EC2: `/home/chris/projects/bitstamp`
+- `gg tst` → Navigate to test/development directory
+  - Mac: `/Users/chris/projects/python/btc-testing`
+  - EC2: `/home/chris/projects/bitstamp-testing`
+
+**Note**: On EC2, you must first run `source ~/ggmap` to enable gg commands.
+
+### Git Branch Structure
+Both Mac and EC2 maintain the same branch structure:
+
+- **At `gg btc` location**: `stable-added-adaptive-trad-n-chart-more` branch (production)
+- **At `gg tst` location**: `development` branch (testing)
+
+**Important**: The production branch name is historical and should eventually be merged into `main`.
+
+### Symbolic Links for Claude
+To facilitate Claude's workflow, symbolic links exist in the main directory:
+
+**Mac**:
+```bash
+/Users/chris/projects/python/btc/tst -> /Users/chris/projects/python/btc-testing
+```
+
+**EC2**:
+```bash
+/home/chris/projects/bitstamp/tst -> /home/chris/projects/bitstamp-testing
+```
+
+This allows Claude to work on test code by simply doing `cd tst` from the main directory.
+
+### Development Rules
+
+1. **All code changes made on Mac**
+   - Claude makes changes in the Mac environment
+   - Can freely navigate using `cd tst` for test development
+   - Commits and pushes to GitHub
+
+2. **EC2 is for running only**
+   - Claude can SSH to check status: `ssh ck`
+   - Must ask permission before modifying files on EC2
+   - Deployment is via git pull only
+
+3. **Deployment Flow**
+   ```
+   Mac Development → Git Push → [Human Action] → EC2 Git Pull → Restart Services
+   ```
+
+### Screen Session Workflow
+
+**Required screens for full system operation**:
+
+1. **EC2 Server Side**:
+   - `screen -S btc` - WebSocket price feed (must run first, shared by all)
+   - `screen -S server` - Live trading server (port 4000)
+   - `screen -S server-tst` - Test trading server (port 4002)
+
+2. **Mac Client Side**:
+   - `screen -S claude-tdr` - Claude development session
+   - `screen -S client-tdr` - Live trading client (connects to localhost:4000)
+   - `screen -S client-tst` - Test trading client (connects to localhost:4002)
+
+3. **SSH Tunnels** (automatic via autossh):
+   - Must be running for Mac clients to reach EC2 servers
+   - Check with `fix-tunnels` if connection issues
+
+### Command Location Context
+When giving commands, always specify:
+- **"ON MAC"** - for local development commands
+- **"ON SERVER"** or **"ON EC2"** - for remote server commands
+
+### Typical Development Session
+
+1. **Start on Mac**: `gg btc` (you're in production directory)
+2. **Work on test code**: `cd tst` (now in development branch)
+3. **Make changes, test locally**
+4. **Commit and push**: 
+   ```bash
+   git add -A
+   git commit -m "Description of changes"
+   git push origin development
+   ```
+5. **Request deployment**: "Please deploy these changes to EC2 test server"
+6. **Human deploys**:
+   ```bash
+   ssh ck
+   source ~/ggmap && gg tst
+   git pull origin development
+   # Restart test server
+   ```
