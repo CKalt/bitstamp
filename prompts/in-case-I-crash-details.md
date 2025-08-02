@@ -1,13 +1,48 @@
 # In Case I Crash - Critical System State Details
 
-## CURRENT SITUATION (as of 2025-07-27)
-Dual-version development environment created to prevent regression bugs. Live system running SHORT position @ $118,011 entry (flipped from LONG @ $116,526 with $2,142.90 profit).
+## CURRENT SITUATION (as of 2025-08-01)
+
+### Trading Position
+- **Position**: SHORT $161,000 at $116,452
+- **Current Price**: ~$113,165 (last checked)
+- **Unrealized Profit**: +$4,504 (gaining ~0.040 BTC)
+- **Net Profit**: +$1,053 (recovered from -$3,451 initial loss)
+- **Strategy**: MA 4/20 (deployed 2025-07-30, working well)
+
+### Work In Progress - AUTO-RESUME BUG FIX
+Auto-resume is buggy on live server. Issues include:
+1. Wrong entry price calculations
+2. Misunderstanding position direction  
+3. Not handling 3-part buy trades correctly
+4. Generally unreliable - requires manual resume each restart
+
+**Current Manual Process**:
+```bash
+ssh ck
+gg btc
+git pull
+screen -r server
+# Ctrl-C to stop
+# Up arrow to get: python src/tdr.py --server
+# Then manually resume with correct position
+```
+
+**What We Found**:
+- Auto-resume code in `tdr_server.py` lines 230-279
+- Resume function in `shell.py` starting at line 918
+- Resume file shows wrong values ($159,581 instead of $161,000)
+- 3-part buy trades confusing the system
+
+**Next Steps**:
+1. Fix auto-resume logic to be simpler and more reliable
+2. Test on development branch first
+3. Deploy to both live and test servers
 
 ## DUAL-VERSION SETUP
 
 ### Overview
 We run two parallel versions for safe development:
-1. **Live**: Full position trading (~1.444 BTC)
+1. **Live**: Full position trading (~1.4 BTC)
 2. **Test**: Limited position (0.001 BTC / ~$100)
 
 ### Directory Navigation (ggmap)
