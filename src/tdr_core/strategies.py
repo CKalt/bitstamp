@@ -645,18 +645,14 @@ class MACrossoverStrategy:
                             latest_signal, current_price, signal_time)
                     else:
                         self.logger.debug("Not enough data to compute MAs.")
-                except Exception as e:
-                    self.logger.error(
-                        f"Error in strategy loop for {self.symbol}: {e}", exc_info=True)
-                    self.diagnostic_logger.log_error(f"Strategy loop error: {e}")
-                    # CRITICAL: Don't crash the loop! Continue after error
-                    self.logger.warning("❗ Strategy loop continuing after error")
                 else:
                     self.logger.debug(f"No data loaded for {self.symbol} yet.")
             except Exception as e:
-                # OUTER EXCEPTION HANDLER - Catch ANY error to prevent loop death
-                self.logger.error(f"❌ CRITICAL ERROR in strategy loop: {e}", exc_info=True)
-                self.logger.warning("❗ Strategy loop continuing after critical error")
+                self.logger.error(
+                    f"Error in strategy loop for {self.symbol}: {e}", exc_info=True)
+                self.diagnostic_logger.log_error(f"Strategy loop error: {e}")
+                # CRITICAL: Don't crash the loop! Continue after error
+                self.logger.warning("❗ Strategy loop continuing after error")
 
             # Hourly status report
             if not hasattr(self, '_last_hourly_status'):
