@@ -538,14 +538,17 @@ class MACrossoverStrategy:
             evaluation_count += 1
             current_time = datetime.now()
             
+            # HEARTBEAT - Log every evaluation so we know loop is alive
+            self.logger.info(f"💓 HEARTBEAT: Strategy loop alive at {current_time.strftime('%H:%M:%S')} (eval #{evaluation_count})")
+            
             # Log evaluation frequency every 5 evaluations or every 5 minutes
             if evaluation_count % 5 == 0 or (current_time - last_evaluation_log).total_seconds() > 300:
                 self.logger.info(f"📊 Strategy evaluation #{evaluation_count} at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 last_evaluation_log = current_time
             
-            df = self.data_manager.get_price_dataframe(self.symbol)
-            if not df.empty:
-                try:
+            try:
+                df = self.data_manager.get_price_dataframe(self.symbol)
+                if not df.empty:
                     df = ensure_datetime_index(df)
                     df_resampled = df.resample('1H').agg({
                         'open': 'first',
@@ -644,10 +647,17 @@ class MACrossoverStrategy:
                         self.logger.debug("Not enough data to compute MAs.")
                 except Exception as e:
                     self.logger.error(
-                        f"Error in strategy loop for {self.symbol}: {e}")
+                        f"Error in strategy loop for {self.symbol}: {e}", exc_info=True)
                     self.diagnostic_logger.log_error(f"Strategy loop error: {e}")
+                    # CRITICAL: Don't crash the loop! Continue after error
+                    self.logger.warning("❗ Strategy loop continuing after error")
             else:
                 self.logger.debug(f"No data loaded for {self.symbol} yet.")
+            
+            except Exception as e:
+                # OUTER EXCEPTION HANDLER - Catch ANY error to prevent loop death
+                self.logger.error(f"❌ CRITICAL ERROR in strategy loop: {e}", exc_info=True)
+                self.logger.warning("❗ Strategy loop continuing after critical error")
 
             # Hourly status report
             if not hasattr(self, '_last_hourly_status'):
