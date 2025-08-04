@@ -651,9 +651,8 @@ class MACrossoverStrategy:
                     self.diagnostic_logger.log_error(f"Strategy loop error: {e}")
                     # CRITICAL: Don't crash the loop! Continue after error
                     self.logger.warning("❗ Strategy loop continuing after error")
-            else:
-                self.logger.debug(f"No data loaded for {self.symbol} yet.")
-            
+                else:
+                    self.logger.debug(f"No data loaded for {self.symbol} yet.")
             except Exception as e:
                 # OUTER EXCEPTION HANDLER - Catch ANY error to prevent loop death
                 self.logger.error(f"❌ CRITICAL ERROR in strategy loop: {e}", exc_info=True)
