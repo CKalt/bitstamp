@@ -124,17 +124,17 @@ def initialize_server_standalone():
     init_payload = {
         'best_strategy': config['best_strategy'],
         'verbose': config.get('verbose', True),
-        'test_mode': False,  # Always use live mode for server
-        'auto_resume': True  # Force auto-resume to load position
+        'test_mode': False  # Always use live mode for server
+        # auto_resume will be taken from best_strategy.json if present
     }
     
-    # Force auto_resume in best_strategy
-    init_payload['best_strategy']['auto_resume'] = True
+    # Respect auto_resume setting from config (don't force it)
+    auto_resume = init_payload['best_strategy'].get('auto_resume', True)
     
     logger.info("Server configuration loaded:")
     logger.info(f"  Strategy: {config['best_strategy'].get('Strategy')}")
     logger.info(f"  Live Trading: {config['best_strategy'].get('do_live_trades')}")
-    logger.info(f"  Auto Resume: True (forced)")
+    logger.info(f"  Auto Resume: {auto_resume}")
     logger.info(f"  Resume File: {'FOUND' if has_resume_file else 'NOT FOUND'}")
     
     return init_payload
