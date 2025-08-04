@@ -234,6 +234,32 @@ def auto_load_history():
                 
                 logger.info(f"Found saved position: {resume_data.get('position', 'UNKNOWN')} {resume_data.get('amount', 0)} {resume_data.get('unit', 'usd')} @ ${resume_data.get('entry_price', 0)}")
                 
+                # Validate resume data before using
+                position = resume_data.get('position', '').upper()
+                unit = resume_data.get('unit', '').lower()
+                amount = resume_data.get('amount', 0)
+                entry_price = resume_data.get('entry_price', 0)
+                
+                validation_errors = []
+                
+                # Check position/unit consistency
+                if position == 'LONG' and unit != 'btc':
+                    validation_errors.append(f"LONG position must use BTC unit, not {unit}")
+                elif position == 'SHORT' and unit != 'usd':
+                    validation_errors.append(f"SHORT position must use USD unit, not {unit}")
+                
+                # Check amounts are reasonable
+                if amount <= 0:
+                    validation_errors.append(f"Invalid amount: {amount}")
+                if entry_price <= 0:
+                    validation_errors.append(f"Invalid entry price: {entry_price}")
+                
+                if validation_errors:
+                    logger.error(f"Resume data validation failed: {', '.join(validation_errors)}")
+                    logger.error("Skipping auto-resume due to invalid data")
+                    logger.error("Please manually resume with: auto_trade <amount><btc|usd> <long|short>")
+                    return
+                
                 # Extract command arguments
                 if 'command' not in resume_data:
                     logger.error(f"Resume file missing 'command' field. Keys found: {list(resume_data.keys())}")

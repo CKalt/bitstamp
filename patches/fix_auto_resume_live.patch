@@ -1,0 +1,61 @@
+--- a/src/tdr_core/strategies.py
++++ b/src/tdr_core/strategies.py
+@@ -1751,6 +1751,10 @@ class MACrossoverStrategy(BaseStrategy):
+     def save_resume_state(self):
+         """Save current position state to resume-auto-trade.json for easy restart."""
++        # Use the new validated save function
++        from .resume_fixes import save_resume_state_with_validation
++        return save_resume_state_with_validation(self)
++        
+         import json
+         import os
+         from datetime import datetime
+
+--- a/src/tdr_server.py
++++ b/src/tdr_server.py
+@@ -230,11 +230,25 @@ def run_server(host="0.0.0.0", port=4000):
+             resume_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'resume-auto-trade.json')
+             if os.path.exists(resume_file):
++                # Use new validation before attempting resume
++                from tdr_core.resume_fixes import load_and_validate_resume_file
++                resume_data, errors = load_and_validate_resume_file(resume_file)
++                
++                if errors:
++                    logger.error(f"Resume file validation failed: {', '.join(errors)}")
++                    logger.error("Skipping auto-resume due to invalid data")
++                    return
++                
++                if not resume_data:
++                    logger.error("Could not load resume data")
++                    return
++                
+                 with open(resume_file, 'r') as f:
+                     resume_data = json.load(f)
+                 
+                 logger.info(f"Found saved position: {resume_data.get('position', 'UNKNOWN')} {resume_data.get('amount', 0)} {resume_data.get('unit', 'usd')} @ ${resume_data.get('entry_price', 0)}")
+                 
++                # Log validation status
++                logger.info(f"Resume data validation: v{resume_data.get('validation', {}).get('version', '1.0')}")
++                
+                 # Extract command arguments
+                 if 'command' not in resume_data:
+
+--- a/src/tdr_core/shell.py
++++ b/src/tdr_core/shell.py
+@@ -918,6 +918,15 @@ class TDRShell(cmd.Cmd):
+                 print(f"[DEBUG] Loading resume file from {resume_file}")
+                 self.logger.info(f"[RESUME_DEBUG] Loading resume file")
+                 
++                # Validate resume file first
++                from .resume_fixes import load_and_validate_resume_file
++                resume_data, errors = load_and_validate_resume_file(resume_file)
++                
++                if errors:
++                    print(f"\n❌ Resume file validation failed:")
++                    for error in errors:
++                        print(f"   • {error}")
++                    return
++                
+                 # Load and display resume data
+                 with open(resume_file, 'r') as f:
+                     resume_data = json.load(f)

@@ -31,6 +31,8 @@ import threading
 import os
 from datetime import datetime, timedelta
 
+from .signal_monitor_enhanced import SignalMonitor
+
 from indicators.technical_indicators import (
     ensure_datetime_index,
     add_moving_averages,
@@ -415,6 +417,10 @@ class MACrossoverStrategy:
             "parameters": {"short": short_window, "long": long_window, "live": live_trading}
         })
         
+        # Initialize enhanced signal monitor
+        self.signal_monitor = SignalMonitor(log_dir="logs", alert_threshold_seconds=90)
+        self.logger.info("✅ Enhanced signal monitoring initialized")
+        
         # Initialize whipsaw tracking
         self.whipsaw_tracker = {
             'trades': [],  # List of all trades with timestamps
@@ -632,6 +638,24 @@ class MACrossoverStrategy:
                         self.logger.info(f"📊 SIGNAL_EVAL v2: MA{self.short_window}={short_ma:.0f} MA{self.long_window}={long_ma:.0f} "
                                        f"Diff={ma_diff:.0f} Prox={ma_proximity:.2f}% Sig={latest_signal} Pos={self.position} "
                                        f"Action={eval_data.get('action', 'NO_TRADE')}")
+                        
+                        # Also log to enhanced signal monitor
+                        self.signal_monitor.log_evaluation(
+                            signal=latest_signal,
+                            position=self.position,
+                            price=current_price,
+                            ma_short=short_ma,
+                            ma_long=long_ma,
+                            will_trade=will_trade,
+                            reason=eval_data.get('blocked_reason', eval_data.get('action', 'NO_TRADE')),
+                            additional_data={
+                                'ma_proximity': ma_proximity,
+                                'trade_count_today': self.trade_count_today,
+                                'max_trades_per_day': self.max_trades_per_day,
+                                'evaluation_count': evaluation_count,
+                                'signal_source': signal_source
+                            }
+                        )
                         
                         # CRITICAL: Log when we're in trigger zone
                         if ma_proximity <= self.ma_separation_threshold:
@@ -1782,8 +1806,12 @@ class MACrossoverStrategy:
                 amount = self.balance_btc
                 unit = 'btc'
                 position_type = 'long'
+                # Validate BTC balance for LONG position
+                if amount <= 0:
+                    self.logger.error(f"Invalid BTC balance for LONG position: {amount}")
+                    return
                 # Use calculated entry price from trades.json if available, otherwise fall back to position tracking
-                if calculated_entry_price is not None:
+                if calculated_entry_price is not None and calculated_entry_price > 0:
                     entry_price = calculated_entry_price
                 else:
                     entry_price = position_info.get('entry_price', self.last_trade_price or 0)
@@ -1791,8 +1819,12 @@ class MACrossoverStrategy:
                 amount = self.balance_usd
                 unit = 'usd'
                 position_type = 'short'
+                # Validate USD balance for SHORT position
+                if amount <= 0:
+                    self.logger.error(f"Invalid USD balance for SHORT position: {amount}")
+                    return
                 # Use calculated entry price from trades.json if available
-                if calculated_entry_price is not None:
+                if calculated_entry_price is not None and calculated_entry_price > 0:
                     entry_price = calculated_entry_price
                 elif self.position_size < 0:
                     entry_price = self.position_cost_basis / abs(self.position_size)
@@ -1800,6 +1832,7 @@ class MACrossoverStrategy:
                     entry_price = position_info.get('entry_price', self.last_trade_price or 0)
             else:
                 # Should not happen in this system
+                self.logger.error(f"Invalid position state: {self.position}")
                 return
                 
             # Create resume data
@@ -1830,8 +1863,45 @@ class MACrossoverStrategy:
                 }
             }
             
+            # Validate resume data before saving
+            validation_errors = []
+            
+            # Check entry price is reasonable
+            if entry_price <= 0 or entry_price > 1000000:
+                validation_errors.append(f"Invalid entry price: ${entry_price}")
+            
+            # Check amount is reasonable
+            if position_type == 'long' and (amount <= 0 or amount > 100):
+                validation_errors.append(f"Invalid BTC amount: {amount}")
+            elif position_type == 'short' and (amount <= 0 or amount > 10000000):
+                validation_errors.append(f"Invalid USD amount: {amount}")
+            
+            # Verify position/unit consistency
+            if position_type == 'long' and unit != 'btc':
+                validation_errors.append(f"LONG position must use BTC unit, not {unit}")
+            elif position_type == 'short' and unit != 'usd':
+                validation_errors.append(f"SHORT position must use USD unit, not {unit}")
+            
+            if validation_errors:
+                self.logger.error(f"Resume data validation failed: {', '.join(validation_errors)}")
+                self.logger.error(f"Not saving invalid resume data")
+                return
+            
             # Save to file
             resume_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'resume-auto-trade.json')
+            
+            # Create backup of existing file
+            if os.path.exists(resume_file):
+                backup_file = f"{resume_file}.backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                try:
+                    with open(resume_file, 'r') as f:
+                        backup_data = json.load(f)
+                    with open(backup_file, 'w') as f:
+                        json.dump(backup_data, f, indent=2)
+                    self.logger.info(f"Created backup: {backup_file}")
+                except Exception as e:
+                    self.logger.warning(f"Could not create backup: {e}")
+            
             with open(resume_file, 'w') as f:
                 json.dump(resume_data, f, indent=2)
             
