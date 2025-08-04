@@ -536,9 +536,11 @@ class MACrossoverStrategy:
         """
         evaluation_count = 0
         last_evaluation_log = datetime.now()
+        last_hourly_check = None  # Track last hour we checked
         
         # Log initial position state
         self.logger.info(f"[POSITION_DEBUG] Strategy loop starting with position: size={self.position_size}, cost_basis={self.position_cost_basis}")
+        self.logger.info("📊 Strategy will only evaluate signals on hourly candle close (like backtesting)")
         
         while self.running:
             evaluation_count += 1
@@ -584,6 +586,26 @@ class MACrossoverStrategy:
                         # Validate position tracking if method exists
                         if hasattr(self, 'validate_position_tracking'):
                             self.validate_position_tracking()
+
+                        # HOURLY CANDLE CHECK - Only evaluate signals when hour changes
+                        current_hour = signal_time.replace(minute=0, second=0, microsecond=0)
+                        
+                        if not hasattr(self, '_last_hourly_check'):
+                            # First run, set the last check
+                            self._last_hourly_check = current_hour
+                            self.logger.info(f"🕐 Initial hourly check set to: {current_hour}")
+                        
+                        should_evaluate = current_hour > self._last_hourly_check
+                        
+                        if should_evaluate:
+                            self.logger.info(f"🕐 NEW HOURLY CANDLE: {current_hour} (was {self._last_hourly_check})")
+                            self._last_hourly_check = current_hour
+                        else:
+                            # Skip signal evaluation until new hour
+                            minutes_until_next = 60 - datetime.now().minute
+                            self.logger.info(f"⏳ Waiting for new hourly candle. Next check in ~{minutes_until_next} minutes")
+                            time.sleep(30)
+                            continue
 
                         # Check signals (MA crossover)
                         
@@ -1170,7 +1192,9 @@ class MACrossoverStrategy:
             self.trade_log.append(trade_info)
             self.update_balance(trade_type, price, trade_btc)
 
-        self.trades_this_hour.append(datetime.utcnow())
+        # Only track hourly trades if not part of a multi-part trade
+        if not hasattr(self, '_in_multi_part_trade') or not self._in_multi_part_trade:
+            self.trades_this_hour.append(datetime.utcnow())
         self._log_successful_trade(trade_info)
         
         # Track trade for whipsaw detection
@@ -1320,7 +1344,11 @@ class MACrossoverStrategy:
                     self.profitable_trades += 1
 
         self.last_trade_price = fill_price
-        self.trades_executed += 1
+        
+        # Only increment trade count if not part of a multi-part trade
+        # Multi-part trades are counted as one trade in the calling function
+        if not hasattr(self, '_in_multi_part_trade') or not self._in_multi_part_trade:
+            self.trades_executed += 1
 
         # Recompute 'current_amount' for old P&L logic
         ratio = self.current_balance / self.initial_balance if self.initial_balance else 1
