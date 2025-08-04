@@ -5,6 +5,8 @@ tst
 /app-bktst.txt
 best_strategy.json
 best_strategy_trades.json
+resume-auto-trade.json
+resume-auto-trade.json.*
 env
 .bitstamp
 .influxdb
