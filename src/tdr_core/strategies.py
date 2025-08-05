@@ -595,7 +595,25 @@ class MACrossoverStrategy:
                             self.validate_position_tracking()
 
                         # CANDLE INTERVAL CHECK - Configurable for testing
-                        if self.candle_interval == '5min':
+                        if self.candle_interval == '1min':
+                            # 1-minute candles for ultra-fast testing
+                            current_candle = signal_time.replace(second=0, microsecond=0)
+                            
+                            if not hasattr(self, '_last_candle_check'):
+                                self._last_candle_check = current_candle
+                                self.logger.info(f"🕐 Initial 1-min candle: {current_candle}")
+                            
+                            should_evaluate = current_candle > self._last_candle_check
+                            
+                            if should_evaluate:
+                                self.logger.info(f"🕐 NEW 1-MIN CANDLE: {current_candle}")
+                                self._last_candle_check = current_candle
+                            else:
+                                seconds_until_next = 60 - datetime.now().second
+                                self.logger.debug(f"⏳ Next 1-min candle in {seconds_until_next}s")
+                                time.sleep(1)  # Check every second for 1-min
+                                continue
+                        elif self.candle_interval == '5min':
                             # 5-minute candles for rapid testing
                             current_candle = signal_time.replace(second=0, microsecond=0)
                             current_candle = current_candle.replace(minute=(current_candle.minute // 5) * 5)
