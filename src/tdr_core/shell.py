@@ -530,7 +530,8 @@ class CryptoShell(cmd.Cmd):
                 max_trades_per_day=max_trades_day,
                 initial_position=desired_position,
                 initial_balance_btc=initial_balance_btc,
-                initial_balance_usd=initial_balance_usd
+                initial_balance_usd=initial_balance_usd,
+                candle_interval=best_strategy_params.get('candle_interval', '1h')
             )
         
         # Check if we have explicit resume parameters first

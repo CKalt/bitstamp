@@ -334,12 +334,14 @@ class MACrossoverStrategy:
         initial_position=0,
         initial_balance_btc=0.0,
         initial_balance_usd=0.0,
+        candle_interval='1h',  # Add configurable candle interval
         **kwargs  # Accept additional keyword arguments
     ):
         self.data_manager = data_manager
         self.order_placer = data_manager.order_placer
         self.short_window = short_window
         self.long_window = long_window
+        self.candle_interval = candle_interval
         self.initial_amount = amount
         self.current_amount = amount
         self.symbol = symbol
@@ -347,6 +349,11 @@ class MACrossoverStrategy:
         self.position = initial_position
         self.running = False
         self.live_trading = live_trading
+        
+        # SAFETY: Log paper trading mode prominently
+        if not self.live_trading:
+            self.logger.warning("🧪 PAPER TRADING MODE - No real trades will be executed")
+            self.logger.warning("🧪 All trades are simulated for testing purposes only")
         self.trade_log = []
 
         # Decide which trades file to use (live vs. non-live).
@@ -587,25 +594,44 @@ class MACrossoverStrategy:
                         if hasattr(self, 'validate_position_tracking'):
                             self.validate_position_tracking()
 
-                        # HOURLY CANDLE CHECK - Only evaluate signals when hour changes
-                        current_hour = signal_time.replace(minute=0, second=0, microsecond=0)
-                        
-                        if not hasattr(self, '_last_hourly_check'):
-                            # First run, set the last check
-                            self._last_hourly_check = current_hour
-                            self.logger.info(f"🕐 Initial hourly check set to: {current_hour}")
-                        
-                        should_evaluate = current_hour > self._last_hourly_check
-                        
-                        if should_evaluate:
-                            self.logger.info(f"🕐 NEW HOURLY CANDLE: {current_hour} (was {self._last_hourly_check})")
-                            self._last_hourly_check = current_hour
+                        # CANDLE INTERVAL CHECK - Configurable for testing
+                        if self.candle_interval == '5min':
+                            # 5-minute candles for rapid testing
+                            current_candle = signal_time.replace(second=0, microsecond=0)
+                            current_candle = current_candle.replace(minute=(current_candle.minute // 5) * 5)
+                            
+                            if not hasattr(self, '_last_candle_check'):
+                                self._last_candle_check = current_candle
+                                self.logger.info(f"🕐 Initial 5-min candle: {current_candle}")
+                            
+                            should_evaluate = current_candle > self._last_candle_check
+                            
+                            if should_evaluate:
+                                self.logger.info(f"🕐 NEW 5-MIN CANDLE: {current_candle}")
+                                self._last_candle_check = current_candle
+                            else:
+                                seconds_until_next = 300 - (datetime.now().minute % 5) * 60 - datetime.now().second
+                                self.logger.info(f"⏳ Next 5-min candle in {seconds_until_next}s")
+                                time.sleep(5)  # Check more frequently for 5-min
+                                continue
                         else:
-                            # Skip signal evaluation until new hour
-                            minutes_until_next = 60 - datetime.now().minute
-                            self.logger.info(f"⏳ Waiting for new hourly candle. Next check in ~{minutes_until_next} minutes")
-                            time.sleep(30)
-                            continue
+                            # Default hourly candles (production)
+                            current_hour = signal_time.replace(minute=0, second=0, microsecond=0)
+                            
+                            if not hasattr(self, '_last_candle_check'):
+                                self._last_candle_check = current_hour
+                                self.logger.info(f"🕐 Initial hourly check set to: {current_hour}")
+                            
+                            should_evaluate = current_hour > self._last_candle_check
+                            
+                            if should_evaluate:
+                                self.logger.info(f"🕐 NEW HOURLY CANDLE: {current_hour}")
+                                self._last_candle_check = current_hour
+                            else:
+                                minutes_until_next = 60 - datetime.now().minute
+                                self.logger.info(f"⏳ Waiting for new hourly candle. Next check in ~{minutes_until_next} minutes")
+                                time.sleep(30)
+                                continue
 
                         # Check signals (MA crossover)
                         
@@ -1194,9 +1220,18 @@ class MACrossoverStrategy:
                 self.logger.error(f"Failed to write live trade: {e}")
 
         else:
-            # Dry-run => no actual exchange order, just local simulation
-            self.logger.info(
-                f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
+            # PAPER TRADING - Simulate the trade
+            self.logger.warning(f"🧪 PAPER TRADE: Would {trade_type} {trade_btc:.8f} BTC @ ${price:,.2f}")
+            self.logger.warning(f"🧪 Reason: {self.last_trade_reason}")
+            
+            # Calculate theoretical impact
+            if trade_type.lower() == 'buy':
+                cost = trade_btc * price * (1 + self.fee_percentage)
+                self.logger.warning(f"🧪 Would spend: ${cost:,.2f} USD (including fees)")
+            else:
+                proceeds = trade_btc * price * (1 - self.fee_percentage)
+                self.logger.warning(f"🧪 Would receive: ${proceeds:,.2f} USD (after fees)")
+            
             self.trade_log.append(trade_info)
             self.update_balance(trade_type, price, trade_btc)
 
