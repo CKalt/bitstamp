@@ -36,6 +36,15 @@ You are helping manage a Bitcoin trading system. Be precise and avoid confusion 
 - Test uses MA 3/22 with 0.001 BTC limit
 - Both use `auto_resume: false` to prevent bad auto-resumes
 
+## Resume Warning
+
+**CRITICAL**: When resuming trading:
+- If signal ≠ position, the system WILL trade immediately on resume
+- Example: If MA signal is SHORT but position is LONG, it will flip to SHORT
+- This is EXPECTED behavior - the system is syncing to the current signal
+- Check current signal BEFORE resuming to avoid surprises
+- Use `./claude-bin/check_ma_status.sh` to see current signal vs position
+
 ## Common Commands
 
 ```bash

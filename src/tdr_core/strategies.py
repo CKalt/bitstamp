@@ -635,7 +635,15 @@ class MACrossoverStrategy:
                         will_trade = False
                         why_not = []
                         
-                        if latest_signal == 1 and self.position <= 0:
+                        # PROXIMITY THRESHOLD CHECK - Prevent flipping when MAs are too close
+                        PROXIMITY_THRESHOLD = 0.5  # Only trade if MAs differ by >0.5%
+                        
+                        if ma_proximity <= PROXIMITY_THRESHOLD:
+                            # MAs are too close - hold current position
+                            why_not.append(f"MAs too close: {ma_proximity:.2f}% <= {PROXIMITY_THRESHOLD}% threshold")
+                            eval_data["action"] = "NO_TRADE_PROXIMITY"
+                            will_trade = False
+                        elif latest_signal == 1 and self.position <= 0:
                             # Signal says go LONG but we're SHORT or NEUTRAL
                             if self.trade_count_today >= self.max_trades_per_day:
                                 why_not.append(f"Daily limit: {self.trade_count_today}/{self.max_trades_per_day}")
