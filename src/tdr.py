@@ -199,9 +199,8 @@ def main():
         print("  python src/tdr.py --local")
         return
     
-    # Server is available, start client
-    config_file = os.path.abspath("best_strategy.json")
-    client = RemoteTDRClient(args.server_url, config_file=config_file)
+    # Server is available, start client (no config file needed)
+    client = RemoteTDRClient(args.server_url, config_file=None)
     try:
         client.cmdloop()
     except KeyboardInterrupt:

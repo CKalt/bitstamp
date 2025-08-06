@@ -193,7 +193,8 @@ Initializing connection to remote server...
         super().__init__()
         self.server_url = server_url.rstrip('/')
         self.verbose = verbose
-        self.config_file = config_file
+        # Config file parameter ignored - server handles all config
+        self.config_file = None
         self.last_status = None
         self.monitoring_thread = None
         self.stop_monitoring = threading.Event()
@@ -780,9 +781,7 @@ Initializing connection to remote server...
                 print(f"  Correct Entry Price: ${data['average_entry_price']:.2f}")
                 print(f"  Based on: {data['trades_count']} trades")
                 
-                # Sync best_strategy.json from server
-                print("\nSyncing best_strategy.json from server...")
-                self.config = self.load_configuration(sync_from_server=True)
+                # Note: No config sync needed - server manages all configuration
                 
                 # Update status to show new values
                 self.update_status()
@@ -864,21 +863,12 @@ Initializing connection to remote server...
         
         # Check if server is already initialized
         if self.check_server_initialized():
-            print("✅ Server is already initialized, syncing configuration...")
-            self.config = self.load_configuration()
+            print("✅ Server is already initialized")
             self.initialized = True
             self.update_status()
             print("✅ Reconnection successful!")
         else:
-            # Server needs initialization
-            print("Server not initialized, sending configuration...")
-            self.config = self.load_configuration()
-            if self.initialize_server():
-                print("✅ Reconnection and initialization successful!")
-                self.initialized = True
-                self.update_status()
-            else:
-                print("❌ Reconnection failed")
+            print("❌ Server not initialized. Please restart server.")
     
     def do_load_history(self, arg):
         """Start loading historical data on the server"""
@@ -1415,14 +1405,13 @@ def main():
     # Determine server URL
     server_url = args.server or os.environ.get('TDR_SERVER_URL', DEFAULT_SERVER_URL)
     
-    logger.info(f"Starting TDR Client - Server: {server_url}, Config: {args.config}")
+    logger.info(f"Starting TDR Client - Server: {server_url}, Config: disabled (server manages all config)")
     print(f"TDR Client - Connecting to server")
     print(f"Server: {server_url}")
-    print(f"Config: {args.config} (will only be sent if server needs initialization)")
+    print(f"Config: Managed by server (client no longer handles configuration)")
     
-    # Create client
-    client = RemoteTDRClient(server_url, config_file=args.config, verbose=args.verbose)
-    client.send_config = args.send_config  # Set whether to send config to server
+    # Create client - no configuration management
+    client = RemoteTDRClient(server_url, config_file=None, verbose=args.verbose)
     
     # Execute single command if provided
     if args.command:
