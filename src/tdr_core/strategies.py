@@ -683,7 +683,7 @@ class MACrossoverStrategy:
                         why_not = []
                         
                         # PROXIMITY THRESHOLD CHECK - Prevent flipping when MAs are too close
-                        PROXIMITY_THRESHOLD = 0.5  # Only trade if MAs differ by >0.5%
+                        PROXIMITY_THRESHOLD = 0.3  # Only trade if MAs differ by >0.3%
                         
                         if ma_proximity <= PROXIMITY_THRESHOLD:
                             # MAs are too close - hold current position
