@@ -13,9 +13,9 @@ while true; do
     
     # 1. SERVER STATUS
     echo -e "\n1️⃣ SERVER STATUS:"
-    if ssh ck 'ps aux | grep -q "[t]dr_server.*testing"'; then
+    if ssh ck 'ps aux | grep -q "[t]dr_server.py"'; then
         echo "   ✅ Server is running"
-        uptime=$(ssh ck 'ps aux | grep "[t]dr_server.*testing" | awk "{print \$9}"')
+        uptime=$(ssh ck 'ps aux | grep "[t]dr_server.py" | awk "{print \$9}"')
         echo "   Started at: $uptime"
     else
         echo "   ❌ SERVER IS DOWN!"
