@@ -788,8 +788,10 @@ class CryptoShell(cmd.Cmd):
                     effective_entry_price = self._resume_entry_price if hasattr(self, '_resume_entry_price') and self._resume_entry_price else current_market_price
                     short_btc = amount_num / effective_entry_price
                     self.auto_trader.position = -1
-                    self.auto_trader.position_size = 0.0
-                    self.auto_trader.position_cost_basis = amount_num
+                    # CRITICAL FIX: Must set position_size to -short_btc, not 0.0!
+                    self.auto_trader.position_size = -short_btc
+                    # CRITICAL FIX: Cost basis should be BTC * price, not USD amount!
+                    self.auto_trader.position_cost_basis = short_btc * effective_entry_price
                     self.auto_trader.balance_btc = 0.0
                     self.auto_trader.balance_usd = amount_num
                     if not is_resumed:
