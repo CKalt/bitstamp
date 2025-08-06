@@ -384,6 +384,14 @@ class MACrossoverStrategy:
         self.balance_usd = initial_balance_usd
 
         self.fee_percentage = 0.0012
+        
+        # CRITICAL FIX: Sync data_manager balances on initialization
+        if self.data_manager:
+            self.data_manager.balance_btc = self.balance_btc
+            self.data_manager.balance_usd = self.balance_usd
+            self.data_manager.position = initial_position
+            self.data_manager.position_size = initial_balance_btc if initial_position == 1 else -initial_balance_btc
+            self.data_manager.position_cost_basis = initial_balance_btc * amount if initial_position == 1 else initial_balance_usd
         self.last_trade_price = None
         self.total_fees_paid = 0
         self.trades_executed = 0
@@ -1254,6 +1262,14 @@ class MACrossoverStrategy:
             
             # Update balances & cost basis with actual fill price
             self.update_balance(trade_type, fill_price, trade_btc)
+            
+            # CRITICAL FIX: Sync data_manager balances after trade
+            if self.data_manager:
+                self.data_manager.balance_btc = self.balance_btc
+                self.data_manager.balance_usd = self.balance_usd
+                self.data_manager.position = self.position
+                self.data_manager.position_size = self.position_size
+                self.data_manager.position_cost_basis = self.position_cost_basis
 
             # (NEW) Append to trades.json right away for live trades
             try:
@@ -1289,6 +1305,14 @@ class MACrossoverStrategy:
             
             self.trade_log.append(trade_info)
             self.update_balance(trade_type, price, trade_btc)
+            
+            # CRITICAL FIX: Sync data_manager balances after trade
+            if self.data_manager:
+                self.data_manager.balance_btc = self.balance_btc
+                self.data_manager.balance_usd = self.balance_usd
+                self.data_manager.position = self.position
+                self.data_manager.position_size = self.position_size
+                self.data_manager.position_cost_basis = self.position_cost_basis
 
         # Only track hourly trades if not part of a multi-part trade
         if not hasattr(self, '_in_multi_part_trade') or not self._in_multi_part_trade:

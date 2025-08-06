@@ -860,6 +860,17 @@ class CryptoShell(cmd.Cmd):
         self._log_full_status_to_diagnostics()
 
         self.auto_trader.start()
+        
+        # CRITICAL FIX: Sync data_manager balances with auto_trader balances
+        # This ensures the API status endpoint shows correct balances
+        if self.data_manager:
+            self.data_manager.balance_btc = self.auto_trader.balance_btc
+            self.data_manager.balance_usd = self.auto_trader.balance_usd
+            self.data_manager.position = self.auto_trader.position
+            self.data_manager.position_size = self.auto_trader.position_size
+            self.data_manager.position_cost_basis = self.auto_trader.position_cost_basis
+            self.logger.info(f"Synced data_manager balances: BTC={self.auto_trader.balance_btc}, USD={self.auto_trader.balance_usd}")
+        
         # Fix: Use proper capitalization for position display
         position_display = {1: 'LONG', -1: 'SHORT'}.get(desired_position, 'UNKNOWN')
         print(f"Auto-trading started with {balance_str}, position={position_display}, "
