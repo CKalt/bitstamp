@@ -657,8 +657,9 @@ class CryptoShell(cmd.Cmd):
                     "note": "No actual trade needed - positions aligned"
                 })
 
-        # If the user starts "short" and hist_position is also short => theoretical (unless resuming)
-        if desired_position == -1 and hist_position == -1 and current_market_price > 0 and not is_resumed:
+        # If the user starts "short" and hist_position is also short => theoretical
+        # FIXED: Allow this to run when resuming so entry price is used correctly
+        if desired_position == -1 and hist_position == -1 and current_market_price > 0:
             # Use resume entry price if available, otherwise current market price
             effective_entry_price = self._resume_entry_price if hasattr(self, '_resume_entry_price') and self._resume_entry_price else current_market_price
             short_btc = amount_num / effective_entry_price
@@ -669,7 +670,7 @@ class CryptoShell(cmd.Cmd):
                 self.logger.info(
                     f"(auto_trade) Setting position_size to {self.auto_trader.position_size:.6f} BTC and "
                     f"cost basis to {self.auto_trader.position_cost_basis:.2f} "
-                    f"for an initial SHORT of {short_btc:.6f} BTC (=-{short_btc:.6f}) at ${current_market_price:.2f}."
+                    f"for an initial SHORT of {short_btc:.6f} BTC (=-{short_btc:.6f}) at ${effective_entry_price:.2f}."
                 )
                 self.auto_trader.theoretical_trade = {
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -684,7 +685,7 @@ class CryptoShell(cmd.Cmd):
                     "position": "SHORT",
                     "amount_usd": amount_num,
                     "btc_equivalent": short_btc,
-                    "entry_price": current_market_price,
+                    "entry_price": effective_entry_price,
                     "cost_basis": self.auto_trader.position_cost_basis,
                     "note": "No actual trade needed - positions aligned"
                 })
@@ -1068,29 +1069,8 @@ class CryptoShell(cmd.Cmd):
             print(f"[DEBUG] do_auto_trade completed")
             self.logger.info(f"[RESUME_DEBUG] do_auto_trade completed")
             
-            # CRITICAL FIX: Force correct position tracking for SHORT positions
-            if self.auto_trader and position_str == 'short' and entry_price:
-                # Calculate correct BTC equivalent for SHORT position
-                btc_equivalent = amount / entry_price
-                
-                # Force correct values
-                self.auto_trader.position = -1
-                self.auto_trader.position_size = -btc_equivalent
-                self.auto_trader.position_cost_basis = btc_equivalent * entry_price
-                self.auto_trader.balance_btc = 0.0
-                self.auto_trader.balance_usd = amount
-                
-                # Sync data_manager
-                if self.data_manager:
-                    self.data_manager.position = -1
-                    self.data_manager.position_size = -btc_equivalent
-                    self.data_manager.position_cost_basis = btc_equivalent * entry_price
-                    self.data_manager.balance_btc = 0.0
-                    self.data_manager.balance_usd = amount
-                
-                self.logger.info(f"[RESUME_FIX] Forced SHORT position: size={-btc_equivalent:.8f} BTC, cost_basis=${btc_equivalent * entry_price:.2f}, entry=${entry_price:.2f}")
-                print(f"✅ Auto-trading resumed with SHORT position at entry price ${entry_price:.2f}")
-            elif self.auto_trader:
+            # Position tracking is now handled inside do_auto_trade when _resume_entry_price is set
+            if self.auto_trader:
                 # Get actual entry price from the auto trader
                 actual_entry = self.auto_trader.position_cost_basis / abs(self.auto_trader.position_size) if self.auto_trader.position_size != 0 else 0
                 print(f"✅ Auto-trading resumed with actual entry price ${actual_entry:.2f}")
