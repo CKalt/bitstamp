@@ -228,11 +228,17 @@ def auto_load_history():
             # AUTO-RESUME: Execute if resume file exists and auto_resume is enabled
             # This runs once after historical data loads
             resume_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'resume-auto-trade.json')
+            # CRITICAL FIX: Actually check if auto_resume is enabled!
             if os.path.exists(resume_file):
-                with open(resume_file, 'r') as f:
-                    resume_data = json.load(f)
-                
-                logger.info(f"Found saved position: {resume_data.get('position', 'UNKNOWN')} {resume_data.get('amount', 0)} {resume_data.get('unit', 'usd')} @ ${resume_data.get('entry_price', 0)}")
+                if server_config.get('auto_resume_enabled', False):
+                    with open(resume_file, 'r') as f:
+                        resume_data = json.load(f)
+                    
+                    logger.info(f"Found saved position: {resume_data.get('position', 'UNKNOWN')} {resume_data.get('amount', 0)} {resume_data.get('unit', 'usd')} @ ${resume_data.get('entry_price', 0)}")
+                else:
+                    logger.info(f"Found resume file but auto_resume is disabled in config. Skipping auto-resume.")
+                    logger.info(f"To resume, use client command: resume_auto_trade")
+                    return
                 
                 # Validate resume data before using
                 position = resume_data.get('position', '').upper()
