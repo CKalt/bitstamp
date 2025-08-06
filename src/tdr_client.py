@@ -639,7 +639,12 @@ Initializing connection to remote server...
                     elif position_val == -1:
                         print(f"  Direction: SHORT")
                     else:
-                        print(f"  Direction: NEUTRAL (Error - should not happen)")
+                        # Check if auto-trader is running
+                        auto_trader_active = response.get('auto_trader', {}).get('active', False)
+                        if auto_trader_active:
+                            print(f"  Direction: NEUTRAL (Error - auto-trader should have a position)")
+                        else:
+                            print(f"  Direction: NEUTRAL (No position - auto-trading not active)")
                 
                 print(f"  BTC: {pos['btc_balance']:.8f}")
                 print(f"  USD: ${pos['usd_balance']:.2f}")
