@@ -1068,8 +1068,29 @@ class CryptoShell(cmd.Cmd):
             print(f"[DEBUG] do_auto_trade completed")
             self.logger.info(f"[RESUME_DEBUG] do_auto_trade completed")
             
-            # Position tracking is now handled inside do_auto_trade when _resume_entry_price is set
-            if self.auto_trader:
+            # CRITICAL FIX: Force correct position tracking for SHORT positions
+            if self.auto_trader and position_str == 'short' and entry_price:
+                # Calculate correct BTC equivalent for SHORT position
+                btc_equivalent = amount / entry_price
+                
+                # Force correct values
+                self.auto_trader.position = -1
+                self.auto_trader.position_size = -btc_equivalent
+                self.auto_trader.position_cost_basis = btc_equivalent * entry_price
+                self.auto_trader.balance_btc = 0.0
+                self.auto_trader.balance_usd = amount
+                
+                # Sync data_manager
+                if self.data_manager:
+                    self.data_manager.position = -1
+                    self.data_manager.position_size = -btc_equivalent
+                    self.data_manager.position_cost_basis = btc_equivalent * entry_price
+                    self.data_manager.balance_btc = 0.0
+                    self.data_manager.balance_usd = amount
+                
+                self.logger.info(f"[RESUME_FIX] Forced SHORT position: size={-btc_equivalent:.8f} BTC, cost_basis=${btc_equivalent * entry_price:.2f}, entry=${entry_price:.2f}")
+                print(f"✅ Auto-trading resumed with SHORT position at entry price ${entry_price:.2f}")
+            elif self.auto_trader:
                 # Get actual entry price from the auto trader
                 actual_entry = self.auto_trader.position_cost_basis / abs(self.auto_trader.position_size) if self.auto_trader.position_size != 0 else 0
                 print(f"✅ Auto-trading resumed with actual entry price ${actual_entry:.2f}")
