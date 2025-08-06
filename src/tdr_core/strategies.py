@@ -635,6 +635,26 @@ class MACrossoverStrategy:
                                 self.logger.info(f"⏳ Next 5-min candle in {seconds_until_next}s")
                                 time.sleep(5)  # Check more frequently for 5-min
                                 continue
+                        elif self.candle_interval == '15min':
+                            # 15-minute candles for balanced testing
+                            current_time = datetime.now()
+                            current_candle = current_time.replace(second=0, microsecond=0)
+                            current_candle = current_candle.replace(minute=(current_candle.minute // 15) * 15)
+                            
+                            if not hasattr(self, '_last_candle_check'):
+                                self._last_candle_check = current_candle
+                                self.logger.info(f"🕐 Initial 15-min candle: {current_candle}")
+                            
+                            should_evaluate = current_candle > self._last_candle_check
+                            
+                            if should_evaluate:
+                                self.logger.info(f"🕐 NEW 15-MIN CANDLE: {current_candle}")
+                                self._last_candle_check = current_candle
+                            else:
+                                seconds_until_next = 900 - (datetime.now().minute % 15) * 60 - datetime.now().second
+                                self.logger.debug(f"⏳ Next 15-min candle in {seconds_until_next}s")
+                                time.sleep(10)  # Check every 10 seconds for 15-min
+                                continue
                         else:
                             # Default hourly candles (production)
                             current_hour = signal_time.replace(minute=0, second=0, microsecond=0)
