@@ -954,6 +954,20 @@ class MACrossoverStrategy:
             self.logger.debug(f"⏭️ Skipping - same signal time as last: {signal_time}")
             return
 
+        # PROXIMITY THRESHOLD CHECK - Critical bug fix
+        # Calculate MA proximity to prevent trading when MAs are too close
+        PROXIMITY_THRESHOLD = 0.3  # Only trade if MAs differ by >0.3%
+        
+        if hasattr(self, 'df_ma') and not self.df_ma.empty:
+            short_ma = self.df_ma.iloc[-1]['Short_MA']
+            long_ma = self.df_ma.iloc[-1]['Long_MA']
+            ma_proximity = abs((short_ma - long_ma) / long_ma * 100) if long_ma != 0 else 0
+            
+            if ma_proximity <= PROXIMITY_THRESHOLD:
+                self.logger.warning(f"🚫 BLOCKING TRADE: MAs too close ({ma_proximity:.2f}% <= {PROXIMITY_THRESHOLD}%)")
+                self.logger.warning(f"   MA{self.short_window}={short_ma:.0f}, MA{self.long_window}={long_ma:.0f}")
+                return  # EXIT without trading
+        
         # CRITICAL TRADE DECISION LOG
         self.logger.warning(f"🎯 TRADE DECISION: Signal={latest_signal} vs Position={self.position} | "
                           f"Will trade? {(latest_signal == 1 and self.position <= 0) or (latest_signal == -1 and self.position >= 0)} | "
