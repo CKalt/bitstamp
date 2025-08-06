@@ -73,19 +73,19 @@ class SignalMonitor:
         self.evaluation_count += 1
         self.last_evaluation_time = datetime.now()
         
-        # Create evaluation record
+        # Create evaluation record (convert numpy types to Python types for JSON)
         evaluation = {
             'timestamp': self.last_evaluation_time.isoformat(),
             'evaluation_number': self.evaluation_count,
-            'signal': signal,
-            'position': position,
-            'price': round(price, 2),
-            'ma_short': round(ma_short, 2),
-            'ma_long': round(ma_long, 2),
-            'ma_diff': round(ma_short - ma_long, 2),
-            'ma_diff_pct': round((ma_short - ma_long) / ma_long * 100, 4),
-            'will_trade': will_trade,
-            'reason': reason,
+            'signal': int(signal),  # Convert numpy int64 to Python int
+            'position': int(position),  # Convert numpy int64 to Python int
+            'price': round(float(price), 2),  # Ensure float
+            'ma_short': round(float(ma_short), 2),  # Ensure float
+            'ma_long': round(float(ma_long), 2),  # Ensure float
+            'ma_diff': round(float(ma_short - ma_long), 2),
+            'ma_diff_pct': round(float((ma_short - ma_long) / ma_long * 100), 4),
+            'will_trade': bool(will_trade),  # Ensure bool
+            'reason': str(reason),  # Ensure string
             'time_since_last': self._time_since_last_evaluation()
         }
         
