@@ -597,7 +597,9 @@ class MACrossoverStrategy:
                         # CANDLE INTERVAL CHECK - Configurable for testing
                         if self.candle_interval == '1min':
                             # 1-minute candles for ultra-fast testing
-                            current_candle = signal_time.replace(second=0, microsecond=0)
+                            # Use real-time for testing, not signal_time from historical data
+                            current_time = datetime.now()
+                            current_candle = current_time.replace(second=0, microsecond=0)
                             
                             if not hasattr(self, '_last_candle_check'):
                                 self._last_candle_check = current_candle
@@ -609,13 +611,14 @@ class MACrossoverStrategy:
                                 self.logger.info(f"🕐 NEW 1-MIN CANDLE: {current_candle}")
                                 self._last_candle_check = current_candle
                             else:
-                                seconds_until_next = 60 - datetime.now().second
+                                seconds_until_next = 60 - current_time.second
                                 self.logger.debug(f"⏳ Next 1-min candle in {seconds_until_next}s")
                                 time.sleep(1)  # Check every second for 1-min
                                 continue
                         elif self.candle_interval == '5min':
                             # 5-minute candles for rapid testing
-                            current_candle = signal_time.replace(second=0, microsecond=0)
+                            current_time = datetime.now()
+                            current_candle = current_time.replace(second=0, microsecond=0)
                             current_candle = current_candle.replace(minute=(current_candle.minute // 5) * 5)
                             
                             if not hasattr(self, '_last_candle_check'):
