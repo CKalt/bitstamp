@@ -1,0 +1,393 @@
+{
+  "config": {
+    "Short_Window": 4,
+    "Long_Window": 20,
+    "proximity_threshold": 0.003,
+    "min_trade_gap_minutes": 30,
+    "rsi_period": 14,
+    "rsi_oversold": 30,
+    "rsi_overbought": 70,
+    "bb_period": 20,
+    "bb_std_dev": 2.0,
+    "regime_lookback": 50
+  },
+  "start_date": "2025-08-10 00:00:00",
+  "end_date": "2025-08-11 09:11:00",
+  "initial_balance": 10000,
+  "final_balance": 9308.133849999886,
+  "total_trades": 43,
+  "trades": [
+    {
+      "timestamp": "2025-08-10 01:09:00",
+      "price": 118272.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.08012251420454546,
+      "usd_value": 9500.0
+    },
+    {
+      "timestamp": "2025-08-10 01:42:00",
+      "price": 118278.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": -23.211091752484208,
+      "pnl_pct": -0.2449396306818014,
+      "amount": 0.08012251420454546,
+      "usd_value": 9453.038908247516
+    },
+    {
+      "timestamp": "2025-08-10 02:15:00",
+      "price": 117944.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.07996802292128512,
+      "usd_value": 9455.38696283514
+    },
+    {
+      "timestamp": "2025-08-10 02:45:00",
+      "price": 118034.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": -16.400241980811188,
+      "pnl_pct": -0.17388336837820734,
+      "amount": 0.07996802292128512,
+      "usd_value": 9415.34825344724
+    },
+    {
+      "timestamp": "2025-08-10 03:33:00",
+      "price": 118016.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.07959773940350752,
+      "usd_value": 9417.350188916635
+    },
+    {
+      "timestamp": "2025-08-10 04:16:00",
+      "price": 118064.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": -19.673377270970377,
+      "pnl_pct": -0.20942922993491833,
+      "amount": 0.07959773940350752,
+      "usd_value": 9374.133436173373
+    },
+    {
+      "timestamp": "2025-08-10 04:52:00",
+      "price": 118318.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 05:30:00",
+      "price": 118247.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.07909590550395368,
+      "usd_value": 9376.294273810536
+    },
+    {
+      "timestamp": "2025-08-10 06:48:00",
+      "price": 118227.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": -24.960097160117584,
+      "pnl_pct": -0.26687146396947353,
+      "amount": 0.07909590550395368,
+      "usd_value": 9327.893440965892
+    },
+    {
+      "timestamp": "2025-08-10 07:22:00",
+      "price": 118128.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 07:52:00",
+      "price": 118469.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 08:26:00",
+      "price": 118605.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 09:00:00",
+      "price": 118506.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.07853600407491272,
+      "usd_value": 9330.313482608126
+    },
+    {
+      "timestamp": "2025-08-10 09:47:00",
+      "price": 118566.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": -18.56708940337012,
+      "pnl_pct": -0.19949622803908262,
+      "amount": 0.07853600407491272,
+      "usd_value": 9288.420609498236
+    },
+    {
+      "timestamp": "2025-08-10 10:17:00",
+      "price": 118627.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 11:05:00",
+      "price": 118824.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 11:35:00",
+      "price": 118623.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.07812387955978896,
+      "usd_value": 9290.51525315373
+    },
+    {
+      "timestamp": "2025-08-10 12:06:00",
+      "price": 118862.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": -4.543294215798596,
+      "pnl_pct": -0.04902506259324759,
+      "amount": 0.07812387955978896,
+      "usd_value": 9262.745670805047
+    },
+    {
+      "timestamp": "2025-08-10 12:59:00",
+      "price": 118682.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.07786331385170182,
+      "usd_value": 9264.134149922482
+    },
+    {
+      "timestamp": "2025-08-10 14:37:00",
+      "price": 118502.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": -37.082792538441936,
+      "pnl_pct": -0.4012866315026675,
+      "amount": 0.07786331385170182,
+      "usd_value": 9203.891022009235
+    },
+    {
+      "timestamp": "2025-08-10 15:15:00",
+      "price": 118661.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 16:11:00",
+      "price": 118440.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.07754040797415472,
+      "usd_value": 9206.903178404897
+    },
+    {
+      "timestamp": "2025-08-10 16:41:00",
+      "price": 118597.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": -10.816305359332546,
+      "pnl_pct": -0.11777482269501116,
+      "amount": 0.07754040797415472,
+      "usd_value": 9173.069615099552
+    },
+    {
+      "timestamp": "2025-08-10 17:37:00",
+      "price": 118184.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.0774370844617855,
+      "usd_value": 9174.761293264819
+    },
+    {
+      "timestamp": "2025-08-10 18:07:00",
+      "price": 118810.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": 25.474864860816524,
+      "pnl_pct": 0.27835832261558946,
+      "amount": 0.0774370844617855,
+      "usd_value": 9177.299254892474
+    },
+    {
+      "timestamp": "2025-08-10 18:59:00",
+      "price": 119053.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 19:31:00",
+      "price": 119147.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 20:27:00",
+      "price": 119470.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 21:31:00",
+      "price": 119396.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 22:01:00",
+      "price": 120660.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 22:32:00",
+      "price": 121500.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 23:02:00",
+      "price": 121889.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-10 23:36:00",
+      "price": 121550.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.0753124592835793,
+      "usd_value": 9177.172356811092
+    },
+    {
+      "timestamp": "2025-08-11 00:53:00",
+      "price": 122072.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": 16.329247421865148,
+      "pnl_pct": 0.17837926779102686,
+      "amount": 0.0753124592835793,
+      "usd_value": 9170.558673340929
+    },
+    {
+      "timestamp": "2025-08-11 01:23:00",
+      "price": 121907.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.07504049918479376,
+      "usd_value": 9170.889357514438
+    },
+    {
+      "timestamp": "2025-08-11 01:58:00",
+      "price": 122014.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": -14.860645256059797,
+      "pnl_pct": -0.16244760350102033,
+      "amount": 0.07504049918479376,
+      "usd_value": 9133.101488864593
+    },
+    {
+      "timestamp": "2025-08-11 02:32:00",
+      "price": 122157.0,
+      "signal": -1,
+      "type": "sell",
+      "amount": 0,
+      "usd_value": 0.0
+    },
+    {
+      "timestamp": "2025-08-11 03:07:00",
+      "price": 122049.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.0746597956975587,
+      "usd_value": 9134.990882297085
+    },
+    {
+      "timestamp": "2025-08-11 04:19:00",
+      "price": 121599.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": -56.293299306471454,
+      "pnl_pct": -0.6177826119017928,
+      "amount": 0.0746597956975587,
+      "usd_value": 9055.860105784872
+    },
+    {
+      "timestamp": "2025-08-11 04:50:00",
+      "price": 121622.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.07430536500796694,
+      "usd_value": 9059.816644610482
+    },
+    {
+      "timestamp": "2025-08-11 05:48:00",
+      "price": 121437.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": -36.30504405265492,
+      "pnl_pct": -0.40173036128331857,
+      "amount": 0.07430536500796694,
+      "usd_value": 9000.8620589463
+    },
+    {
+      "timestamp": "2025-08-11 06:35:00",
+      "price": 121155.0,
+      "signal": 1,
+      "type": "buy",
+      "amount": 0.07413066125012534,
+      "usd_value": 9003.80978822951
+    },
+    {
+      "timestamp": "2025-08-11 09:11:00",
+      "price": 119470.0,
+      "signal": -1,
+      "type": "sell",
+      "pnl": -147.0511394553414,
+      "pnl_pct": -1.6373034542528055,
+      "amount": 0.07413066125012534,
+      "usd_value": 8834.249124303595
+    }
+  ]
+}

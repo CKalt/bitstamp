@@ -7,6 +7,11 @@
 4. [Critical Operations](#critical-operations)
 5. [Development Process](#development-process)
 6. [Recent Work & Plans](#recent-work--plans)
+7. [Important Reminders](#important-reminders)
+8. [Support Information](#support-information)
+9. [USK (Update Session Knowledge)](#usk-update-session-knowledge)
+10. [Documentation Layout](#documentation-layout)
+11. [Recent Session Work](#recent-session-work-2025-07-29)
 
 ---
 

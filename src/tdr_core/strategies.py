@@ -31,8 +31,6 @@ import threading
 import os
 from datetime import datetime, timedelta
 
-from .signal_monitor_enhanced import SignalMonitor
-
 from indicators.technical_indicators import (
     ensure_datetime_index,
     add_moving_averages,
@@ -334,14 +332,12 @@ class MACrossoverStrategy:
         initial_position=0,
         initial_balance_btc=0.0,
         initial_balance_usd=0.0,
-        candle_interval='1h',  # Add configurable candle interval
         **kwargs  # Accept additional keyword arguments
     ):
         self.data_manager = data_manager
         self.order_placer = data_manager.order_placer
         self.short_window = short_window
         self.long_window = long_window
-        self.candle_interval = candle_interval
         self.initial_amount = amount
         self.current_amount = amount
         self.symbol = symbol
@@ -349,11 +345,6 @@ class MACrossoverStrategy:
         self.position = initial_position
         self.running = False
         self.live_trading = live_trading
-        
-        # SAFETY: Log paper trading mode prominently
-        if not self.live_trading:
-            self.logger.warning("🧪 PAPER TRADING MODE - No real trades will be executed")
-            self.logger.warning("🧪 All trades are simulated for testing purposes only")
         self.trade_log = []
 
         # Decide which trades file to use (live vs. non-live).
@@ -384,14 +375,6 @@ class MACrossoverStrategy:
         self.balance_usd = initial_balance_usd
 
         self.fee_percentage = 0.0012
-        
-        # CRITICAL FIX: Sync data_manager balances on initialization
-        if self.data_manager:
-            self.data_manager.balance_btc = self.balance_btc
-            self.data_manager.balance_usd = self.balance_usd
-            self.data_manager.position = initial_position
-            self.data_manager.position_size = initial_balance_btc if initial_position == 1 else -initial_balance_btc
-            self.data_manager.position_cost_basis = initial_balance_btc * amount if initial_position == 1 else initial_balance_usd
         self.last_trade_price = None
         self.total_fees_paid = 0
         self.trades_executed = 0
@@ -432,9 +415,22 @@ class MACrossoverStrategy:
             "parameters": {"short": short_window, "long": long_window, "live": live_trading}
         })
         
-        # Initialize enhanced signal monitor
-        self.signal_monitor = SignalMonitor(log_dir="logs", alert_threshold_seconds=90)
-        self.logger.info("✅ Enhanced signal monitoring initialized")
+        # Initialize comparison logger if enabled
+        self.comparison_logger = None
+        enable_comparison = kwargs.get('enable_comparison_logging', False)
+        self.logger.info(f"[COMPARISON_DEBUG] enable_comparison_logging = {enable_comparison}")
+        
+        if enable_comparison:
+            try:
+                self.logger.info("[COMPARISON_DEBUG] Attempting to import BacktestComparisonLogger...")
+                from tdr_core.backtest_comparison_logger import BacktestComparisonLogger
+                self.logger.info("[COMPARISON_DEBUG] Import successful, creating instance...")
+                self.comparison_logger = BacktestComparisonLogger()
+                self.logger.info("✅ Initialized BacktestComparisonLogger for live/backtest comparison")
+            except Exception as e:
+                self.logger.error(f"[COMPARISON_DEBUG] Could not initialize comparison logger: {e}")
+                import traceback
+                self.logger.error(f"[COMPARISON_DEBUG] Traceback: {traceback.format_exc()}")
         
         # Initialize whipsaw tracking
         self.whipsaw_tracker = {
@@ -465,6 +461,17 @@ class MACrossoverStrategy:
         
         # Load recent trades for whipsaw tracking
         self._load_recent_trades_for_whipsaw()
+        
+        # Initialize System Verifier for continuous regression detection
+        self.system_verifier = None
+        self.last_verification_time = None
+        self.verification_interval = 30  # seconds
+        try:
+            from tdr_core.system_verifier import SystemVerifier
+            self.system_verifier = SystemVerifier(self, data_manager, logger)
+            self.logger.info("✅ System Verifier initialized for continuous regression detection")
+        except Exception as e:
+            self.logger.warning(f"Could not initialize System Verifier: {e}")
     
     @property
     def position_cost_basis(self):
@@ -551,27 +558,37 @@ class MACrossoverStrategy:
         """
         evaluation_count = 0
         last_evaluation_log = datetime.now()
-        last_hourly_check = None  # Track last hour we checked
         
         # Log initial position state
         self.logger.info(f"[POSITION_DEBUG] Strategy loop starting with position: size={self.position_size}, cost_basis={self.position_cost_basis}")
-        self.logger.info("📊 Strategy will only evaluate signals on hourly candle close (like backtesting)")
         
         while self.running:
             evaluation_count += 1
             current_time = datetime.now()
-            
-            # HEARTBEAT - Log every evaluation so we know loop is alive
-            self.logger.info(f"💓 HEARTBEAT: Strategy loop alive at {current_time.strftime('%H:%M:%S')} (eval #{evaluation_count})")
             
             # Log evaluation frequency every 5 evaluations or every 5 minutes
             if evaluation_count % 5 == 0 or (current_time - last_evaluation_log).total_seconds() > 300:
                 self.logger.info(f"📊 Strategy evaluation #{evaluation_count} at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 last_evaluation_log = current_time
             
-            try:
-                df = self.data_manager.get_price_dataframe(self.symbol)
-                if not df.empty:
+            # Run System Verifier checks every 30 seconds
+            if self.system_verifier and (self.last_verification_time is None or 
+                                        (current_time - self.last_verification_time).total_seconds() >= self.verification_interval):
+                try:
+                    verification_results = self.system_verifier.run_all_checks()
+                    self.last_verification_time = current_time
+                    
+                    # Log errors if any found
+                    if verification_results.get('errors'):
+                        self.logger.error(f"🚨 SYSTEM VERIFIER DETECTED {len(verification_results['errors'])} ISSUES!")
+                        for error in verification_results['errors']:
+                            self.logger.error(f"  ❌ {error}")
+                except Exception as e:
+                    self.logger.error(f"System Verifier failed: {e}")
+            
+            df = self.data_manager.get_price_dataframe(self.symbol)
+            if not df.empty:
+                try:
                     df = ensure_datetime_index(df)
                     df_resampled = df.resample('1H').agg({
                         'open': 'first',
@@ -602,86 +619,6 @@ class MACrossoverStrategy:
                         if hasattr(self, 'validate_position_tracking'):
                             self.validate_position_tracking()
 
-                        # CANDLE INTERVAL CHECK - Configurable for testing
-                        if self.candle_interval == '1min':
-                            # 1-minute candles for ultra-fast testing
-                            # Use real-time for testing, not signal_time from historical data
-                            current_time = datetime.now()
-                            current_candle = current_time.replace(second=0, microsecond=0)
-                            
-                            if not hasattr(self, '_last_candle_check'):
-                                self._last_candle_check = current_candle
-                                self.logger.info(f"🕐 Initial 1-min candle: {current_candle}")
-                            
-                            should_evaluate = current_candle > self._last_candle_check
-                            
-                            if should_evaluate:
-                                self.logger.info(f"🕐 NEW 1-MIN CANDLE: {current_candle}")
-                                self._last_candle_check = current_candle
-                            else:
-                                seconds_until_next = 60 - current_time.second
-                                self.logger.debug(f"⏳ Next 1-min candle in {seconds_until_next}s")
-                                time.sleep(1)  # Check every second for 1-min
-                                continue
-                        elif self.candle_interval == '5min':
-                            # 5-minute candles for rapid testing
-                            current_time = datetime.now()
-                            current_candle = current_time.replace(second=0, microsecond=0)
-                            current_candle = current_candle.replace(minute=(current_candle.minute // 5) * 5)
-                            
-                            if not hasattr(self, '_last_candle_check'):
-                                self._last_candle_check = current_candle
-                                self.logger.info(f"🕐 Initial 5-min candle: {current_candle}")
-                            
-                            should_evaluate = current_candle > self._last_candle_check
-                            
-                            if should_evaluate:
-                                self.logger.info(f"🕐 NEW 5-MIN CANDLE: {current_candle}")
-                                self._last_candle_check = current_candle
-                            else:
-                                seconds_until_next = 300 - (datetime.now().minute % 5) * 60 - datetime.now().second
-                                self.logger.info(f"⏳ Next 5-min candle in {seconds_until_next}s")
-                                time.sleep(5)  # Check more frequently for 5-min
-                                continue
-                        elif self.candle_interval == '15min':
-                            # 15-minute candles for balanced testing
-                            current_time = datetime.now()
-                            current_candle = current_time.replace(second=0, microsecond=0)
-                            current_candle = current_candle.replace(minute=(current_candle.minute // 15) * 15)
-                            
-                            if not hasattr(self, '_last_candle_check'):
-                                self._last_candle_check = current_candle
-                                self.logger.info(f"🕐 Initial 15-min candle: {current_candle}")
-                            
-                            should_evaluate = current_candle > self._last_candle_check
-                            
-                            if should_evaluate:
-                                self.logger.info(f"🕐 NEW 15-MIN CANDLE: {current_candle}")
-                                self._last_candle_check = current_candle
-                            else:
-                                seconds_until_next = 900 - (datetime.now().minute % 15) * 60 - datetime.now().second
-                                self.logger.debug(f"⏳ Next 15-min candle in {seconds_until_next}s")
-                                time.sleep(10)  # Check every 10 seconds for 15-min
-                                continue
-                        else:
-                            # Default hourly candles (production)
-                            current_hour = signal_time.replace(minute=0, second=0, microsecond=0)
-                            
-                            if not hasattr(self, '_last_candle_check'):
-                                self._last_candle_check = current_hour
-                                self.logger.info(f"🕐 Initial hourly check set to: {current_hour}")
-                            
-                            should_evaluate = current_hour > self._last_candle_check
-                            
-                            if should_evaluate:
-                                self.logger.info(f"🕐 NEW HOURLY CANDLE: {current_hour}")
-                                self._last_candle_check = current_hour
-                            else:
-                                minutes_until_next = 60 - datetime.now().minute
-                                self.logger.info(f"⏳ Waiting for new hourly candle. Next check in ~{minutes_until_next} minutes")
-                                time.sleep(30)
-                                continue
-
                         # Check signals (MA crossover)
                         
                         # ENHANCED LOGGING: Log EVERY signal evaluation for debugging
@@ -689,6 +626,10 @@ class MACrossoverStrategy:
                         long_ma = df_ma.iloc[-1]['Long_MA']
                         ma_diff = short_ma - long_ma
                         ma_proximity = abs(ma_diff) / long_ma * 100
+                        
+                        # Store MA values for use in trade execution
+                        self._last_ma_short = short_ma
+                        self._last_ma_long = long_ma
                         
                         # Log comprehensive signal evaluation data
                         eval_data = {
@@ -710,15 +651,7 @@ class MACrossoverStrategy:
                         will_trade = False
                         why_not = []
                         
-                        # PROXIMITY THRESHOLD CHECK - Prevent flipping when MAs are too close
-                        PROXIMITY_THRESHOLD = 0.3  # Only trade if MAs differ by >0.3%
-                        
-                        if ma_proximity <= PROXIMITY_THRESHOLD:
-                            # MAs are too close - hold current position
-                            why_not.append(f"MAs too close: {ma_proximity:.2f}% <= {PROXIMITY_THRESHOLD}% threshold")
-                            eval_data["action"] = "NO_TRADE_PROXIMITY"
-                            will_trade = False
-                        elif latest_signal == 1 and self.position <= 0:
+                        if latest_signal == 1 and self.position <= 0:
                             # Signal says go LONG but we're SHORT or NEUTRAL
                             if self.trade_count_today >= self.max_trades_per_day:
                                 why_not.append(f"Daily limit: {self.trade_count_today}/{self.max_trades_per_day}")
@@ -744,23 +677,24 @@ class MACrossoverStrategy:
                                        f"Diff={ma_diff:.0f} Prox={ma_proximity:.2f}% Sig={latest_signal} Pos={self.position} "
                                        f"Action={eval_data.get('action', 'NO_TRADE')}")
                         
-                        # Also log to enhanced signal monitor
-                        self.signal_monitor.log_evaluation(
-                            signal=latest_signal,
-                            position=self.position,
-                            price=current_price,
-                            ma_short=short_ma,
-                            ma_long=long_ma,
-                            will_trade=will_trade,
-                            reason=eval_data.get('blocked_reason', eval_data.get('action', 'NO_TRADE')),
-                            additional_data={
-                                'ma_proximity': ma_proximity,
-                                'trade_count_today': self.trade_count_today,
-                                'max_trades_per_day': self.max_trades_per_day,
-                                'evaluation_count': evaluation_count,
-                                'signal_source': signal_source
-                            }
-                        )
+                        # Log to comparison logger if available
+                        if self.comparison_logger:
+                            try:
+                                self.comparison_logger.log_signal_evaluation(
+                                    timestamp=current_time,
+                                    current_price=float(current_price),
+                                    ma_short_value=float(short_ma),
+                                    ma_long_value=float(long_ma),
+                                    previous_signal=int(getattr(self, 'last_logged_signal', 0)),
+                                    current_signal=int(latest_signal),
+                                    will_trade=bool(will_trade),
+                                    reason=eval_data.get('action', 'NO_TRADE')
+                                )
+                                self.last_logged_signal = latest_signal
+                            except Exception as e:
+                                self.logger.error(f"[COMPARISON_LOG] Error logging signal: {e}")
+                                import traceback
+                                self.logger.error(f"[COMPARISON_LOG] Traceback: {traceback.format_exc()}")
                         
                         # CRITICAL: Log when we're in trigger zone
                         if ma_proximity <= self.ma_separation_threshold:
@@ -774,14 +708,12 @@ class MACrossoverStrategy:
                             latest_signal, current_price, signal_time)
                     else:
                         self.logger.debug("Not enough data to compute MAs.")
-                else:
-                    self.logger.debug(f"No data loaded for {self.symbol} yet.")
-            except Exception as e:
-                self.logger.error(
-                    f"Error in strategy loop for {self.symbol}: {e}", exc_info=True)
-                self.diagnostic_logger.log_error(f"Strategy loop error: {e}")
-                # CRITICAL: Don't crash the loop! Continue after error
-                self.logger.warning("❗ Strategy loop continuing after error")
+                except Exception as e:
+                    self.logger.error(
+                        f"Error in strategy loop for {self.symbol}: {e}")
+                    self.diagnostic_logger.log_error(f"Strategy loop error: {e}")
+            else:
+                self.logger.debug(f"No data loaded for {self.symbol} yet.")
 
             # Hourly status report
             if not hasattr(self, '_last_hourly_status'):
@@ -982,20 +914,6 @@ class MACrossoverStrategy:
             self.logger.debug(f"⏭️ Skipping - same signal time as last: {signal_time}")
             return
 
-        # PROXIMITY THRESHOLD CHECK - Critical bug fix
-        # Calculate MA proximity to prevent trading when MAs are too close
-        PROXIMITY_THRESHOLD = 0.3  # Only trade if MAs differ by >0.3%
-        
-        if hasattr(self, 'df_ma') and not self.df_ma.empty:
-            short_ma = self.df_ma.iloc[-1]['Short_MA']
-            long_ma = self.df_ma.iloc[-1]['Long_MA']
-            ma_proximity = abs((short_ma - long_ma) / long_ma * 100) if long_ma != 0 else 0
-            
-            if ma_proximity <= PROXIMITY_THRESHOLD:
-                self.logger.warning(f"🚫 BLOCKING TRADE: MAs too close ({ma_proximity:.2f}% <= {PROXIMITY_THRESHOLD}%)")
-                self.logger.warning(f"   MA{self.short_window}={short_ma:.0f}, MA{self.long_window}={long_ma:.0f}")
-                return  # EXIT without trading
-        
         # CRITICAL TRADE DECISION LOG
         self.logger.warning(f"🎯 TRADE DECISION: Signal={latest_signal} vs Position={self.position} | "
                           f"Will trade? {(latest_signal == 1 and self.position <= 0) or (latest_signal == -1 and self.position >= 0)} | "
@@ -1017,13 +935,23 @@ class MACrossoverStrategy:
                 "position": self.position
             }
 
-            self.position = 1
+            # Store reason before trade
             self.last_trade_reason = "MA Crossover: short above long."
+            
+            # Execute trade FIRST
             self.buy_in_three_parts(
                 current_price, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), signal_time
             )
+            
+            # Update position AFTER successful trade execution
+            self.position = 1
             self.trade_count_today += 1
             self.last_signal_time = signal_time
+            
+            # Sync position to data_manager
+            if hasattr(self, 'data_manager') and self.data_manager:
+                self.data_manager.position = self.position
+                self.logger.info(f"[POSITION_SYNC] After BUY: synced position={self.position} to data_manager")
             
             # Log position after trade
             self.diagnostic_logger.log_trade_execution(
@@ -1034,6 +962,24 @@ class MACrossoverStrategy:
                 position_after={"btc": self.balance_btc, "usd": self.balance_usd, "position": self.position},
                 pnl=self.total_profit_loss
             )
+            
+            # Log to comparison logger if available
+            if self.comparison_logger:
+                try:
+                    self.comparison_logger.log_trade_decision(
+                        timestamp=signal_time,
+                        trade_type="BUY",
+                        price=float(current_price),
+                        amount=float(self.position_size),
+                        position_before=int(position_before["position"]),
+                        position_after=int(self.position),
+                        ma_short=int(self.short_window),
+                        ma_long=int(self.long_window),
+                        hourly_bar_time=signal_time,
+                        exact_trigger_time=datetime.now()
+                    )
+                except Exception as e:
+                    self.logger.error(f"[COMPARISON_LOG] Error logging trade: {e}")
             
             # Log full status after trade
             self._log_trade_status()
@@ -1054,9 +1000,11 @@ class MACrossoverStrategy:
                 "position": self.position
             }
  
-            self.position = -1
+            # Store reason before trade
             self.last_trade_reason = "MA Crossover: short below long."
             trade_btc = round(self.balance_btc, 8)
+            
+            # Execute trade FIRST
             self.execute_trade(
                 "sell",
                 current_price,
@@ -1064,8 +1012,16 @@ class MACrossoverStrategy:
                 signal_time,
                 trade_btc
             )
+            
+            # Update position AFTER successful trade execution
+            self.position = -1
             self.trade_count_today += 1
             self.last_signal_time = signal_time
+            
+            # Sync position to data_manager
+            if hasattr(self, 'data_manager') and self.data_manager:
+                self.data_manager.position = self.position
+                self.logger.info(f"[POSITION_SYNC] After SELL: synced position={self.position} to data_manager")
             
             # Log position after trade
             self.diagnostic_logger.log_trade_execution(
@@ -1076,6 +1032,24 @@ class MACrossoverStrategy:
                 position_after={"btc": self.balance_btc, "usd": self.balance_usd, "position": self.position},
                 pnl=self.total_profit_loss
             )
+            
+            # Log to comparison logger if available
+            if self.comparison_logger:
+                try:
+                    self.comparison_logger.log_trade_decision(
+                        timestamp=signal_time,
+                        trade_type="SELL",
+                        price=float(current_price),
+                        amount=float(trade_btc),
+                        position_before=int(position_before["position"]),
+                        position_after=int(self.position),
+                        ma_short=int(self.short_window),
+                        ma_long=int(self.long_window),
+                        hourly_bar_time=signal_time,
+                        exact_trigger_time=datetime.now()
+                    )
+                except Exception as e:
+                    self.logger.error(f"[COMPARISON_LOG] Error logging trade: {e}")
             
             # Log full status after trade
             self._log_trade_status()
@@ -1155,7 +1129,7 @@ class MACrossoverStrategy:
                     }
                 )
                 # Use the actual cost added, not position_size * last_price
-                self.position_cost_basis = actual_cost_added
+                self.position_cost_basis = abs(self.position_size) * price * (1 + self.fee_percentage)
                 avg_price = actual_cost_added / total_btc_bought if total_btc_bought > 0 else price
                 self.logger.info(f"Corrected position cost basis to ${self.position_cost_basis:.2f} (avg price: ${avg_price:.2f})")
         
@@ -1190,7 +1164,7 @@ class MACrossoverStrategy:
         """
         Execute a single trade. 
         (NEW) If trade_btc < 1e-8, skip to avoid confusion with 0.0 updates.
-        (NEW) If live_trading=True, append to trades.json immediately.
+        (NEW) If live_trading=True, append to trades.json immediately in JSONL format.
         """
         if trade_btc < 1e-8:
             self.logger.debug(
@@ -1242,81 +1216,100 @@ class MACrossoverStrategy:
 
         # Place order with the exchange if live.
         if self.live_trading:
+            # JSONL Format: Write pre-trade entry BEFORE placing order
+            try:
+                file_path = os.path.abspath(self.trade_log_file)
+                pre_trade_entry = {
+                    "event_type": "PRE_TRADE",
+                    "timestamp": datetime.now().isoformat(),
+                    "signal_timestamp": signal_time.strftime('%Y-%m-%d %H:%M:%S'),
+                    "trade_type": trade_type,
+                    "symbol": self.symbol,
+                    "amount_btc": trade_btc,
+                    "signal_price": price,
+                    "reason": self.last_trade_reason,
+                    "trade_group_id": getattr(self, '_current_trade_group_id', None),
+                    "multi_part_sequence": getattr(self, '_current_multi_part_sequence', None),
+                    "multi_part_total": getattr(self, '_multi_part_total', None),
+                    "position_before": self.position,
+                    "ma_values": {
+                        "short_window": self.ma_short_window,
+                        "long_window": self.ma_long_window,
+                        "short_value": getattr(self, '_last_ma_short', None),
+                        "long_value": getattr(self, '_last_ma_long', None)
+                    }
+                }
+                
+                # Append to JSONL file
+                with open(file_path, 'a') as f:
+                    f.write(json.dumps(pre_trade_entry) + '\n')
+                    
+                self.logger.debug(f"Logged PRE_TRADE to {self.trade_log_file}")
+            except Exception as e:
+                self.logger.error(f"Failed to log PRE_TRADE: {e}")
+            
+            # Place the actual order
             result = self.order_placer.place_order(
                 f"market-{trade_type}", self.symbol, trade_btc)
             self.logger.info(f"Executed LIVE {trade_type} order: {result}")
             trade_info.order_result = result
+            
+            # JSONL Format: Write post-trade entry with Bitstamp results
+            try:
+                # Extract actual values from Bitstamp response
+                fill_price = price  # Default to signal price
+                trade_id = None
+                if result.get("price"):
+                    try:
+                        fill_price = float(result["price"])
+                        self.logger.info(f"Using actual fill price: ${fill_price:.2f} (vs signal price ${price:.2f})")
+                    except:
+                        pass
+                
+                if result.get("id"):
+                    trade_id = result.get("id")
+                
+                post_trade_entry = {
+                    "event_type": "POST_TRADE",
+                    "timestamp": datetime.now().isoformat(),
+                    "signal_timestamp": signal_time.strftime('%Y-%m-%d %H:%M:%S'),
+                    "trade_type": trade_type,
+                    "symbol": self.symbol,
+                    "amount_btc": trade_btc,
+                    "signal_price": price,
+                    "fill_price": fill_price,
+                    "bitstamp_trade_id": trade_id,
+                    "bitstamp_response": result,
+                    "status": "success" if result.get("status") != "error" else "failed",
+                    "trade_group_id": getattr(self, '_current_trade_group_id', None),
+                    "multi_part_sequence": getattr(self, '_current_multi_part_sequence', None),
+                    "multi_part_total": getattr(self, '_multi_part_total', None)
+                }
+                
+                # Append to JSONL file
+                with open(file_path, 'a') as f:
+                    f.write(json.dumps(post_trade_entry) + '\n')
+                    
+                self.logger.debug(f"Logged POST_TRADE to {self.trade_log_file}")
+            except Exception as e:
+                self.logger.error(f"Failed to log POST_TRADE: {e}")
+            
             if result.get("status") == "error":
                 self.logger.error(f"Trade failed: {result}")
                 self._log_failed_trade(trade_info)
                 return
             
-            # Use actual fill price from order result if available
-            fill_price = price  # Default to signal price
-            if result.get("price"):
-                try:
-                    fill_price = float(result["price"])
-                    self.logger.info(f"Using actual fill price: ${fill_price:.2f} (vs signal price ${price:.2f})")
-                except:
-                    pass
-            
             # Update balances & cost basis with actual fill price
             self.update_balance(trade_type, fill_price, trade_btc)
-            
-            # CRITICAL FIX: Sync data_manager balances after trade
-            if self.data_manager:
-                self.data_manager.balance_btc = self.balance_btc
-                self.data_manager.balance_usd = self.balance_usd
-                self.data_manager.position = self.position
-                self.data_manager.position_size = self.position_size
-                self.data_manager.position_cost_basis = self.position_cost_basis
-
-            # (NEW) Append to trades.json right away for live trades
-            try:
-                file_path = os.path.abspath(self.trade_log_file)
-                if not os.path.exists(file_path):
-                    existing_trades = []
-                else:
-                    with open(file_path, 'r') as f:
-                        try:
-                            existing_trades = json.load(f)
-                        except json.JSONDecodeError:
-                            existing_trades = []
-                existing_trades.append(trade_info.to_dict())
-                with open(file_path, 'w') as f:
-                    json.dump(existing_trades, f, indent=2)
-                self.logger.debug(
-                    f"Appended live trade to {self.trade_log_file}")
-            except Exception as e:
-                self.logger.error(f"Failed to write live trade: {e}")
 
         else:
-            # PAPER TRADING - Simulate the trade
-            self.logger.warning(f"🧪 PAPER TRADE: Would {trade_type} {trade_btc:.8f} BTC @ ${price:,.2f}")
-            self.logger.warning(f"🧪 Reason: {self.last_trade_reason}")
-            
-            # Calculate theoretical impact
-            if trade_type.lower() == 'buy':
-                cost = trade_btc * price * (1 + self.fee_percentage)
-                self.logger.warning(f"🧪 Would spend: ${cost:,.2f} USD (including fees)")
-            else:
-                proceeds = trade_btc * price * (1 - self.fee_percentage)
-                self.logger.warning(f"🧪 Would receive: ${proceeds:,.2f} USD (after fees)")
-            
+            # Dry-run => no actual exchange order, just local simulation
+            self.logger.info(
+                f"Executed DRY RUN {trade_type} order: {trade_info.to_dict()}")
             self.trade_log.append(trade_info)
             self.update_balance(trade_type, price, trade_btc)
-            
-            # CRITICAL FIX: Sync data_manager balances after trade
-            if self.data_manager:
-                self.data_manager.balance_btc = self.balance_btc
-                self.data_manager.balance_usd = self.balance_usd
-                self.data_manager.position = self.position
-                self.data_manager.position_size = self.position_size
-                self.data_manager.position_cost_basis = self.position_cost_basis
 
-        # Only track hourly trades if not part of a multi-part trade
-        if not hasattr(self, '_in_multi_part_trade') or not self._in_multi_part_trade:
-            self.trades_this_hour.append(datetime.utcnow())
+        self.trades_this_hour.append(datetime.utcnow())
         self._log_successful_trade(trade_info)
         
         # Track trade for whipsaw detection
@@ -1466,11 +1459,7 @@ class MACrossoverStrategy:
                     self.profitable_trades += 1
 
         self.last_trade_price = fill_price
-        
-        # Only increment trade count if not part of a multi-part trade
-        # Multi-part trades are counted as one trade in the calling function
-        if not hasattr(self, '_in_multi_part_trade') or not self._in_multi_part_trade:
-            self.trades_executed += 1
+        self.trades_executed += 1
 
         # Recompute 'current_amount' for old P&L logic
         ratio = self.current_balance / self.initial_balance if self.initial_balance else 1
@@ -1539,31 +1528,65 @@ class MACrossoverStrategy:
         )
         
         # Sync position tracking to data_manager for consistent display
-        if hasattr(self.data_manager, 'position_size'):
-            self.data_manager.position_size = self.position_size
-            self.data_manager.position_cost_basis = self.position_cost_basis
+        if hasattr(self, 'data_manager') and self.data_manager:
+            # Always sync position
             self.data_manager.position = self.position
-            self.logger.debug(f"Synced position to data_manager: size={self.position_size}, cost_basis={self.position_cost_basis}")
+            self.data_manager.balance_btc = self.balance_btc
+            self.data_manager.balance_usd = self.balance_usd
+            
+            # Sync additional tracking if available
+            if hasattr(self.data_manager, 'position_size'):
+                self.data_manager.position_size = self.position_size
+                self.data_manager.position_cost_basis = self.position_cost_basis
+            
+            self.logger.info(f"[POSITION_SYNC] Synced to data_manager: position={self.position}, btc={self.balance_btc:.8f}, usd={self.balance_usd:.2f}")
+        else:
+            self.logger.warning("[POSITION_SYNC] No data_manager available for position sync")
         
         # Automatically save resume state after each trade (unless in multi-part trade)
         if not getattr(self, '_in_multi_part_trade', False):
             self.save_resume_state()
 
+    def _read_trades_jsonl(self):
+        """Read trades from JSONL format file, extracting only successful POST_TRADE entries"""
+        trades = []
+        try:
+            trades_file = os.path.abspath(self.trade_log_file)
+            if not os.path.exists(trades_file):
+                return trades
+                
+            with open(trades_file, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        try:
+                            entry = json.loads(line)
+                            # Only include successful POST_TRADE entries for backward compatibility
+                            if entry.get('event_type') == 'POST_TRADE' and entry.get('status') == 'success':
+                                # Convert to old format for compatibility
+                                trade = {
+                                    'type': entry['trade_type'],
+                                    'symbol': entry['symbol'],
+                                    'amount': entry['amount_btc'],
+                                    'price': entry.get('fill_price', entry['signal_price']),
+                                    'timestamp': entry['signal_timestamp'],
+                                    'reason': entry.get('reason', ''),
+                                    'trade_group_id': entry.get('trade_group_id'),
+                                    'multi_part_sequence': entry.get('multi_part_sequence'),
+                                    'multi_part_total': entry.get('multi_part_total')
+                                }
+                                trades.append(trade)
+                        except json.JSONDecodeError:
+                            continue
+        except Exception as e:
+            self.logger.error(f"Error reading trades JSONL: {e}")
+        return trades
+    
     def validate_position_from_trades(self):
         """Validate and fix position tracking based on recent trades from trades.json"""
         self.logger.info(f"[POSITION_DEBUG] Starting validate_position_from_trades")
         self.logger.info(f"[POSITION_DEBUG] Current position before: size={self.position_size}, cost_basis={self.position_cost_basis}")
         try:
-            import json
-            import os
-            
-            trades_file = os.path.abspath(self.trade_log_file)
-            if not os.path.exists(trades_file):
-                self.logger.warning("No trades.json file found")
-                return False
-                
-            with open(trades_file, 'r') as f:
-                trades = json.load(f)
+            trades = self._read_trades_jsonl()
                 
             if not trades:
                 self.logger.warning("No trades found in trades.json")
@@ -1655,16 +1678,8 @@ class MACrossoverStrategy:
         """Calculate the correct entry price from trades.json based on position type.
         Returns: (entry_price, position_trades)
         """
-        import json
-        import os
-        
         try:
-            trades_file = os.path.abspath(self.trade_log_file)
-            if not os.path.exists(trades_file):
-                return None, []
-                
-            with open(trades_file, 'r') as f:
-                trades = json.load(f)
+            trades = self._read_trades_jsonl()
                 
             if not trades:
                 return None, []
@@ -1956,12 +1971,8 @@ class MACrossoverStrategy:
                 amount = self.balance_btc
                 unit = 'btc'
                 position_type = 'long'
-                # Validate BTC balance for LONG position
-                if amount <= 0:
-                    self.logger.error(f"Invalid BTC balance for LONG position: {amount}")
-                    return
                 # Use calculated entry price from trades.json if available, otherwise fall back to position tracking
-                if calculated_entry_price is not None and calculated_entry_price > 0:
+                if calculated_entry_price is not None:
                     entry_price = calculated_entry_price
                 else:
                     entry_price = position_info.get('entry_price', self.last_trade_price or 0)
@@ -1969,12 +1980,8 @@ class MACrossoverStrategy:
                 amount = self.balance_usd
                 unit = 'usd'
                 position_type = 'short'
-                # Validate USD balance for SHORT position
-                if amount <= 0:
-                    self.logger.error(f"Invalid USD balance for SHORT position: {amount}")
-                    return
                 # Use calculated entry price from trades.json if available
-                if calculated_entry_price is not None and calculated_entry_price > 0:
+                if calculated_entry_price is not None:
                     entry_price = calculated_entry_price
                 elif self.position_size < 0:
                     entry_price = self.position_cost_basis / abs(self.position_size)
@@ -1982,7 +1989,6 @@ class MACrossoverStrategy:
                     entry_price = position_info.get('entry_price', self.last_trade_price or 0)
             else:
                 # Should not happen in this system
-                self.logger.error(f"Invalid position state: {self.position}")
                 return
                 
             # Create resume data
@@ -2013,45 +2019,8 @@ class MACrossoverStrategy:
                 }
             }
             
-            # Validate resume data before saving
-            validation_errors = []
-            
-            # Check entry price is reasonable
-            if entry_price <= 0 or entry_price > 1000000:
-                validation_errors.append(f"Invalid entry price: ${entry_price}")
-            
-            # Check amount is reasonable
-            if position_type == 'long' and (amount <= 0 or amount > 100):
-                validation_errors.append(f"Invalid BTC amount: {amount}")
-            elif position_type == 'short' and (amount <= 0 or amount > 10000000):
-                validation_errors.append(f"Invalid USD amount: {amount}")
-            
-            # Verify position/unit consistency
-            if position_type == 'long' and unit != 'btc':
-                validation_errors.append(f"LONG position must use BTC unit, not {unit}")
-            elif position_type == 'short' and unit != 'usd':
-                validation_errors.append(f"SHORT position must use USD unit, not {unit}")
-            
-            if validation_errors:
-                self.logger.error(f"Resume data validation failed: {', '.join(validation_errors)}")
-                self.logger.error(f"Not saving invalid resume data")
-                return
-            
             # Save to file
             resume_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'resume-auto-trade.json')
-            
-            # Create backup of existing file
-            if os.path.exists(resume_file):
-                backup_file = f"{resume_file}.backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                try:
-                    with open(resume_file, 'r') as f:
-                        backup_data = json.load(f)
-                    with open(backup_file, 'w') as f:
-                        json.dump(backup_data, f, indent=2)
-                    self.logger.info(f"Created backup: {backup_file}")
-                except Exception as e:
-                    self.logger.warning(f"Could not create backup: {e}")
-            
             with open(resume_file, 'w') as f:
                 json.dump(resume_data, f, indent=2)
             
@@ -2473,8 +2442,7 @@ class MACrossoverStrategy:
         """Load recent trades from trades.json for whipsaw tracking"""
         try:
             if os.path.exists(self.trade_log_file):
-                with open(self.trade_log_file, 'r') as f:
-                    all_trades = json.load(f)
+                all_trades = self._read_trades_jsonl()
                 
                 # Only load trades from last 24 hours
                 cutoff_time = datetime.utcnow() - timedelta(hours=24)
@@ -2596,6 +2564,17 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             f"   Will switch between TRENDING → RANGING → VOLATILE strategies")
         self.logger.info(
             f"   Regime lookback: {self.regime_lookback}, Gap: {self.min_trade_gap_minutes}min")
+        
+        # Initialize System Verifier for continuous regression detection
+        self.system_verifier = None
+        self.last_verification_time = None
+        self.verification_interval = 30  # seconds
+        try:
+            from tdr_core.system_verifier import SystemVerifier
+            self.system_verifier = SystemVerifier(self, data_manager, logger)
+            self.logger.info("✅ System Verifier initialized for continuous regression detection")
+        except Exception as e:
+            self.logger.warning(f"Could not initialize System Verifier: {e}")
 
         # BUG FIX: Use actual config parameters instead of hardcoded values
         self.logger.info(f"   Confidence threshold: {self.regime_switch_threshold:.1%}")
@@ -2968,6 +2947,21 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                     self.save_resume_state()
                 except Exception as e:
                     self.logger.error(f"Failed to save resume state: {e}")
+            
+            # Run System Verifier checks every 30 seconds
+            if self.system_verifier and (self.last_verification_time is None or 
+                                        (current_time - self.last_verification_time).total_seconds() >= self.verification_interval):
+                try:
+                    verification_results = self.system_verifier.run_all_checks()
+                    self.last_verification_time = current_time
+                    
+                    # Log errors if any found
+                    if verification_results.get('errors'):
+                        self.logger.error(f"🚨 SYSTEM VERIFIER DETECTED {len(verification_results['errors'])} ISSUES!")
+                        for error in verification_results['errors']:
+                            self.logger.error(f"  ❌ {error}")
+                except Exception as e:
+                    self.logger.error(f"System Verifier failed: {e}")
 
             df = self.data_manager.get_price_dataframe(self.symbol)
             if not df.empty:
@@ -3403,13 +3397,17 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                 "position": self.position
             }
             
-            self.position = 1
             # Don't overwrite pivot protection reasons
             if "Pivot break:" not in self.last_trade_reason:
                 self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed long"
             self.last_trade_time = datetime.now()
+            
+            # Execute trade FIRST
             self.buy_in_three_parts(current_price, datetime.now().strftime(
                 '%Y-%m-%d %H:%M:%S'), signal_time)
+            
+            # Update position AFTER successful trade execution
+            self.position = 1
             self.trade_count_today += 1
             self.last_signal_time = signal_time
             self.strategy_performance[self.active_strategy]["trades"] += 1
@@ -3438,7 +3436,6 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
                 "position": self.position
             }
             
-            self.position = -1
             # Don't overwrite pivot protection reasons
             if "Pivot break:" not in self.last_trade_reason:
                 self.last_trade_reason = f"Adaptive {self.active_strategy}: confirmed short"
@@ -3447,11 +3444,14 @@ class AdaptiveMultiStrategy(MACrossoverStrategy):
             
             # Only execute if we have BTC to sell
             if trade_btc > 1e-8:
+                # Execute trade FIRST
                 self.execute_trade("sell", current_price, datetime.now().strftime(
                     '%Y-%m-%d %H:%M:%S'), signal_time, trade_btc)
+                
+                # Update position AFTER successful trade execution
+                self.position = -1
             else:
                 self.logger.warning(f"Cannot sell - insufficient BTC balance: {trade_btc}")
-                self.position = self.position  # Reset position flag
                 return
                 
             self.trade_count_today += 1

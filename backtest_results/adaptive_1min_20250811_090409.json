@@ -1,0 +1,20 @@
+{
+  "config": {
+    "Short_Window": 4,
+    "Long_Window": 20,
+    "proximity_threshold": 0.003,
+    "min_trade_gap_minutes": 30,
+    "rsi_period": 14,
+    "rsi_oversold": 30,
+    "rsi_overbought": 70,
+    "bb_period": 20,
+    "bb_std_dev": 2.0,
+    "regime_lookback": 50
+  },
+  "start_date": null,
+  "end_date": null,
+  "initial_balance": 10000,
+  "final_balance": 10000,
+  "total_trades": 0,
+  "trades": []
+}

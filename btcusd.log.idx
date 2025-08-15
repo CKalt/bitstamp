@@ -1,0 +1,5752 @@
+{
+  "created": "2025-08-15T11:37:55.509536",
+  "days": {
+    "2023-09-28": {
+      "first_line": 2,
+      "first_offset": 80,
+      "first_timestamp": 1695948468,
+      "last_line": 1707,
+      "last_offset": 488856,
+      "last_timestamp": 1695959999,
+      "trade_count": 1705
+    },
+    "2023-09-29": {
+      "first_line": 1708,
+      "first_offset": 489141,
+      "first_timestamp": 1695960001,
+      "last_line": 16527,
+      "last_offset": 4741027,
+      "last_timestamp": 1696046385,
+      "trade_count": 14819
+    },
+    "2023-09-30": {
+      "first_line": 16528,
+      "first_offset": 4741312,
+      "first_timestamp": 1696046406,
+      "last_line": 24280,
+      "last_offset": 6965637,
+      "last_timestamp": 1696132781,
+      "trade_count": 7753
+    },
+    "2023-10-01": {
+      "first_line": 24281,
+      "first_offset": 6965922,
+      "first_timestamp": 1696132825,
+      "last_line": 39655,
+      "last_offset": 11377011,
+      "last_timestamp": 1696219184,
+      "trade_count": 15375
+    },
+    "2023-10-02": {
+      "first_line": 39656,
+      "first_offset": 11377299,
+      "first_timestamp": 1696219209,
+      "last_line": 62997,
+      "last_offset": 18075863,
+      "last_timestamp": 1696305475,
+      "trade_count": 23342
+    },
+    "2023-10-03": {
+      "first_line": 62998,
+      "first_offset": 18076151,
+      "first_timestamp": 1696305612,
+      "last_line": 80699,
+      "last_offset": 23158784,
+      "last_timestamp": 1696391983,
+      "trade_count": 17702
+    },
+    "2023-10-04": {
+      "first_line": 80700,
+      "first_offset": 23159069,
+      "first_timestamp": 1696392059,
+      "last_line": 89760,
+      "last_offset": 25754314,
+      "last_timestamp": 1696478396,
+      "trade_count": 9060
+    },
+    "2023-10-05": {
+      "first_line": 89761,
+      "first_offset": 25754599,
+      "first_timestamp": 1696478412,
+      "last_line": 101463,
+      "last_offset": 29106011,
+      "last_timestamp": 1696564790,
+      "trade_count": 11701
+    },
+    "2023-10-06": {
+      "first_line": 101464,
+      "first_offset": 29106299,
+      "first_timestamp": 1696564811,
+      "last_line": 117334,
+      "last_offset": 33656394,
+      "last_timestamp": 1696651186,
+      "trade_count": 15871
+    },
+    "2023-10-07": {
+      "first_line": 117335,
+      "first_offset": 33656679,
+      "first_timestamp": 1696651220,
+      "last_line": 124261,
+      "last_offset": 35642660,
+      "last_timestamp": 1696737584,
+      "trade_count": 6925
+    },
+    "2023-10-08": {
+      "first_line": 124262,
+      "first_offset": 35642945,
+      "first_timestamp": 1696737655,
+      "last_line": 131335,
+      "last_offset": 37672239,
+      "last_timestamp": 1696823965,
+      "trade_count": 7074
+    },
+    "2023-10-09": {
+      "first_line": 131336,
+      "first_offset": 37672523,
+      "first_timestamp": 1696824003,
+      "last_line": 150859,
+      "last_offset": 43280419,
+      "last_timestamp": 1696910384,
+      "trade_count": 19524
+    },
+    "2023-10-10": {
+      "first_line": 150860,
+      "first_offset": 43280703,
+      "first_timestamp": 1696910461,
+      "last_line": 165465,
+      "last_offset": 47470609,
+      "last_timestamp": 1696996744,
+      "trade_count": 14606
+    },
+    "2023-10-11": {
+      "first_line": 165466,
+      "first_offset": 47470897,
+      "first_timestamp": 1696996802,
+      "last_line": 188132,
+      "last_offset": 53979638,
+      "last_timestamp": 1697083189,
+      "trade_count": 22667
+    },
+    "2023-10-12": {
+      "first_line": 188133,
+      "first_offset": 53979923,
+      "first_timestamp": 1697083251,
+      "last_line": 201613,
+      "last_offset": 57844698,
+      "last_timestamp": 1697169596,
+      "trade_count": 13481
+    },
+    "2023-10-13": {
+      "first_line": 201614,
+      "first_offset": 57844986,
+      "first_timestamp": 1697169604,
+      "last_line": 212956,
+      "last_offset": 61094468,
+      "last_timestamp": 1697255973,
+      "trade_count": 11343
+    },
+    "2023-10-14": {
+      "first_line": 212957,
+      "first_offset": 61094753,
+      "first_timestamp": 1697256004,
+      "last_line": 219076,
+      "last_offset": 62845325,
+      "last_timestamp": 1697342312,
+      "trade_count": 6120
+    },
+    "2023-10-15": {
+      "first_line": 219077,
+      "first_offset": 62845610,
+      "first_timestamp": 1697342412,
+      "last_line": 226121,
+      "last_offset": 64862265,
+      "last_timestamp": 1697428796,
+      "trade_count": 7044
+    },
+    "2023-10-16": {
+      "first_line": 226122,
+      "first_offset": 64862550,
+      "first_timestamp": 1697428837,
+      "last_line": 255139,
+      "last_offset": 73178994,
+      "last_timestamp": 1697515169,
+      "trade_count": 29018
+    },
+    "2023-10-17": {
+      "first_line": 255140,
+      "first_offset": 73179281,
+      "first_timestamp": 1697515213,
+      "last_line": 267399,
+      "last_offset": 76691889,
+      "last_timestamp": 1697601573,
+      "trade_count": 12260
+    },
+    "2023-10-18": {
+      "first_line": 267400,
+      "first_offset": 76692177,
+      "first_timestamp": 1697601603,
+      "last_line": 278953,
+      "last_offset": 79998930,
+      "last_timestamp": 1697687964,
+      "trade_count": 11554
+    },
+    "2023-10-19": {
+      "first_line": 278954,
+      "first_offset": 79999218,
+      "first_timestamp": 1697688025,
+      "last_line": 291300,
+      "last_offset": 83533611,
+      "last_timestamp": 1697774377,
+      "trade_count": 12347
+    },
+    "2023-10-20": {
+      "first_line": 291301,
+      "first_offset": 83533896,
+      "first_timestamp": 1697774424,
+      "last_line": 305803,
+      "last_offset": 87685219,
+      "last_timestamp": 1697860674,
+      "trade_count": 14503
+    },
+    "2023-10-21": {
+      "first_line": 305804,
+      "first_offset": 87685507,
+      "first_timestamp": 1697860818,
+      "last_line": 316494,
+      "last_offset": 90784679,
+      "last_timestamp": 1697947179,
+      "trade_count": 10689
+    },
+    "2023-10-22": {
+      "first_line": 316495,
+      "first_offset": 90784988,
+      "first_timestamp": 1697947221,
+      "last_line": 337926,
+      "last_offset": 97178166,
+      "last_timestamp": 1698033582,
+      "trade_count": 21432
+    },
+    "2023-10-23": {
+      "first_line": 337927,
+      "first_offset": 97178475,
+      "first_timestamp": 1698033600,
+      "last_line": 399276,
+      "last_offset": 115482356,
+      "last_timestamp": 1698119998,
+      "trade_count": 61350
+    },
+    "2023-10-24": {
+      "first_line": 399277,
+      "first_offset": 115482668,
+      "first_timestamp": 1698120009,
+      "last_line": 446862,
+      "last_offset": 129672218,
+      "last_timestamp": 1698206397,
+      "trade_count": 47586
+    },
+    "2023-10-25": {
+      "first_line": 446863,
+      "first_offset": 129672527,
+      "first_timestamp": 1698206404,
+      "last_line": 479452,
+      "last_offset": 139394403,
+      "last_timestamp": 1698292756,
+      "trade_count": 32590
+    },
+    "2023-10-26": {
+      "first_line": 479453,
+      "first_offset": 139394712,
+      "first_timestamp": 1698292809,
+      "last_line": 507456,
+      "last_offset": 147749215,
+      "last_timestamp": 1698379175,
+      "trade_count": 28004
+    },
+    "2023-10-27": {
+      "first_line": 507457,
+      "first_offset": 147749500,
+      "first_timestamp": 1698379232,
+      "last_line": 533300,
+      "last_offset": 155460989,
+      "last_timestamp": 1698465598,
+      "trade_count": 25844
+    },
+    "2023-10-28": {
+      "first_line": 533301,
+      "first_offset": 155461273,
+      "first_timestamp": 1698465608,
+      "last_line": 549310,
+      "last_offset": 160233362,
+      "last_timestamp": 1698551999,
+      "trade_count": 16010
+    },
+    "2023-10-29": {
+      "first_line": 549311,
+      "first_offset": 160233674,
+      "first_timestamp": 1698552019,
+      "last_line": 567307,
+      "last_offset": 165603966,
+      "last_timestamp": 1698638393,
+      "trade_count": 17995
+    },
+    "2023-10-30": {
+      "first_line": 567308,
+      "first_offset": 165604275,
+      "first_timestamp": 1698638409,
+      "last_line": 588628,
+      "last_offset": 171968204,
+      "last_timestamp": 1698724795,
+      "trade_count": 21319
+    },
+    "2023-10-31": {
+      "first_line": 588629,
+      "first_offset": 171968513,
+      "first_timestamp": 1698724813,
+      "last_line": 606890,
+      "last_offset": 177398166,
+      "last_timestamp": 1698811183,
+      "trade_count": 18260
+    },
+    "2023-11-01": {
+      "first_line": 606891,
+      "first_offset": 177398454,
+      "first_timestamp": 1698811227,
+      "last_line": 622584,
+      "last_offset": 181894323,
+      "last_timestamp": 1698897572,
+      "trade_count": 15694
+    },
+    "2023-11-02": {
+      "first_line": 622585,
+      "first_offset": 181894608,
+      "first_timestamp": 1698897644,
+      "last_line": 635787,
+      "last_offset": 185677462,
+      "last_timestamp": 1698983999,
+      "trade_count": 13200
+    },
+    "2023-11-03": {
+      "first_line": 635788,
+      "first_offset": 185677750,
+      "first_timestamp": 1698984000,
+      "last_line": 649398,
+      "last_offset": 189577652,
+      "last_timestamp": 1699070398,
+      "trade_count": 13611
+    },
+    "2023-11-04": {
+      "first_line": 649399,
+      "first_offset": 189577937,
+      "first_timestamp": 1699070421,
+      "last_line": 656736,
+      "last_offset": 191678179,
+      "last_timestamp": 1699156791,
+      "trade_count": 7338
+    },
+    "2023-11-05": {
+      "first_line": 656737,
+      "first_offset": 191678464,
+      "first_timestamp": 1699156811,
+      "last_line": 663944,
+      "last_offset": 193742353,
+      "last_timestamp": 1699246697,
+      "trade_count": 7207
+    },
+    "2023-11-06": {
+      "first_line": 663945,
+      "first_offset": 193742641,
+      "first_timestamp": 1699246836,
+      "last_line": 673962,
+      "last_offset": 196608115,
+      "last_timestamp": 1699333191,
+      "trade_count": 10016
+    },
+    "2023-11-07": {
+      "first_line": 673963,
+      "first_offset": 196608400,
+      "first_timestamp": 1699333215,
+      "last_line": 688182,
+      "last_offset": 200677863,
+      "last_timestamp": 1699419590,
+      "trade_count": 14219
+    },
+    "2023-11-08": {
+      "first_line": 688183,
+      "first_offset": 200678146,
+      "first_timestamp": 1699419647,
+      "last_line": 702435,
+      "last_offset": 204756918,
+      "last_timestamp": 1699505945,
+      "trade_count": 14253
+    },
+    "2023-11-09": {
+      "first_line": 702436,
+      "first_offset": 204757203,
+      "first_timestamp": 1699506057,
+      "last_line": 725355,
+      "last_offset": 211320904,
+      "last_timestamp": 1699592369,
+      "trade_count": 22920
+    },
+    "2023-11-10": {
+      "first_line": 725356,
+      "first_offset": 211321189,
+      "first_timestamp": 1699592412,
+      "last_line": 738841,
+      "last_offset": 215183505,
+      "last_timestamp": 1699678777,
+      "trade_count": 13485
+    },
+    "2023-11-11": {
+      "first_line": 738842,
+      "first_offset": 215183790,
+      "first_timestamp": 1699678811,
+      "last_line": 747627,
+      "last_offset": 217698265,
+      "last_timestamp": 1699765187,
+      "trade_count": 8786
+    },
+    "2023-11-12": {
+      "first_line": 747628,
+      "first_offset": 217698550,
+      "first_timestamp": 1699765206,
+      "last_line": 754809,
+      "last_offset": 219755391,
+      "last_timestamp": 1699851586,
+      "trade_count": 7182
+    },
+    "2023-11-13": {
+      "first_line": 754810,
+      "first_offset": 219755679,
+      "first_timestamp": 1699851612,
+      "last_line": 764964,
+      "last_offset": 222666679,
+      "last_timestamp": 1699937959,
+      "trade_count": 10154
+    },
+    "2023-11-14": {
+      "first_line": 764965,
+      "first_offset": 222666967,
+      "first_timestamp": 1699938019,
+      "last_line": 777960,
+      "last_offset": 226388749,
+      "last_timestamp": 1700024342,
+      "trade_count": 12996
+    },
+    "2023-11-15": {
+      "first_line": 777961,
+      "first_offset": 226389033,
+      "first_timestamp": 1700024415,
+      "last_line": 795137,
+      "last_offset": 231304881,
+      "last_timestamp": 1700110205,
+      "trade_count": 17177
+    },
+    "2023-11-27": {
+      "first_line": 795139,
+      "first_offset": 231305246,
+      "first_timestamp": 1701095636,
+      "last_line": 802331,
+      "last_offset": 233366263,
+      "last_timestamp": 1701147551,
+      "trade_count": 7193
+    },
+    "2023-11-28": {
+      "first_line": 802332,
+      "first_offset": 233366551,
+      "first_timestamp": 1701147634,
+      "last_line": 822674,
+      "last_offset": 239196447,
+      "last_timestamp": 1701233998,
+      "trade_count": 20342
+    },
+    "2023-11-29": {
+      "first_line": 822675,
+      "first_offset": 239196734,
+      "first_timestamp": 1701234007,
+      "last_line": 835087,
+      "last_offset": 242753075,
+      "last_timestamp": 1701320393,
+      "trade_count": 12413
+    },
+    "2023-11-30": {
+      "first_line": 835088,
+      "first_offset": 242753363,
+      "first_timestamp": 1701320401,
+      "last_line": 845911,
+      "last_offset": 245853953,
+      "last_timestamp": 1701406682,
+      "trade_count": 10824
+    },
+    "2023-12-01": {
+      "first_line": 845912,
+      "first_offset": 245854238,
+      "first_timestamp": 1701406800,
+      "last_line": 859137,
+      "last_offset": 249643359,
+      "last_timestamp": 1701493183,
+      "trade_count": 13226
+    },
+    "2023-12-02": {
+      "first_line": 859138,
+      "first_offset": 249643644,
+      "first_timestamp": 1701493210,
+      "last_line": 868750,
+      "last_offset": 252398032,
+      "last_timestamp": 1701579595,
+      "trade_count": 9612
+    },
+    "2023-12-03": {
+      "first_line": 868751,
+      "first_offset": 252398320,
+      "first_timestamp": 1701579604,
+      "last_line": 879104,
+      "last_offset": 255364887,
+      "last_timestamp": 1701665897,
+      "trade_count": 10354
+    },
+    "2023-12-04": {
+      "first_line": 879105,
+      "first_offset": 255365172,
+      "first_timestamp": 1701666021,
+      "last_line": 898591,
+      "last_offset": 260950632,
+      "last_timestamp": 1701752370,
+      "trade_count": 19487
+    },
+    "2023-12-05": {
+      "first_line": 898592,
+      "first_offset": 260950917,
+      "first_timestamp": 1701752442,
+      "last_line": 918316,
+      "last_offset": 266607326,
+      "last_timestamp": 1701838797,
+      "trade_count": 19725
+    },
+    "2023-12-06": {
+      "first_line": 918317,
+      "first_offset": 266607611,
+      "first_timestamp": 1701838806,
+      "last_line": 934202,
+      "last_offset": 271161089,
+      "last_timestamp": 1701925156,
+      "trade_count": 15886
+    },
+    "2023-12-07": {
+      "first_line": 934203,
+      "first_offset": 271161377,
+      "first_timestamp": 1701925229,
+      "last_line": 949738,
+      "last_offset": 275612613,
+      "last_timestamp": 1702011598,
+      "trade_count": 15536
+    },
+    "2023-12-08": {
+      "first_line": 949739,
+      "first_offset": 275612897,
+      "first_timestamp": 1702011602,
+      "last_line": 964359,
+      "last_offset": 279801927,
+      "last_timestamp": 1702097965,
+      "trade_count": 14621
+    },
+    "2023-12-09": {
+      "first_line": 964360,
+      "first_offset": 279802212,
+      "first_timestamp": 1702098005,
+      "last_line": 976171,
+      "last_offset": 283182640,
+      "last_timestamp": 1702184371,
+      "trade_count": 11812
+    },
+    "2023-12-10": {
+      "first_line": 976172,
+      "first_offset": 283182925,
+      "first_timestamp": 1702184402,
+      "last_line": 992333,
+      "last_offset": 287813887,
+      "last_timestamp": 1702270788,
+      "trade_count": 16162
+    },
+    "2023-12-11": {
+      "first_line": 992334,
+      "first_offset": 287814172,
+      "first_timestamp": 1702270803,
+      "last_line": 1015822,
+      "last_offset": 294540473,
+      "last_timestamp": 1702357199,
+      "trade_count": 23489
+    },
+    "2023-12-12": {
+      "first_line": 1015823,
+      "first_offset": 294540761,
+      "first_timestamp": 1702357202,
+      "last_line": 1032941,
+      "last_offset": 299440815,
+      "last_timestamp": 1702443595,
+      "trade_count": 17119
+    },
+    "2023-12-13": {
+      "first_line": 1032942,
+      "first_offset": 299441097,
+      "first_timestamp": 1702443613,
+      "last_line": 1053039,
+      "last_offset": 305189196,
+      "last_timestamp": 1702529970,
+      "trade_count": 20098
+    },
+    "2023-12-14": {
+      "first_line": 1053040,
+      "first_offset": 305189484,
+      "first_timestamp": 1702530015,
+      "last_line": 1069582,
+      "last_offset": 309921466,
+      "last_timestamp": 1702616397,
+      "trade_count": 16543
+    },
+    "2023-12-15": {
+      "first_line": 1069583,
+      "first_offset": 309921751,
+      "first_timestamp": 1702616420,
+      "last_line": 1082986,
+      "last_offset": 313759902,
+      "last_timestamp": 1702702791,
+      "trade_count": 13403
+    },
+    "2023-12-16": {
+      "first_line": 1082987,
+      "first_offset": 313760190,
+      "first_timestamp": 1702702806,
+      "last_line": 1090646,
+      "last_offset": 315954343,
+      "last_timestamp": 1702789199,
+      "trade_count": 7660
+    },
+    "2023-12-17": {
+      "first_line": 1090647,
+      "first_offset": 315954628,
+      "first_timestamp": 1702789202,
+      "last_line": 1103301,
+      "last_offset": 319576406,
+      "last_timestamp": 1702875542,
+      "trade_count": 12655
+    },
+    "2023-12-18": {
+      "first_line": 1103302,
+      "first_offset": 319576694,
+      "first_timestamp": 1702875635,
+      "last_line": 1122672,
+      "last_offset": 325118617,
+      "last_timestamp": 1702961965,
+      "trade_count": 19371
+    },
+    "2023-12-19": {
+      "first_line": 1122673,
+      "first_offset": 325118902,
+      "first_timestamp": 1702962021,
+      "last_line": 1137293,
+      "last_offset": 329301306,
+      "last_timestamp": 1703048367,
+      "trade_count": 14621
+    },
+    "2023-12-20": {
+      "first_line": 1137294,
+      "first_offset": 329301589,
+      "first_timestamp": 1703048414,
+      "last_line": 1154548,
+      "last_offset": 334239285,
+      "last_timestamp": 1703134793,
+      "trade_count": 17255
+    },
+    "2023-12-21": {
+      "first_line": 1154549,
+      "first_offset": 334239570,
+      "first_timestamp": 1703134812,
+      "last_line": 1168306,
+      "last_offset": 338174988,
+      "last_timestamp": 1703221156,
+      "trade_count": 13758
+    },
+    "2023-12-22": {
+      "first_line": 1168307,
+      "first_offset": 338175275,
+      "first_timestamp": 1703221201,
+      "last_line": 1181704,
+      "last_offset": 342006351,
+      "last_timestamp": 1703307578,
+      "trade_count": 13398
+    },
+    "2023-12-23": {
+      "first_line": 1181705,
+      "first_offset": 342006636,
+      "first_timestamp": 1703307604,
+      "last_line": 1188992,
+      "last_offset": 344093925,
+      "last_timestamp": 1703393981,
+      "trade_count": 7288
+    },
+    "2023-12-24": {
+      "first_line": 1188993,
+      "first_offset": 344094210,
+      "first_timestamp": 1703394023,
+      "last_line": 1197838,
+      "last_offset": 346627262,
+      "last_timestamp": 1703480353,
+      "trade_count": 8845
+    },
+    "2023-12-25": {
+      "first_line": 1197839,
+      "first_offset": 346627547,
+      "first_timestamp": 1703480489,
+      "last_line": 1205438,
+      "last_offset": 348805155,
+      "last_timestamp": 1703566794,
+      "trade_count": 7600
+    },
+    "2023-12-26": {
+      "first_line": 1205439,
+      "first_offset": 348805443,
+      "first_timestamp": 1703566843,
+      "last_line": 1222776,
+      "last_offset": 353772928,
+      "last_timestamp": 1703653177,
+      "trade_count": 17338
+    },
+    "2023-12-27": {
+      "first_line": 1222777,
+      "first_offset": 353773216,
+      "first_timestamp": 1703653218,
+      "last_line": 1238363,
+      "last_offset": 358235809,
+      "last_timestamp": 1703739558,
+      "trade_count": 15587
+    },
+    "2023-12-28": {
+      "first_line": 1238364,
+      "first_offset": 358236097,
+      "first_timestamp": 1703739600,
+      "last_line": 1251842,
+      "last_offset": 362093599,
+      "last_timestamp": 1703825982,
+      "trade_count": 13479
+    },
+    "2023-12-29": {
+      "first_line": 1251843,
+      "first_offset": 362093884,
+      "first_timestamp": 1703826017,
+      "last_line": 1267913,
+      "last_offset": 366693303,
+      "last_timestamp": 1703912395,
+      "trade_count": 16071
+    },
+    "2023-12-30": {
+      "first_line": 1267914,
+      "first_offset": 366693588,
+      "first_timestamp": 1703912504,
+      "last_line": 1277464,
+      "last_offset": 369429229,
+      "last_timestamp": 1703998799,
+      "trade_count": 9550
+    },
+    "2023-12-31": {
+      "first_line": 1277465,
+      "first_offset": 369429516,
+      "first_timestamp": 1703998814,
+      "last_line": 1285723,
+      "last_offset": 371794288,
+      "last_timestamp": 1704085160,
+      "trade_count": 8259
+    },
+    "2024-01-01": {
+      "first_line": 1285724,
+      "first_offset": 371794573,
+      "first_timestamp": 1704085201,
+      "last_line": 1301570,
+      "last_offset": 376325467,
+      "last_timestamp": 1704171517,
+      "trade_count": 15847
+    },
+    "2024-01-02": {
+      "first_line": 1301571,
+      "first_offset": 376325751,
+      "first_timestamp": 1704171605,
+      "last_line": 1321967,
+      "last_offset": 382164755,
+      "last_timestamp": 1704257994,
+      "trade_count": 20397
+    },
+    "2024-01-03": {
+      "first_line": 1321968,
+      "first_offset": 382165040,
+      "first_timestamp": 1704258026,
+      "last_line": 1357104,
+      "last_offset": 392215759,
+      "last_timestamp": 1704344392,
+      "trade_count": 35137
+    },
+    "2024-01-04": {
+      "first_line": 1357105,
+      "first_offset": 392216044,
+      "first_timestamp": 1704344416,
+      "last_line": 1381002,
+      "last_offset": 399054241,
+      "last_timestamp": 1704430748,
+      "trade_count": 23898
+    },
+    "2024-01-05": {
+      "first_line": 1381003,
+      "first_offset": 399054526,
+      "first_timestamp": 1704430813,
+      "last_line": 1401355,
+      "last_offset": 404878347,
+      "last_timestamp": 1704517190,
+      "trade_count": 20353
+    },
+    "2024-01-06": {
+      "first_line": 1401356,
+      "first_offset": 404878632,
+      "first_timestamp": 1704517203,
+      "last_line": 1411401,
+      "last_offset": 407756606,
+      "last_timestamp": 1704603599,
+      "trade_count": 10046
+    },
+    "2024-01-07": {
+      "first_line": 1411402,
+      "first_offset": 407756894,
+      "first_timestamp": 1704603621,
+      "last_line": 1423217,
+      "last_offset": 411142720,
+      "last_timestamp": 1704689964,
+      "trade_count": 11816
+    },
+    "2024-01-08": {
+      "first_line": 1423218,
+      "first_offset": 411143005,
+      "first_timestamp": 1704690017,
+      "last_line": 1450742,
+      "last_offset": 419021403,
+      "last_timestamp": 1704776388,
+      "trade_count": 27524
+    },
+    "2024-01-09": {
+      "first_line": 1450743,
+      "first_offset": 419021691,
+      "first_timestamp": 1704776483,
+      "last_line": 1476464,
+      "last_offset": 426377695,
+      "last_timestamp": 1704862798,
+      "trade_count": 25722
+    },
+    "2024-01-10": {
+      "first_line": 1476465,
+      "first_offset": 426377980,
+      "first_timestamp": 1704862816,
+      "last_line": 1506573,
+      "last_offset": 434989308,
+      "last_timestamp": 1704949189,
+      "trade_count": 30109
+    },
+    "2024-01-11": {
+      "first_line": 1506574,
+      "first_offset": 434989593,
+      "first_timestamp": 1704949208,
+      "last_line": 1542460,
+      "last_offset": 445252892,
+      "last_timestamp": 1705035590,
+      "trade_count": 35887
+    },
+    "2024-01-12": {
+      "first_line": 1542461,
+      "first_offset": 445253177,
+      "first_timestamp": 1705035605,
+      "last_line": 1579344,
+      "last_offset": 455811261,
+      "last_timestamp": 1705121980,
+      "trade_count": 36884
+    },
+    "2024-01-13": {
+      "first_line": 1579345,
+      "first_offset": 455811543,
+      "first_timestamp": 1705122009,
+      "last_line": 1589942,
+      "last_offset": 458846622,
+      "last_timestamp": 1705208384,
+      "trade_count": 10598
+    },
+    "2024-01-14": {
+      "first_line": 1589943,
+      "first_offset": 458846906,
+      "first_timestamp": 1705208425,
+      "last_line": 1600287,
+      "last_offset": 461809723,
+      "last_timestamp": 1705294785,
+      "trade_count": 10345
+    },
+    "2024-01-15": {
+      "first_line": 1600288,
+      "first_offset": 461810011,
+      "first_timestamp": 1705294829,
+      "last_line": 1611642,
+      "last_offset": 465062756,
+      "last_timestamp": 1705381181,
+      "trade_count": 11355
+    },
+    "2024-01-16": {
+      "first_line": 1611643,
+      "first_offset": 465063041,
+      "first_timestamp": 1705381214,
+      "last_line": 1628296,
+      "last_offset": 469829298,
+      "last_timestamp": 1705467583,
+      "trade_count": 16654
+    },
+    "2024-01-17": {
+      "first_line": 1628297,
+      "first_offset": 469829580,
+      "first_timestamp": 1705467602,
+      "last_line": 1643894,
+      "last_offset": 474296863,
+      "last_timestamp": 1705553990,
+      "trade_count": 15598
+    },
+    "2024-01-18": {
+      "first_line": 1643895,
+      "first_offset": 474297148,
+      "first_timestamp": 1705554020,
+      "last_line": 1665070,
+      "last_offset": 480367801,
+      "last_timestamp": 1705640389,
+      "trade_count": 21176
+    },
+    "2024-01-19": {
+      "first_line": 1665071,
+      "first_offset": 480368089,
+      "first_timestamp": 1705640400,
+      "last_line": 1685781,
+      "last_offset": 486307880,
+      "last_timestamp": 1705726772,
+      "trade_count": 20711
+    },
+    "2024-01-20": {
+      "first_line": 1685782,
+      "first_offset": 486308166,
+      "first_timestamp": 1705726825,
+      "last_line": 1695762,
+      "last_offset": 489171493,
+      "last_timestamp": 1705813186,
+      "trade_count": 9981
+    },
+    "2024-01-21": {
+      "first_line": 1695763,
+      "first_offset": 489171781,
+      "first_timestamp": 1705813220,
+      "last_line": 1704693,
+      "last_offset": 491734124,
+      "last_timestamp": 1705899599,
+      "trade_count": 8931
+    },
+    "2024-01-22": {
+      "first_line": 1704694,
+      "first_offset": 491734409,
+      "first_timestamp": 1705899600,
+      "last_line": 1728538,
+      "last_offset": 498569330,
+      "last_timestamp": 1705985992,
+      "trade_count": 23845
+    },
+    "2024-01-23": {
+      "first_line": 1728539,
+      "first_offset": 498569618,
+      "first_timestamp": 1705986001,
+      "last_line": 1752493,
+      "last_offset": 505436839,
+      "last_timestamp": 1706072395,
+      "trade_count": 23955
+    },
+    "2024-01-24": {
+      "first_line": 1752494,
+      "first_offset": 505437127,
+      "first_timestamp": 1706072411,
+      "last_line": 1776418,
+      "last_offset": 512300611,
+      "last_timestamp": 1706158788,
+      "trade_count": 23924
+    },
+    "2024-01-25": {
+      "first_line": 1776419,
+      "first_offset": 512300895,
+      "first_timestamp": 1706158814,
+      "last_line": 1800363,
+      "last_offset": 519166433,
+      "last_timestamp": 1706245194,
+      "trade_count": 23945
+    },
+    "2024-01-26": {
+      "first_line": 1800364,
+      "first_offset": 519166721,
+      "first_timestamp": 1706245220,
+      "last_line": 1830257,
+      "last_offset": 527736658,
+      "last_timestamp": 1706331598,
+      "trade_count": 29893
+    },
+    "2024-01-27": {
+      "first_line": 1830258,
+      "first_offset": 527736946,
+      "first_timestamp": 1706331602,
+      "last_line": 1843983,
+      "last_offset": 531675594,
+      "last_timestamp": 1706417989,
+      "trade_count": 13726
+    },
+    "2024-01-28": {
+      "first_line": 1843984,
+      "first_offset": 531675882,
+      "first_timestamp": 1706418002,
+      "last_line": 1857620,
+      "last_offset": 535587643,
+      "last_timestamp": 1706504380,
+      "trade_count": 13637
+    },
+    "2024-01-29": {
+      "first_line": 1857621,
+      "first_offset": 535587931,
+      "first_timestamp": 1706504422,
+      "last_line": 1882415,
+      "last_offset": 542699917,
+      "last_timestamp": 1706590791,
+      "trade_count": 24795
+    },
+    "2024-01-30": {
+      "first_line": 1882416,
+      "first_offset": 542700205,
+      "first_timestamp": 1706590801,
+      "last_line": 1907349,
+      "last_offset": 549853093,
+      "last_timestamp": 1706677181,
+      "trade_count": 24934
+    },
+    "2024-01-31": {
+      "first_line": 1907350,
+      "first_offset": 549853381,
+      "first_timestamp": 1706677203,
+      "last_line": 1934484,
+      "last_offset": 557625455,
+      "last_timestamp": 1706763597,
+      "trade_count": 27135
+    },
+    "2024-02-01": {
+      "first_line": 1934485,
+      "first_offset": 557625743,
+      "first_timestamp": 1706763681,
+      "last_line": 1956901,
+      "last_offset": 564050619,
+      "last_timestamp": 1706849976,
+      "trade_count": 22417
+    },
+    "2024-02-02": {
+      "first_line": 1956902,
+      "first_offset": 564050907,
+      "first_timestamp": 1706850007,
+      "last_line": 1977239,
+      "last_offset": 569883081,
+      "last_timestamp": 1706936396,
+      "trade_count": 20338
+    },
+    "2024-02-03": {
+      "first_line": 1977240,
+      "first_offset": 569883369,
+      "first_timestamp": 1706936419,
+      "last_line": 1988569,
+      "last_offset": 573135026,
+      "last_timestamp": 1707022789,
+      "trade_count": 11330
+    },
+    "2024-02-04": {
+      "first_line": 1988570,
+      "first_offset": 573135310,
+      "first_timestamp": 1707022823,
+      "last_line": 2000238,
+      "last_offset": 576482476,
+      "last_timestamp": 1707109195,
+      "trade_count": 11669
+    },
+    "2024-02-05": {
+      "first_line": 2000239,
+      "first_offset": 576482764,
+      "first_timestamp": 1707109204,
+      "last_line": 2019480,
+      "last_offset": 582000579,
+      "last_timestamp": 1707195588,
+      "trade_count": 19242
+    },
+    "2024-02-06": {
+      "first_line": 2019481,
+      "first_offset": 582000863,
+      "first_timestamp": 1707195613,
+      "last_line": 2035840,
+      "last_offset": 586693960,
+      "last_timestamp": 1707281947,
+      "trade_count": 16360
+    },
+    "2024-02-07": {
+      "first_line": 2035841,
+      "first_offset": 586694246,
+      "first_timestamp": 1707282036,
+      "last_line": 2055856,
+      "last_offset": 592437171,
+      "last_timestamp": 1707368360,
+      "trade_count": 20016
+    },
+    "2024-02-08": {
+      "first_line": 2055857,
+      "first_offset": 592437459,
+      "first_timestamp": 1707368431,
+      "last_line": 2082484,
+      "last_offset": 600077368,
+      "last_timestamp": 1707454796,
+      "trade_count": 26628
+    },
+    "2024-02-09": {
+      "first_line": 2082485,
+      "first_offset": 600077656,
+      "first_timestamp": 1707454800,
+      "last_line": 2111528,
+      "last_offset": 608408840,
+      "last_timestamp": 1707541198,
+      "trade_count": 29044
+    },
+    "2024-02-10": {
+      "first_line": 2111529,
+      "first_offset": 608409128,
+      "first_timestamp": 1707541225,
+      "last_line": 2125895,
+      "last_offset": 612530519,
+      "last_timestamp": 1707627599,
+      "trade_count": 14367
+    },
+    "2024-02-11": {
+      "first_line": 2125896,
+      "first_offset": 612530807,
+      "first_timestamp": 1707627611,
+      "last_line": 2138665,
+      "last_offset": 616195719,
+      "last_timestamp": 1707713957,
+      "trade_count": 12769
+    },
+    "2024-02-12": {
+      "first_line": 2138666,
+      "first_offset": 616196007,
+      "first_timestamp": 1707714016,
+      "last_line": 2166011,
+      "last_offset": 624040725,
+      "last_timestamp": 1707800372,
+      "trade_count": 27345
+    },
+    "2024-02-13": {
+      "first_line": 2166012,
+      "first_offset": 624041010,
+      "first_timestamp": 1707800410,
+      "last_line": 2189288,
+      "last_offset": 630720616,
+      "last_timestamp": 1707886787,
+      "trade_count": 23277
+    },
+    "2024-02-14": {
+      "first_line": 2189289,
+      "first_offset": 630720904,
+      "first_timestamp": 1707886802,
+      "last_line": 2219252,
+      "last_offset": 639318865,
+      "last_timestamp": 1707973187,
+      "trade_count": 29964
+    },
+    "2024-02-15": {
+      "first_line": 2219253,
+      "first_offset": 639319153,
+      "first_timestamp": 1707973204,
+      "last_line": 2246268,
+      "last_offset": 647074425,
+      "last_timestamp": 1708059593,
+      "trade_count": 27014
+    },
+    "2024-02-16": {
+      "first_line": 2246269,
+      "first_offset": 647074713,
+      "first_timestamp": 1708059624,
+      "last_line": 2265628,
+      "last_offset": 652628704,
+      "last_timestamp": 1708145999,
+      "trade_count": 19360
+    },
+    "2024-02-17": {
+      "first_line": 2265629,
+      "first_offset": 652628989,
+      "first_timestamp": 1708146019,
+      "last_line": 2278281,
+      "last_offset": 656257629,
+      "last_timestamp": 1708232368,
+      "trade_count": 12653
+    },
+    "2024-02-18": {
+      "first_line": 2278282,
+      "first_offset": 656257914,
+      "first_timestamp": 1708232403,
+      "last_line": 2289533,
+      "last_offset": 659486035,
+      "last_timestamp": 1708318779,
+      "trade_count": 11252
+    },
+    "2024-02-19": {
+      "first_line": 2289534,
+      "first_offset": 659486323,
+      "first_timestamp": 1708318826,
+      "last_line": 2304592,
+      "last_offset": 663805791,
+      "last_timestamp": 1708405183,
+      "trade_count": 15059
+    },
+    "2024-02-20": {
+      "first_line": 2304593,
+      "first_offset": 663806076,
+      "first_timestamp": 1708405210,
+      "last_line": 2326473,
+      "last_offset": 670077528,
+      "last_timestamp": 1708491578,
+      "trade_count": 21881
+    },
+    "2024-02-21": {
+      "first_line": 2326474,
+      "first_offset": 670077816,
+      "first_timestamp": 1708491609,
+      "last_line": 2347011,
+      "last_offset": 675962907,
+      "last_timestamp": 1708577994,
+      "trade_count": 20538
+    },
+    "2024-02-22": {
+      "first_line": 2347012,
+      "first_offset": 675963192,
+      "first_timestamp": 1708578002,
+      "last_line": 2365472,
+      "last_offset": 681250621,
+      "last_timestamp": 1708664398,
+      "trade_count": 18461
+    },
+    "2024-02-23": {
+      "first_line": 2365473,
+      "first_offset": 681250906,
+      "first_timestamp": 1708664467,
+      "last_line": 2385477,
+      "last_offset": 686984739,
+      "last_timestamp": 1708750793,
+      "trade_count": 20004
+    },
+    "2024-02-24": {
+      "first_line": 2385478,
+      "first_offset": 686985027,
+      "first_timestamp": 1708750801,
+      "last_line": 2394556,
+      "last_offset": 689585857,
+      "last_timestamp": 1708837191,
+      "trade_count": 9079
+    },
+    "2024-02-25": {
+      "first_line": 2394557,
+      "first_offset": 689586142,
+      "first_timestamp": 1708837206,
+      "last_line": 2402720,
+      "last_offset": 691925654,
+      "last_timestamp": 1708923585,
+      "trade_count": 8164
+    },
+    "2024-02-26": {
+      "first_line": 2402721,
+      "first_offset": 691925942,
+      "first_timestamp": 1708923665,
+      "last_line": 2433427,
+      "last_offset": 700725272,
+      "last_timestamp": 1709009997,
+      "trade_count": 30707
+    },
+    "2024-02-27": {
+      "first_line": 2433428,
+      "first_offset": 700725557,
+      "first_timestamp": 1709010001,
+      "last_line": 2469519,
+      "last_offset": 711076441,
+      "last_timestamp": 1709096398,
+      "trade_count": 36092
+    },
+    "2024-02-28": {
+      "first_line": 2469520,
+      "first_offset": 711076729,
+      "first_timestamp": 1709096408,
+      "last_line": 2524455,
+      "last_offset": 726832949,
+      "last_timestamp": 1709182791,
+      "trade_count": 54936
+    },
+    "2024-02-29": {
+      "first_line": 2524456,
+      "first_offset": 726833232,
+      "first_timestamp": 1709182801,
+      "last_line": 2562311,
+      "last_offset": 737691281,
+      "last_timestamp": 1709269198,
+      "trade_count": 37856
+    },
+    "2024-03-01": {
+      "first_line": 2562312,
+      "first_offset": 737691569,
+      "first_timestamp": 1709269203,
+      "last_line": 2589308,
+      "last_offset": 745435283,
+      "last_timestamp": 1709355559,
+      "trade_count": 26996
+    },
+    "2024-03-02": {
+      "first_line": 2589309,
+      "first_offset": 745435568,
+      "first_timestamp": 1709355601,
+      "last_line": 2602715,
+      "last_offset": 749278946,
+      "last_timestamp": 1709441974,
+      "trade_count": 13406
+    },
+    "2024-03-03": {
+      "first_line": 2602716,
+      "first_offset": 749279234,
+      "first_timestamp": 1709442005,
+      "last_line": 2622848,
+      "last_offset": 755052325,
+      "last_timestamp": 1709528350,
+      "trade_count": 20133
+    },
+    "2024-03-04": {
+      "first_line": 2622849,
+      "first_offset": 755052613,
+      "first_timestamp": 1709528409,
+      "last_line": 2670166,
+      "last_offset": 768627195,
+      "last_timestamp": 1709614788,
+      "trade_count": 47318
+    },
+    "2024-03-05": {
+      "first_line": 2670167,
+      "first_offset": 768627480,
+      "first_timestamp": 1709614801,
+      "last_line": 2742317,
+      "last_offset": 789318064,
+      "last_timestamp": 1709701198,
+      "trade_count": 72151
+    },
+    "2024-03-06": {
+      "first_line": 2742318,
+      "first_offset": 789318352,
+      "first_timestamp": 1709701200,
+      "last_line": 2786486,
+      "last_offset": 801984548,
+      "last_timestamp": 1709787586,
+      "trade_count": 44169
+    },
+    "2024-03-07": {
+      "first_line": 2786487,
+      "first_offset": 801984836,
+      "first_timestamp": 1709787602,
+      "last_line": 2822243,
+      "last_offset": 812243830,
+      "last_timestamp": 1709873995,
+      "trade_count": 35757
+    },
+    "2024-03-08": {
+      "first_line": 2822244,
+      "first_offset": 812244113,
+      "first_timestamp": 1709874123,
+      "last_line": 2863728,
+      "last_offset": 824140949,
+      "last_timestamp": 1709960388,
+      "trade_count": 41484
+    },
+    "2024-03-09": {
+      "first_line": 2863729,
+      "first_offset": 824141237,
+      "first_timestamp": 1709960401,
+      "last_line": 2882737,
+      "last_offset": 829591112,
+      "last_timestamp": 1710046780,
+      "trade_count": 19009
+    },
+    "2024-03-10": {
+      "first_line": 2882738,
+      "first_offset": 829591400,
+      "first_timestamp": 1710046801,
+      "last_line": 2907199,
+      "last_offset": 836605945,
+      "last_timestamp": 1710129565,
+      "trade_count": 24462
+    },
+    "2024-03-11": {
+      "first_line": 2907200,
+      "first_offset": 836606233,
+      "first_timestamp": 1710129608,
+      "last_line": 2953083,
+      "last_offset": 849769041,
+      "last_timestamp": 1710215979,
+      "trade_count": 45884
+    },
+    "2024-03-12": {
+      "first_line": 2953084,
+      "first_offset": 849769329,
+      "first_timestamp": 1710216001,
+      "last_line": 2997711,
+      "last_offset": 862569951,
+      "last_timestamp": 1710302396,
+      "trade_count": 44628
+    },
+    "2024-03-13": {
+      "first_line": 2997712,
+      "first_offset": 862570239,
+      "first_timestamp": 1710302404,
+      "last_line": 3039083,
+      "last_offset": 874443622,
+      "last_timestamp": 1710388792,
+      "trade_count": 41372
+    },
+    "2024-03-14": {
+      "first_line": 3039084,
+      "first_offset": 874443907,
+      "first_timestamp": 1710388800,
+      "last_line": 3091695,
+      "last_offset": 889531268,
+      "last_timestamp": 1710475194,
+      "trade_count": 52612
+    },
+    "2024-03-15": {
+      "first_line": 3091696,
+      "first_offset": 889531556,
+      "first_timestamp": 1710475201,
+      "last_line": 3140546,
+      "last_offset": 903540066,
+      "last_timestamp": 1710561581,
+      "trade_count": 48851
+    },
+    "2024-03-16": {
+      "first_line": 3140547,
+      "first_offset": 903540354,
+      "first_timestamp": 1710561601,
+      "last_line": 3170194,
+      "last_offset": 912042763,
+      "last_timestamp": 1710647996,
+      "trade_count": 29648
+    },
+    "2024-03-17": {
+      "first_line": 3170195,
+      "first_offset": 912043050,
+      "first_timestamp": 1710648012,
+      "last_line": 3198008,
+      "last_offset": 920019387,
+      "last_timestamp": 1710734374,
+      "trade_count": 27814
+    },
+    "2024-03-18": {
+      "first_line": 3198009,
+      "first_offset": 920019672,
+      "first_timestamp": 1710734416,
+      "last_line": 3235064,
+      "last_offset": 930647985,
+      "last_timestamp": 1710820799,
+      "trade_count": 37056
+    },
+    "2024-03-19": {
+      "first_line": 3235065,
+      "first_offset": 930648269,
+      "first_timestamp": 1710820802,
+      "last_line": 3285088,
+      "last_offset": 944991105,
+      "last_timestamp": 1710907166,
+      "trade_count": 50024
+    },
+    "2024-03-20": {
+      "first_line": 3285089,
+      "first_offset": 944991393,
+      "first_timestamp": 1710907200,
+      "last_line": 3325839,
+      "last_offset": 956667480,
+      "last_timestamp": 1710993596,
+      "trade_count": 40750
+    },
+    "2024-03-21": {
+      "first_line": 3325840,
+      "first_offset": 956667767,
+      "first_timestamp": 1710993605,
+      "last_line": 3353473,
+      "last_offset": 964590246,
+      "last_timestamp": 1711079999,
+      "trade_count": 27634
+    },
+    "2024-03-22": {
+      "first_line": 3353474,
+      "first_offset": 964590530,
+      "first_timestamp": 1711080032,
+      "last_line": 3382481,
+      "last_offset": 972906021,
+      "last_timestamp": 1711166373,
+      "trade_count": 29008
+    },
+    "2024-03-23": {
+      "first_line": 3382482,
+      "first_offset": 972906309,
+      "first_timestamp": 1711166419,
+      "last_line": 3398962,
+      "last_offset": 977632570,
+      "last_timestamp": 1711252798,
+      "trade_count": 16481
+    },
+    "2024-03-24": {
+      "first_line": 3398963,
+      "first_offset": 977632855,
+      "first_timestamp": 1711252801,
+      "last_line": 3416974,
+      "last_offset": 982796441,
+      "last_timestamp": 1711339197,
+      "trade_count": 18012
+    },
+    "2024-03-25": {
+      "first_line": 3416975,
+      "first_offset": 982796729,
+      "first_timestamp": 1711339202,
+      "last_line": 3450617,
+      "last_offset": 992447377,
+      "last_timestamp": 1711425578,
+      "trade_count": 33643
+    },
+    "2024-03-26": {
+      "first_line": 3450618,
+      "first_offset": 992447665,
+      "first_timestamp": 1711425606,
+      "last_line": 3480008,
+      "last_offset": 1000878533,
+      "last_timestamp": 1711511981,
+      "trade_count": 29391
+    },
+    "2024-03-27": {
+      "first_line": 3480009,
+      "first_offset": 1000878821,
+      "first_timestamp": 1711512000,
+      "last_line": 3507891,
+      "last_offset": 1008873330,
+      "last_timestamp": 1711598335,
+      "trade_count": 27883
+    },
+    "2024-03-28": {
+      "first_line": 3507892,
+      "first_offset": 1008873618,
+      "first_timestamp": 1711598400,
+      "last_line": 3531673,
+      "last_offset": 1015694845,
+      "last_timestamp": 1711684747,
+      "trade_count": 23782
+    },
+    "2024-03-29": {
+      "first_line": 3531674,
+      "first_offset": 1015695133,
+      "first_timestamp": 1711684801,
+      "last_line": 3547686,
+      "last_offset": 1020287008,
+      "last_timestamp": 1711771191,
+      "trade_count": 16013
+    },
+    "2024-03-30": {
+      "first_line": 3547687,
+      "first_offset": 1020287296,
+      "first_timestamp": 1711771202,
+      "last_line": 3559592,
+      "last_offset": 1023860558,
+      "last_timestamp": 1711857597,
+      "trade_count": 11904
+    },
+    "2024-03-31": {
+      "first_line": 3559593,
+      "first_offset": 1023860867,
+      "first_timestamp": 1711857602,
+      "last_line": 3572243,
+      "last_offset": 1027791879,
+      "last_timestamp": 1711943987,
+      "trade_count": 12651
+    },
+    "2024-04-01": {
+      "first_line": 3572244,
+      "first_offset": 1027792188,
+      "first_timestamp": 1711944014,
+      "last_line": 3598207,
+      "last_offset": 1035858926,
+      "last_timestamp": 1712030398,
+      "trade_count": 25964
+    },
+    "2024-04-02": {
+      "first_line": 3598208,
+      "first_offset": 1035859238,
+      "first_timestamp": 1712030401,
+      "last_line": 3627486,
+      "last_offset": 1044956379,
+      "last_timestamp": 1712116784,
+      "trade_count": 29279
+    },
+    "2024-04-03": {
+      "first_line": 3627487,
+      "first_offset": 1044956688,
+      "first_timestamp": 1712116811,
+      "last_line": 3649088,
+      "last_offset": 1051667951,
+      "last_timestamp": 1712203158,
+      "trade_count": 21600
+    },
+    "2024-04-04": {
+      "first_line": 3649089,
+      "first_offset": 1051668263,
+      "first_timestamp": 1712203200,
+      "last_line": 3673718,
+      "last_offset": 1059317415,
+      "last_timestamp": 1712289584,
+      "trade_count": 24630
+    },
+    "2024-04-05": {
+      "first_line": 3673719,
+      "first_offset": 1059317724,
+      "first_timestamp": 1712289601,
+      "last_line": 3696284,
+      "last_offset": 1066326370,
+      "last_timestamp": 1712375999,
+      "trade_count": 22566
+    },
+    "2024-04-06": {
+      "first_line": 3696285,
+      "first_offset": 1066326682,
+      "first_timestamp": 1712376041,
+      "last_line": 3711490,
+      "last_offset": 1071051427,
+      "last_timestamp": 1712462357,
+      "trade_count": 15206
+    },
+    "2024-04-07": {
+      "first_line": 3711491,
+      "first_offset": 1071051739,
+      "first_timestamp": 1712462400,
+      "last_line": 3725021,
+      "last_offset": 1075258384,
+      "last_timestamp": 1712548781,
+      "trade_count": 13531
+    },
+    "2024-04-08": {
+      "first_line": 3725022,
+      "first_offset": 1075258693,
+      "first_timestamp": 1712548803,
+      "last_line": 3752503,
+      "last_offset": 1083801175,
+      "last_timestamp": 1712635153,
+      "trade_count": 27482
+    },
+    "2024-04-09": {
+      "first_line": 3752504,
+      "first_offset": 1083801487,
+      "first_timestamp": 1712635202,
+      "last_line": 3779094,
+      "last_offset": 1092061559,
+      "last_timestamp": 1712721596,
+      "trade_count": 26590
+    },
+    "2024-04-10": {
+      "first_line": 3779095,
+      "first_offset": 1092061871,
+      "first_timestamp": 1712721600,
+      "last_line": 3804863,
+      "last_offset": 1100063326,
+      "last_timestamp": 1712807978,
+      "trade_count": 25769
+    },
+    "2024-04-11": {
+      "first_line": 3804864,
+      "first_offset": 1100063638,
+      "first_timestamp": 1712808010,
+      "last_line": 3825685,
+      "last_offset": 1106532651,
+      "last_timestamp": 1712894377,
+      "trade_count": 20822
+    },
+    "2024-04-12": {
+      "first_line": 3825686,
+      "first_offset": 1106532959,
+      "first_timestamp": 1712894438,
+      "last_line": 3859104,
+      "last_offset": 1116915446,
+      "last_timestamp": 1712980796,
+      "trade_count": 33419
+    },
+    "2024-04-13": {
+      "first_line": 3859105,
+      "first_offset": 1116915758,
+      "first_timestamp": 1712980800,
+      "last_line": 3899087,
+      "last_offset": 1129328215,
+      "last_timestamp": 1713067171,
+      "trade_count": 39983
+    },
+    "2024-04-14": {
+      "first_line": 3899088,
+      "first_offset": 1129328527,
+      "first_timestamp": 1713067206,
+      "last_line": 3922607,
+      "last_offset": 1136632446,
+      "last_timestamp": 1713153597,
+      "trade_count": 23520
+    },
+    "2024-04-15": {
+      "first_line": 3922608,
+      "first_offset": 1136632755,
+      "first_timestamp": 1713153627,
+      "last_line": 3951968,
+      "last_offset": 1145750771,
+      "last_timestamp": 1713239986,
+      "trade_count": 29361
+    },
+    "2024-04-16": {
+      "first_line": 3951969,
+      "first_offset": 1145751083,
+      "first_timestamp": 1713240000,
+      "last_line": 3977474,
+      "last_offset": 1153670634,
+      "last_timestamp": 1713326396,
+      "trade_count": 25506
+    },
+    "2024-04-17": {
+      "first_line": 3977475,
+      "first_offset": 1153670946,
+      "first_timestamp": 1713326401,
+      "last_line": 4004871,
+      "last_offset": 1162179267,
+      "last_timestamp": 1713412791,
+      "trade_count": 27397
+    },
+    "2024-04-18": {
+      "first_line": 4004872,
+      "first_offset": 1162179579,
+      "first_timestamp": 1713412814,
+      "last_line": 4032998,
+      "last_offset": 1170911655,
+      "last_timestamp": 1713499187,
+      "trade_count": 28126
+    },
+    "2024-04-19": {
+      "first_line": 4032999,
+      "first_offset": 1170911963,
+      "first_timestamp": 1713499215,
+      "last_line": 4057880,
+      "last_offset": 1178639908,
+      "last_timestamp": 1713585579,
+      "trade_count": 24882
+    },
+    "2024-04-20": {
+      "first_line": 4057881,
+      "first_offset": 1178640220,
+      "first_timestamp": 1713585603,
+      "last_line": 4071169,
+      "last_offset": 1182770075,
+      "last_timestamp": 1713671997,
+      "trade_count": 13289
+    },
+    "2024-04-21": {
+      "first_line": 4071170,
+      "first_offset": 1182770387,
+      "first_timestamp": 1713672011,
+      "last_line": 4081329,
+      "last_offset": 1185926001,
+      "last_timestamp": 1713758378,
+      "trade_count": 10160
+    },
+    "2024-04-22": {
+      "first_line": 4081330,
+      "first_offset": 1185926310,
+      "first_timestamp": 1713758401,
+      "last_line": 4100888,
+      "last_offset": 1192005360,
+      "last_timestamp": 1713844799,
+      "trade_count": 19559
+    },
+    "2024-04-23": {
+      "first_line": 4100889,
+      "first_offset": 1192005672,
+      "first_timestamp": 1713844801,
+      "last_line": 4114889,
+      "last_offset": 1196357962,
+      "last_timestamp": 1713931189,
+      "trade_count": 14001
+    },
+    "2024-04-24": {
+      "first_line": 4114890,
+      "first_offset": 1196358274,
+      "first_timestamp": 1713931201,
+      "last_line": 4135192,
+      "last_offset": 1202665592,
+      "last_timestamp": 1714017554,
+      "trade_count": 20303
+    },
+    "2024-04-25": {
+      "first_line": 4135193,
+      "first_offset": 1202665904,
+      "first_timestamp": 1714017609,
+      "last_line": 4154442,
+      "last_offset": 1208645694,
+      "last_timestamp": 1714103968,
+      "trade_count": 19250
+    },
+    "2024-04-26": {
+      "first_line": 4154443,
+      "first_offset": 1208646003,
+      "first_timestamp": 1714104000,
+      "last_line": 4171185,
+      "last_offset": 1213847601,
+      "last_timestamp": 1714190388,
+      "trade_count": 16743
+    },
+    "2024-04-27": {
+      "first_line": 4171186,
+      "first_offset": 1213847911,
+      "first_timestamp": 1714190400,
+      "last_line": 4180959,
+      "last_offset": 1216884456,
+      "last_timestamp": 1714276798,
+      "trade_count": 9774
+    },
+    "2024-04-28": {
+      "first_line": 4180960,
+      "first_offset": 1216884765,
+      "first_timestamp": 1714276800,
+      "last_line": 4193886,
+      "last_offset": 1220902292,
+      "last_timestamp": 1714363166,
+      "trade_count": 12927
+    },
+    "2024-04-29": {
+      "first_line": 4193887,
+      "first_offset": 1220902603,
+      "first_timestamp": 1714363200,
+      "last_line": 4212017,
+      "last_offset": 1226535783,
+      "last_timestamp": 1714449591,
+      "trade_count": 18131
+    },
+    "2024-04-30": {
+      "first_line": 4212018,
+      "first_offset": 1226536095,
+      "first_timestamp": 1714449641,
+      "last_line": 4238726,
+      "last_offset": 1234832725,
+      "last_timestamp": 1714535986,
+      "trade_count": 26709
+    },
+    "2024-05-01": {
+      "first_line": 4238727,
+      "first_offset": 1234833037,
+      "first_timestamp": 1714536000,
+      "last_line": 4272151,
+      "last_offset": 1245204075,
+      "last_timestamp": 1714622368,
+      "trade_count": 33425
+    },
+    "2024-05-02": {
+      "first_line": 4272152,
+      "first_offset": 1245204387,
+      "first_timestamp": 1714622400,
+      "last_line": 4294814,
+      "last_offset": 1252242922,
+      "last_timestamp": 1714708754,
+      "trade_count": 22663
+    },
+    "2024-05-03": {
+      "first_line": 4294815,
+      "first_offset": 1252243234,
+      "first_timestamp": 1714708800,
+      "last_line": 4318419,
+      "last_offset": 1259570234,
+      "last_timestamp": 1714795177,
+      "trade_count": 23605
+    },
+    "2024-05-04": {
+      "first_line": 4318420,
+      "first_offset": 1259570543,
+      "first_timestamp": 1714795200,
+      "last_line": 4333343,
+      "last_offset": 1264206535,
+      "last_timestamp": 1714881594,
+      "trade_count": 14924
+    },
+    "2024-05-05": {
+      "first_line": 4333344,
+      "first_offset": 1264206844,
+      "first_timestamp": 1714881600,
+      "last_line": 4343903,
+      "last_offset": 1267484611,
+      "last_timestamp": 1714967983,
+      "trade_count": 10559
+    },
+    "2024-05-06": {
+      "first_line": 4343904,
+      "first_offset": 1267484923,
+      "first_timestamp": 1714968001,
+      "last_line": 4362864,
+      "last_offset": 1273370200,
+      "last_timestamp": 1715054399,
+      "trade_count": 18961
+    },
+    "2024-05-07": {
+      "first_line": 4362865,
+      "first_offset": 1273370512,
+      "first_timestamp": 1715054400,
+      "last_line": 4378547,
+      "last_offset": 1278239339,
+      "last_timestamp": 1715140799,
+      "trade_count": 15683
+    },
+    "2024-05-08": {
+      "first_line": 4378548,
+      "first_offset": 1278239651,
+      "first_timestamp": 1715140802,
+      "last_line": 4393722,
+      "last_offset": 1282948813,
+      "last_timestamp": 1715227188,
+      "trade_count": 15174
+    },
+    "2024-05-09": {
+      "first_line": 4393723,
+      "first_offset": 1282949124,
+      "first_timestamp": 1715227204,
+      "last_line": 4409221,
+      "last_offset": 1287758837,
+      "last_timestamp": 1715313562,
+      "trade_count": 15498
+    },
+    "2024-05-10": {
+      "first_line": 4409222,
+      "first_offset": 1287759149,
+      "first_timestamp": 1715313600,
+      "last_line": 4428805,
+      "last_offset": 1293836033,
+      "last_timestamp": 1715399969,
+      "trade_count": 19584
+    },
+    "2024-05-11": {
+      "first_line": 4428806,
+      "first_offset": 1293836342,
+      "first_timestamp": 1715400004,
+      "last_line": 4437518,
+      "last_offset": 1296539874,
+      "last_timestamp": 1715486362,
+      "trade_count": 8713
+    },
+    "2024-05-12": {
+      "first_line": 4437519,
+      "first_offset": 1296540183,
+      "first_timestamp": 1715486400,
+      "last_line": 4446783,
+      "last_offset": 1299418322,
+      "last_timestamp": 1715572790,
+      "trade_count": 9265
+    },
+    "2024-05-13": {
+      "first_line": 4446784,
+      "first_offset": 1299418631,
+      "first_timestamp": 1715572800,
+      "last_line": 4467154,
+      "last_offset": 1305745027,
+      "last_timestamp": 1715659191,
+      "trade_count": 20371
+    },
+    "2024-05-14": {
+      "first_line": 4467155,
+      "first_offset": 1305745339,
+      "first_timestamp": 1715659200,
+      "last_line": 4478997,
+      "last_offset": 1309422013,
+      "last_timestamp": 1715711988,
+      "trade_count": 11843
+    },
+    "2024-06-21": {
+      "first_line": 4478999,
+      "first_offset": 1309422405,
+      "first_timestamp": 1718982960,
+      "last_line": 4489740,
+      "last_offset": 1312506235,
+      "last_timestamp": 1719028782,
+      "trade_count": 10742
+    },
+    "2024-06-22": {
+      "first_line": 4489741,
+      "first_offset": 1312506520,
+      "first_timestamp": 1719028870,
+      "last_line": 4496849,
+      "last_offset": 1314545770,
+      "last_timestamp": 1719115184,
+      "trade_count": 7109
+    },
+    "2024-06-23": {
+      "first_line": 4496850,
+      "first_offset": 1314546057,
+      "first_timestamp": 1719115200,
+      "last_line": 4506753,
+      "last_offset": 1317387855,
+      "last_timestamp": 1719201596,
+      "trade_count": 9904
+    },
+    "2024-06-24": {
+      "first_line": 4506754,
+      "first_offset": 1317388140,
+      "first_timestamp": 1719201600,
+      "last_line": 4542001,
+      "last_offset": 1327503081,
+      "last_timestamp": 1719287997,
+      "trade_count": 35248
+    },
+    "2024-06-25": {
+      "first_line": 4542002,
+      "first_offset": 1327503369,
+      "first_timestamp": 1719288005,
+      "last_line": 4566358,
+      "last_offset": 1334491456,
+      "last_timestamp": 1719374393,
+      "trade_count": 24356
+    },
+    "2024-06-26": {
+      "first_line": 4566359,
+      "first_offset": 1334491740,
+      "first_timestamp": 1719374404,
+      "last_line": 4584940,
+      "last_offset": 1339822261,
+      "last_timestamp": 1719460794,
+      "trade_count": 18582
+    },
+    "2024-06-27": {
+      "first_line": 4584941,
+      "first_offset": 1339822543,
+      "first_timestamp": 1719460803,
+      "last_line": 4604824,
+      "last_offset": 1345529621,
+      "last_timestamp": 1719547194,
+      "trade_count": 19884
+    },
+    "2024-06-28": {
+      "first_line": 4604825,
+      "first_offset": 1345529908,
+      "first_timestamp": 1719547200,
+      "last_line": 4623516,
+      "last_offset": 1350894509,
+      "last_timestamp": 1719633591,
+      "trade_count": 18692
+    },
+    "2024-06-29": {
+      "first_line": 4623517,
+      "first_offset": 1350894794,
+      "first_timestamp": 1719633601,
+      "last_line": 4632384,
+      "last_offset": 1353438451,
+      "last_timestamp": 1719719986,
+      "trade_count": 8868
+    },
+    "2024-06-30": {
+      "first_line": 4632385,
+      "first_offset": 1353438739,
+      "first_timestamp": 1719720049,
+      "last_line": 4645031,
+      "last_offset": 1357067725,
+      "last_timestamp": 1719806394,
+      "trade_count": 12647
+    },
+    "2024-07-01": {
+      "first_line": 4645032,
+      "first_offset": 1357068010,
+      "first_timestamp": 1719806424,
+      "last_line": 4657442,
+      "last_offset": 1360621033,
+      "last_timestamp": 1719892793,
+      "trade_count": 12411
+    },
+    "2024-07-02": {
+      "first_line": 4657443,
+      "first_offset": 1360621318,
+      "first_timestamp": 1719892831,
+      "last_line": 4670123,
+      "last_offset": 1364253010,
+      "last_timestamp": 1719979185,
+      "trade_count": 12681
+    },
+    "2024-07-03": {
+      "first_line": 4670124,
+      "first_offset": 1364253294,
+      "first_timestamp": 1719979275,
+      "last_line": 4688385,
+      "last_offset": 1369479836,
+      "last_timestamp": 1720065558,
+      "trade_count": 18261
+    },
+    "2024-07-04": {
+      "first_line": 4688386,
+      "first_offset": 1369480124,
+      "first_timestamp": 1720065622,
+      "last_line": 4711319,
+      "last_offset": 1376050867,
+      "last_timestamp": 1720151971,
+      "trade_count": 22934
+    },
+    "2024-07-05": {
+      "first_line": 4711320,
+      "first_offset": 1376051151,
+      "first_timestamp": 1720152001,
+      "last_line": 4734546,
+      "last_offset": 1382704393,
+      "last_timestamp": 1720238389,
+      "trade_count": 23227
+    },
+    "2024-07-06": {
+      "first_line": 4734547,
+      "first_offset": 1382704681,
+      "first_timestamp": 1720238402,
+      "last_line": 4744482,
+      "last_offset": 1385549382,
+      "last_timestamp": 1720324781,
+      "trade_count": 9936
+    },
+    "2024-07-07": {
+      "first_line": 4744483,
+      "first_offset": 1385549670,
+      "first_timestamp": 1720324806,
+      "last_line": 4755314,
+      "last_offset": 1388652140,
+      "last_timestamp": 1720411091,
+      "trade_count": 10831
+    },
+    "2024-07-08": {
+      "first_line": 4755315,
+      "first_offset": 1388652424,
+      "first_timestamp": 1720411212,
+      "last_line": 4774121,
+      "last_offset": 1394042819,
+      "last_timestamp": 1720497565,
+      "trade_count": 18807
+    },
+    "2024-07-09": {
+      "first_line": 4774122,
+      "first_offset": 1394043102,
+      "first_timestamp": 1720497614,
+      "last_line": 4788454,
+      "last_offset": 1398150016,
+      "last_timestamp": 1720583948,
+      "trade_count": 14333
+    },
+    "2024-07-10": {
+      "first_line": 4788455,
+      "first_offset": 1398150304,
+      "first_timestamp": 1720584042,
+      "last_line": 4802391,
+      "last_offset": 1402142737,
+      "last_timestamp": 1720670352,
+      "trade_count": 13936
+    },
+    "2024-07-11": {
+      "first_line": 4802392,
+      "first_offset": 1402143025,
+      "first_timestamp": 1720670405,
+      "last_line": 4817429,
+      "last_offset": 1406448528,
+      "last_timestamp": 1720756782,
+      "trade_count": 15037
+    },
+    "2024-07-12": {
+      "first_line": 4817430,
+      "first_offset": 1406448813,
+      "first_timestamp": 1720756855,
+      "last_line": 4830531,
+      "last_offset": 1410203181,
+      "last_timestamp": 1720843159,
+      "trade_count": 13101
+    },
+    "2024-07-13": {
+      "first_line": 4830532,
+      "first_offset": 1410203466,
+      "first_timestamp": 1720843255,
+      "last_line": 4840891,
+      "last_offset": 1413172795,
+      "last_timestamp": 1720929599,
+      "trade_count": 10360
+    },
+    "2024-07-14": {
+      "first_line": 4840892,
+      "first_offset": 1413173083,
+      "first_timestamp": 1720929604,
+      "last_line": 4851977,
+      "last_offset": 1416349571,
+      "last_timestamp": 1721015983,
+      "trade_count": 11086
+    },
+    "2024-07-15": {
+      "first_line": 4851978,
+      "first_offset": 1416349855,
+      "first_timestamp": 1721016016,
+      "last_line": 4874949,
+      "last_offset": 1422934050,
+      "last_timestamp": 1721102368,
+      "trade_count": 22972
+    },
+    "2024-07-16": {
+      "first_line": 4874950,
+      "first_offset": 1422934338,
+      "first_timestamp": 1721102422,
+      "last_line": 4908078,
+      "last_offset": 1432441714,
+      "last_timestamp": 1721188798,
+      "trade_count": 33129
+    },
+    "2024-07-17": {
+      "first_line": 4908079,
+      "first_offset": 1432442002,
+      "first_timestamp": 1721188800,
+      "last_line": 4937190,
+      "last_offset": 1440804858,
+      "last_timestamp": 1721275194,
+      "trade_count": 29112
+    },
+    "2024-07-18": {
+      "first_line": 4937191,
+      "first_offset": 1440805146,
+      "first_timestamp": 1721275200,
+      "last_line": 4961149,
+      "last_offset": 1447687325,
+      "last_timestamp": 1721361572,
+      "trade_count": 23959
+    },
+    "2024-07-19": {
+      "first_line": 4961150,
+      "first_offset": 1447687613,
+      "first_timestamp": 1721361604,
+      "last_line": 4999453,
+      "last_offset": 1458688097,
+      "last_timestamp": 1721447991,
+      "trade_count": 38303
+    },
+    "2024-07-20": {
+      "first_line": 4999454,
+      "first_offset": 1458688385,
+      "first_timestamp": 1721448009,
+      "last_line": 5042330,
+      "last_offset": 1471020731,
+      "last_timestamp": 1721534389,
+      "trade_count": 42877
+    },
+    "2024-07-21": {
+      "first_line": 5042331,
+      "first_offset": 1471021016,
+      "first_timestamp": 1721534401,
+      "last_line": 5090380,
+      "last_offset": 1484840125,
+      "last_timestamp": 1721620754,
+      "trade_count": 48050
+    },
+    "2024-07-22": {
+      "first_line": 5090381,
+      "first_offset": 1484840412,
+      "first_timestamp": 1721620802,
+      "last_line": 5139509,
+      "last_offset": 1498964562,
+      "last_timestamp": 1721707130,
+      "trade_count": 49129
+    },
+    "2024-07-23": {
+      "first_line": 5139510,
+      "first_offset": 1498964847,
+      "first_timestamp": 1721707204,
+      "last_line": 5183263,
+      "last_offset": 1511537984,
+      "last_timestamp": 1721793591,
+      "trade_count": 43754
+    },
+    "2024-07-24": {
+      "first_line": 5183264,
+      "first_offset": 1511538272,
+      "first_timestamp": 1721793601,
+      "last_line": 5222518,
+      "last_offset": 1522817149,
+      "last_timestamp": 1721879989,
+      "trade_count": 39255
+    },
+    "2024-07-25": {
+      "first_line": 5222519,
+      "first_offset": 1522817437,
+      "first_timestamp": 1721880001,
+      "last_line": 5252291,
+      "last_offset": 1531369080,
+      "last_timestamp": 1721966392,
+      "trade_count": 29773
+    },
+    "2024-07-26": {
+      "first_line": 5252292,
+      "first_offset": 1531369368,
+      "first_timestamp": 1721966418,
+      "last_line": 5286743,
+      "last_offset": 1541270300,
+      "last_timestamp": 1722052790,
+      "trade_count": 34451
+    },
+    "2024-07-27": {
+      "first_line": 5286744,
+      "first_offset": 1541270585,
+      "first_timestamp": 1722052805,
+      "last_line": 5316084,
+      "last_offset": 1549698056,
+      "last_timestamp": 1722139181,
+      "trade_count": 29341
+    },
+    "2024-07-28": {
+      "first_line": 5316085,
+      "first_offset": 1549698344,
+      "first_timestamp": 1722139200,
+      "last_line": 5334941,
+      "last_offset": 1555115260,
+      "last_timestamp": 1722225593,
+      "trade_count": 18857
+    },
+    "2024-07-29": {
+      "first_line": 5334942,
+      "first_offset": 1555115545,
+      "first_timestamp": 1722225610,
+      "last_line": 5373402,
+      "last_offset": 1566165946,
+      "last_timestamp": 1722311967,
+      "trade_count": 38461
+    },
+    "2024-07-30": {
+      "first_line": 5373403,
+      "first_offset": 1566166231,
+      "first_timestamp": 1722312025,
+      "last_line": 5397074,
+      "last_offset": 1572965797,
+      "last_timestamp": 1722398399,
+      "trade_count": 23672
+    },
+    "2024-07-31": {
+      "first_line": 5397075,
+      "first_offset": 1572966085,
+      "first_timestamp": 1722398418,
+      "last_line": 5435142,
+      "last_offset": 1583906683,
+      "last_timestamp": 1722484795,
+      "trade_count": 38068
+    },
+    "2024-08-01": {
+      "first_line": 5435143,
+      "first_offset": 1583906971,
+      "first_timestamp": 1722484801,
+      "last_line": 5498991,
+      "last_offset": 1602252749,
+      "last_timestamp": 1722571194,
+      "trade_count": 63848
+    },
+    "2024-08-02": {
+      "first_line": 5498992,
+      "first_offset": 1602253037,
+      "first_timestamp": 1722571216,
+      "last_line": 5547813,
+      "last_offset": 1616275837,
+      "last_timestamp": 1722657596,
+      "trade_count": 48822
+    },
+    "2024-08-03": {
+      "first_line": 5547814,
+      "first_offset": 1616276124,
+      "first_timestamp": 1722657601,
+      "last_line": 5572510,
+      "last_offset": 1623366313,
+      "last_timestamp": 1722743982,
+      "trade_count": 24697
+    },
+    "2024-08-04": {
+      "first_line": 5572511,
+      "first_offset": 1623366601,
+      "first_timestamp": 1722744001,
+      "last_line": 5619423,
+      "last_offset": 1636823660,
+      "last_timestamp": 1722830398,
+      "trade_count": 46913
+    },
+    "2024-08-05": {
+      "first_line": 5619424,
+      "first_offset": 1636823944,
+      "first_timestamp": 1722830400,
+      "last_line": 5712200,
+      "last_offset": 1663447896,
+      "last_timestamp": 1722916795,
+      "trade_count": 92777
+    },
+    "2024-08-06": {
+      "first_line": 5712201,
+      "first_offset": 1663448184,
+      "first_timestamp": 1722916801,
+      "last_line": 5757348,
+      "last_offset": 1676402776,
+      "last_timestamp": 1723003191,
+      "trade_count": 45148
+    },
+    "2024-08-07": {
+      "first_line": 5757349,
+      "first_offset": 1676403064,
+      "first_timestamp": 1723003204,
+      "last_line": 5792093,
+      "last_offset": 1686372481,
+      "last_timestamp": 1723089598,
+      "trade_count": 34745
+    },
+    "2024-08-08": {
+      "first_line": 5792094,
+      "first_offset": 1686372769,
+      "first_timestamp": 1723089609,
+      "last_line": 5833751,
+      "last_offset": 1698332735,
+      "last_timestamp": 1723175990,
+      "trade_count": 41657
+    },
+    "2024-08-09": {
+      "first_line": 5833752,
+      "first_offset": 1698333020,
+      "first_timestamp": 1723176001,
+      "last_line": 5857249,
+      "last_offset": 1705077598,
+      "last_timestamp": 1723262385,
+      "trade_count": 23497
+    },
+    "2024-08-10": {
+      "first_line": 5857250,
+      "first_offset": 1705077883,
+      "first_timestamp": 1723262432,
+      "last_line": 5871963,
+      "last_offset": 1709304302,
+      "last_timestamp": 1723348783,
+      "trade_count": 14714
+    },
+    "2024-08-11": {
+      "first_line": 5871964,
+      "first_offset": 1709304587,
+      "first_timestamp": 1723348803,
+      "last_line": 5890886,
+      "last_offset": 1714735957,
+      "last_timestamp": 1723435180,
+      "trade_count": 18920
+    },
+    "2024-08-12": {
+      "first_line": 5890887,
+      "first_offset": 1714736241,
+      "first_timestamp": 1723435200,
+      "last_line": 5925235,
+      "last_offset": 1724601063,
+      "last_timestamp": 1723521598,
+      "trade_count": 34349
+    },
+    "2024-08-13": {
+      "first_line": 5925236,
+      "first_offset": 1724601351,
+      "first_timestamp": 1723521601,
+      "last_line": 5954971,
+      "last_offset": 1733142589,
+      "last_timestamp": 1723607985,
+      "trade_count": 29736
+    },
+    "2024-08-14": {
+      "first_line": 5954972,
+      "first_offset": 1733142873,
+      "first_timestamp": 1723608002,
+      "last_line": 5990630,
+      "last_offset": 1743381505,
+      "last_timestamp": 1723694388,
+      "trade_count": 35658
+    },
+    "2024-08-15": {
+      "first_line": 5990631,
+      "first_offset": 1743381793,
+      "first_timestamp": 1723694401,
+      "last_line": 6048807,
+      "last_offset": 1760100217,
+      "last_timestamp": 1723780795,
+      "trade_count": 58177
+    },
+    "2024-08-16": {
+      "first_line": 6048808,
+      "first_offset": 1760100505,
+      "first_timestamp": 1723780801,
+      "last_line": 6091898,
+      "last_offset": 1772482384,
+      "last_timestamp": 1723867196,
+      "trade_count": 43091
+    },
+    "2024-08-17": {
+      "first_line": 6091899,
+      "first_offset": 1772482669,
+      "first_timestamp": 1723867201,
+      "last_line": 6111933,
+      "last_offset": 1778239394,
+      "last_timestamp": 1723953559,
+      "trade_count": 20035
+    },
+    "2024-08-18": {
+      "first_line": 6111934,
+      "first_offset": 1778239682,
+      "first_timestamp": 1723953601,
+      "last_line": 6137839,
+      "last_offset": 1785684052,
+      "last_timestamp": 1724039976,
+      "trade_count": 25906
+    },
+    "2024-08-19": {
+      "first_line": 6137840,
+      "first_offset": 1785684337,
+      "first_timestamp": 1724040004,
+      "last_line": 6175580,
+      "last_offset": 1796530950,
+      "last_timestamp": 1724126398,
+      "trade_count": 37741
+    },
+    "2024-08-20": {
+      "first_line": 6175581,
+      "first_offset": 1796531235,
+      "first_timestamp": 1724126404,
+      "last_line": 6198248,
+      "last_offset": 1803042265,
+      "last_timestamp": 1724212768,
+      "trade_count": 22667
+    },
+    "2024-08-21": {
+      "first_line": 6198249,
+      "first_offset": 1803042550,
+      "first_timestamp": 1724212930,
+      "last_line": 6215991,
+      "last_offset": 1808132794,
+      "last_timestamp": 1724299172,
+      "trade_count": 17743
+    },
+    "2024-08-22": {
+      "first_line": 6215992,
+      "first_offset": 1808133082,
+      "first_timestamp": 1724299201,
+      "last_line": 6238221,
+      "last_offset": 1814521886,
+      "last_timestamp": 1724385589,
+      "trade_count": 22229
+    },
+    "2024-08-23": {
+      "first_line": 6238222,
+      "first_offset": 1814522174,
+      "first_timestamp": 1724385602,
+      "last_line": 6282044,
+      "last_offset": 1827110419,
+      "last_timestamp": 1724471988,
+      "trade_count": 43823
+    },
+    "2024-08-24": {
+      "first_line": 6282045,
+      "first_offset": 1827110707,
+      "first_timestamp": 1724472065,
+      "last_line": 6305492,
+      "last_offset": 1833853128,
+      "last_timestamp": 1724558391,
+      "trade_count": 23448
+    },
+    "2024-08-25": {
+      "first_line": 6305493,
+      "first_offset": 1833853416,
+      "first_timestamp": 1724558421,
+      "last_line": 6318915,
+      "last_offset": 1837709281,
+      "last_timestamp": 1724644790,
+      "trade_count": 13423
+    },
+    "2024-08-26": {
+      "first_line": 6318916,
+      "first_offset": 1837709568,
+      "first_timestamp": 1724644802,
+      "last_line": 6341219,
+      "last_offset": 1844119212,
+      "last_timestamp": 1724731197,
+      "trade_count": 22304
+    },
+    "2024-08-27": {
+      "first_line": 6341220,
+      "first_offset": 1844119500,
+      "first_timestamp": 1724731203,
+      "last_line": 6389119,
+      "last_offset": 1857891670,
+      "last_timestamp": 1724817596,
+      "trade_count": 47900
+    },
+    "2024-08-28": {
+      "first_line": 6389120,
+      "first_offset": 1857891958,
+      "first_timestamp": 1724817602,
+      "last_line": 6439476,
+      "last_offset": 1872366218,
+      "last_timestamp": 1724903997,
+      "trade_count": 50356
+    },
+    "2024-08-29": {
+      "first_line": 6439477,
+      "first_offset": 1872366503,
+      "first_timestamp": 1724904000,
+      "last_line": 6488573,
+      "last_offset": 1886480233,
+      "last_timestamp": 1724990388,
+      "trade_count": 49097
+    },
+    "2024-08-30": {
+      "first_line": 6488574,
+      "first_offset": 1886480521,
+      "first_timestamp": 1724990415,
+      "last_line": 6530659,
+      "last_offset": 1898578799,
+      "last_timestamp": 1725076754,
+      "trade_count": 42086
+    },
+    "2024-08-31": {
+      "first_line": 6530660,
+      "first_offset": 1898579087,
+      "first_timestamp": 1725076805,
+      "last_line": 6565138,
+      "last_offset": 1908497527,
+      "last_timestamp": 1725163199,
+      "trade_count": 34479
+    },
+    "2024-09-01": {
+      "first_line": 6565139,
+      "first_offset": 1908497812,
+      "first_timestamp": 1725163201,
+      "last_line": 6588825,
+      "last_offset": 1915302804,
+      "last_timestamp": 1725249550,
+      "trade_count": 23680
+    },
+    "2024-09-02": {
+      "first_line": 6588826,
+      "first_offset": 1915303092,
+      "first_timestamp": 1725249602,
+      "last_line": 6597698,
+      "last_offset": 1917845316,
+      "last_timestamp": 1725335941,
+      "trade_count": 8873
+    },
+    "2024-09-03": {
+      "first_line": 6597699,
+      "first_offset": 1917845603,
+      "first_timestamp": 1725336161,
+      "last_line": 6607645,
+      "last_offset": 1920696769,
+      "last_timestamp": 1725422365,
+      "trade_count": 9947
+    },
+    "2024-09-04": {
+      "first_line": 6607646,
+      "first_offset": 1920697053,
+      "first_timestamp": 1725422477,
+      "last_line": 6617591,
+      "last_offset": 1923547465,
+      "last_timestamp": 1725508634,
+      "trade_count": 9946
+    },
+    "2024-09-05": {
+      "first_line": 6617592,
+      "first_offset": 1923547753,
+      "first_timestamp": 1725508830,
+      "last_line": 6626497,
+      "last_offset": 1926098942,
+      "last_timestamp": 1725595192,
+      "trade_count": 8906
+    },
+    "2024-09-06": {
+      "first_line": 6626498,
+      "first_offset": 1926099230,
+      "first_timestamp": 1725595205,
+      "last_line": 6658218,
+      "last_offset": 1935200620,
+      "last_timestamp": 1725681597,
+      "trade_count": 31721
+    },
+    "2024-09-07": {
+      "first_line": 6658219,
+      "first_offset": 1935200908,
+      "first_timestamp": 1725681600,
+      "last_line": 6679224,
+      "last_offset": 1941234173,
+      "last_timestamp": 1725767990,
+      "trade_count": 21006
+    },
+    "2024-09-08": {
+      "first_line": 6679225,
+      "first_offset": 1941234461,
+      "first_timestamp": 1725768001,
+      "last_line": 6707805,
+      "last_offset": 1949449509,
+      "last_timestamp": 1725854391,
+      "trade_count": 28581
+    },
+    "2024-09-09": {
+      "first_line": 6707806,
+      "first_offset": 1949449794,
+      "first_timestamp": 1725854401,
+      "last_line": 6746518,
+      "last_offset": 1960575099,
+      "last_timestamp": 1725940782,
+      "trade_count": 38713
+    },
+    "2024-09-10": {
+      "first_line": 6746519,
+      "first_offset": 1960575387,
+      "first_timestamp": 1725940800,
+      "last_line": 6786224,
+      "last_offset": 1971988489,
+      "last_timestamp": 1726027198,
+      "trade_count": 39706
+    },
+    "2024-09-11": {
+      "first_line": 6786225,
+      "first_offset": 1971988777,
+      "first_timestamp": 1726027218,
+      "last_line": 6831016,
+      "last_offset": 1984860218,
+      "last_timestamp": 1726113565,
+      "trade_count": 44791
+    },
+    "2024-09-12": {
+      "first_line": 6831017,
+      "first_offset": 1984860506,
+      "first_timestamp": 1726113604,
+      "last_line": 6864357,
+      "last_offset": 1994442474,
+      "last_timestamp": 1726199994,
+      "trade_count": 33340
+    },
+    "2024-09-13": {
+      "first_line": 6864358,
+      "first_offset": 1994442762,
+      "first_timestamp": 1726200001,
+      "last_line": 6907679,
+      "last_offset": 2006896130,
+      "last_timestamp": 1726286398,
+      "trade_count": 43322
+    },
+    "2024-09-14": {
+      "first_line": 6907680,
+      "first_offset": 2006896418,
+      "first_timestamp": 1726286401,
+      "last_line": 6930246,
+      "last_offset": 2013384265,
+      "last_timestamp": 1726372797,
+      "trade_count": 22567
+    },
+    "2024-09-15": {
+      "first_line": 6930247,
+      "first_offset": 2013384550,
+      "first_timestamp": 1726372803,
+      "last_line": 6959321,
+      "last_offset": 2021743197,
+      "last_timestamp": 1726459128,
+      "trade_count": 29075
+    },
+    "2024-09-16": {
+      "first_line": 6959322,
+      "first_offset": 2021743482,
+      "first_timestamp": 1726459241,
+      "last_line": 6992988,
+      "last_offset": 2031417539,
+      "last_timestamp": 1726545599,
+      "trade_count": 33667
+    },
+    "2024-09-17": {
+      "first_line": 6992989,
+      "first_offset": 2031417827,
+      "first_timestamp": 1726545601,
+      "last_line": 7035277,
+      "last_offset": 2043569657,
+      "last_timestamp": 1726631981,
+      "trade_count": 42289
+    },
+    "2024-09-18": {
+      "first_line": 7035278,
+      "first_offset": 2043569945,
+      "first_timestamp": 1726632004,
+      "last_line": 7075140,
+      "last_offset": 2055014814,
+      "last_timestamp": 1726718378,
+      "trade_count": 39863
+    },
+    "2024-09-19": {
+      "first_line": 7075141,
+      "first_offset": 2055015102,
+      "first_timestamp": 1726718402,
+      "last_line": 7122359,
+      "last_offset": 2068586938,
+      "last_timestamp": 1726804796,
+      "trade_count": 47218
+    },
+    "2024-09-20": {
+      "first_line": 7122360,
+      "first_offset": 2068587226,
+      "first_timestamp": 1726804814,
+      "last_line": 7132596,
+      "last_offset": 2071520331,
+      "last_timestamp": 1726891193,
+      "trade_count": 10237
+    },
+    "2024-09-21": {
+      "first_line": 7132597,
+      "first_offset": 2071520616,
+      "first_timestamp": 1726891337,
+      "last_line": 7136960,
+      "last_offset": 2072771798,
+      "last_timestamp": 1726977526,
+      "trade_count": 4363
+    },
+    "2024-09-22": {
+      "first_line": 7136961,
+      "first_offset": 2072772086,
+      "first_timestamp": 1726977613,
+      "last_line": 7144080,
+      "last_offset": 2074813663,
+      "last_timestamp": 1727063978,
+      "trade_count": 7120
+    },
+    "2024-09-23": {
+      "first_line": 7144081,
+      "first_offset": 2074813951,
+      "first_timestamp": 1727064001,
+      "last_line": 7151506,
+      "last_offset": 2076939496,
+      "last_timestamp": 1727150260,
+      "trade_count": 7426
+    },
+    "2024-09-24": {
+      "first_line": 7151507,
+      "first_offset": 2076939784,
+      "first_timestamp": 1727150570,
+      "last_line": 7161027,
+      "last_offset": 2079666089,
+      "last_timestamp": 1727236701,
+      "trade_count": 9521
+    },
+    "2024-09-25": {
+      "first_line": 7161028,
+      "first_offset": 2079666374,
+      "first_timestamp": 1727236849,
+      "last_line": 7168379,
+      "last_offset": 2081773238,
+      "last_timestamp": 1727323111,
+      "trade_count": 7352
+    },
+    "2024-09-26": {
+      "first_line": 7168380,
+      "first_offset": 2081773526,
+      "first_timestamp": 1727323264,
+      "last_line": 7179801,
+      "last_offset": 2085046844,
+      "last_timestamp": 1727409566,
+      "trade_count": 11422
+    },
+    "2024-09-27": {
+      "first_line": 7179802,
+      "first_offset": 2085047128,
+      "first_timestamp": 1727409620,
+      "last_line": 7189226,
+      "last_offset": 2087747284,
+      "last_timestamp": 1727495959,
+      "trade_count": 9425
+    },
+    "2024-09-28": {
+      "first_line": 7189227,
+      "first_offset": 2087747572,
+      "first_timestamp": 1727496037,
+      "last_line": 7194235,
+      "last_offset": 2089184026,
+      "last_timestamp": 1727582398,
+      "trade_count": 5008
+    },
+    "2024-09-29": {
+      "first_line": 7194236,
+      "first_offset": 2089184311,
+      "first_timestamp": 1727582478,
+      "last_line": 7198992,
+      "last_offset": 2090547677,
+      "last_timestamp": 1727668788,
+      "trade_count": 4757
+    },
+    "2024-09-30": {
+      "first_line": 7198993,
+      "first_offset": 2090547965,
+      "first_timestamp": 1727668826,
+      "last_line": 7209403,
+      "last_offset": 2093533355,
+      "last_timestamp": 1727755175,
+      "trade_count": 10411
+    },
+    "2024-10-01": {
+      "first_line": 7209404,
+      "first_offset": 2093533643,
+      "first_timestamp": 1727755205,
+      "last_line": 7229924,
+      "last_offset": 2099417835,
+      "last_timestamp": 1727841566,
+      "trade_count": 20521
+    },
+    "2024-10-02": {
+      "first_line": 7229925,
+      "first_offset": 2099418118,
+      "first_timestamp": 1727841604,
+      "last_line": 7247158,
+      "last_offset": 2104362815,
+      "last_timestamp": 1727927903,
+      "trade_count": 17233
+    },
+    "2024-10-03": {
+      "first_line": 7247159,
+      "first_offset": 2104363103,
+      "first_timestamp": 1727928010,
+      "last_line": 7255767,
+      "last_offset": 2106830336,
+      "last_timestamp": 1728014340,
+      "trade_count": 8609
+    },
+    "2024-10-04": {
+      "first_line": 7255768,
+      "first_offset": 2106830624,
+      "first_timestamp": 1728014408,
+      "last_line": 7272945,
+      "last_offset": 2111763244,
+      "last_timestamp": 1728100796,
+      "trade_count": 17178
+    },
+    "2024-10-05": {
+      "first_line": 7272946,
+      "first_offset": 2111763532,
+      "first_timestamp": 1728100837,
+      "last_line": 7293518,
+      "last_offset": 2117680133,
+      "last_timestamp": 1728187162,
+      "trade_count": 20573
+    },
+    "2024-10-06": {
+      "first_line": 7293519,
+      "first_offset": 2117680421,
+      "first_timestamp": 1728187201,
+      "last_line": 7310804,
+      "last_offset": 2122647773,
+      "last_timestamp": 1728273568,
+      "trade_count": 17286
+    },
+    "2024-10-07": {
+      "first_line": 7310805,
+      "first_offset": 2122648061,
+      "first_timestamp": 1728273600,
+      "last_line": 7333860,
+      "last_offset": 2129268582,
+      "last_timestamp": 1728359959,
+      "trade_count": 23056
+    },
+    "2024-10-08": {
+      "first_line": 7333861,
+      "first_offset": 2129268870,
+      "first_timestamp": 1728360025,
+      "last_line": 7352355,
+      "last_offset": 2134582615,
+      "last_timestamp": 1728446384,
+      "trade_count": 18495
+    },
+    "2024-10-09": {
+      "first_line": 7352356,
+      "first_offset": 2134582902,
+      "first_timestamp": 1728446400,
+      "last_line": 7376227,
+      "last_offset": 2141440802,
+      "last_timestamp": 1728532792,
+      "trade_count": 23872
+    },
+    "2024-10-10": {
+      "first_line": 7376228,
+      "first_offset": 2141441090,
+      "first_timestamp": 1728532801,
+      "last_line": 7396774,
+      "last_offset": 2147341237,
+      "last_timestamp": 1728619181,
+      "trade_count": 20546
+    },
+    "2024-10-11": {
+      "first_line": 7396775,
+      "first_offset": 2147341525,
+      "first_timestamp": 1728619205,
+      "last_line": 7418613,
+      "last_offset": 2153613474,
+      "last_timestamp": 1728705527,
+      "trade_count": 21839
+    },
+    "2024-10-12": {
+      "first_line": 7418614,
+      "first_offset": 2153613762,
+      "first_timestamp": 1728705614,
+      "last_line": 7428973,
+      "last_offset": 2156589975,
+      "last_timestamp": 1728791997,
+      "trade_count": 10360
+    },
+    "2024-10-13": {
+      "first_line": 7428974,
+      "first_offset": 2156590262,
+      "first_timestamp": 1728792002,
+      "last_line": 7440661,
+      "last_offset": 2159947646,
+      "last_timestamp": 1728878399,
+      "trade_count": 11688
+    },
+    "2024-10-14": {
+      "first_line": 7440662,
+      "first_offset": 2159947934,
+      "first_timestamp": 1728878406,
+      "last_line": 7462932,
+      "last_offset": 2166340050,
+      "last_timestamp": 1728964751,
+      "trade_count": 22271
+    },
+    "2024-10-15": {
+      "first_line": 7462933,
+      "first_offset": 2166340335,
+      "first_timestamp": 1728964819,
+      "last_line": 7488150,
+      "last_offset": 2173578826,
+      "last_timestamp": 1729051193,
+      "trade_count": 25218
+    },
+    "2024-10-16": {
+      "first_line": 7488151,
+      "first_offset": 2173579111,
+      "first_timestamp": 1729051200,
+      "last_line": 7508250,
+      "last_offset": 2179349278,
+      "last_timestamp": 1729137586,
+      "trade_count": 20100
+    },
+    "2024-10-17": {
+      "first_line": 7508251,
+      "first_offset": 2179349563,
+      "first_timestamp": 1729137606,
+      "last_line": 7526024,
+      "last_offset": 2184452404,
+      "last_timestamp": 1729223980,
+      "trade_count": 17774
+    },
+    "2024-10-18": {
+      "first_line": 7526025,
+      "first_offset": 2184452692,
+      "first_timestamp": 1729224001,
+      "last_line": 7543917,
+      "last_offset": 2189589410,
+      "last_timestamp": 1729310394,
+      "trade_count": 17893
+    },
+    "2024-10-19": {
+      "first_line": 7543918,
+      "first_offset": 2189589698,
+      "first_timestamp": 1729310401,
+      "last_line": 7550178,
+      "last_offset": 2191387668,
+      "last_timestamp": 1729396555,
+      "trade_count": 6260
+    },
+    "2024-10-20": {
+      "first_line": 7550179,
+      "first_offset": 2191387953,
+      "first_timestamp": 1729396801,
+      "last_line": 7561446,
+      "last_offset": 2194624184,
+      "last_timestamp": 1729483133,
+      "trade_count": 11268
+    },
+    "2024-10-21": {
+      "first_line": 7561447,
+      "first_offset": 2194624472,
+      "first_timestamp": 1729483222,
+      "last_line": 7581893,
+      "last_offset": 2200496697,
+      "last_timestamp": 1729569564,
+      "trade_count": 20447
+    },
+    "2024-10-22": {
+      "first_line": 7581894,
+      "first_offset": 2200496985,
+      "first_timestamp": 1729569609,
+      "last_line": 7600604,
+      "last_offset": 2205871879,
+      "last_timestamp": 1729655985,
+      "trade_count": 18711
+    },
+    "2024-10-23": {
+      "first_line": 7600605,
+      "first_offset": 2205872164,
+      "first_timestamp": 1729656014,
+      "last_line": 7624233,
+      "last_offset": 2212659403,
+      "last_timestamp": 1729742384,
+      "trade_count": 23629
+    },
+    "2024-10-24": {
+      "first_line": 7624234,
+      "first_offset": 2212659691,
+      "first_timestamp": 1729742406,
+      "last_line": 7650385,
+      "last_offset": 2220168982,
+      "last_timestamp": 1729828787,
+      "trade_count": 26152
+    },
+    "2024-10-25": {
+      "first_line": 7650386,
+      "first_offset": 2220169270,
+      "first_timestamp": 1729828808,
+      "last_line": 7676874,
+      "last_offset": 2227774292,
+      "last_timestamp": 1729915172,
+      "trade_count": 26488
+    },
+    "2024-10-26": {
+      "first_line": 7676875,
+      "first_offset": 2227774580,
+      "first_timestamp": 1729915213,
+      "last_line": 7695715,
+      "last_offset": 2233188144,
+      "last_timestamp": 1730001597,
+      "trade_count": 18841
+    },
+    "2024-10-27": {
+      "first_line": 7695716,
+      "first_offset": 2233188429,
+      "first_timestamp": 1730001601,
+      "last_line": 7709920,
+      "last_offset": 2237265619,
+      "last_timestamp": 1730087993,
+      "trade_count": 14205
+    },
+    "2024-10-28": {
+      "first_line": 7709921,
+      "first_offset": 2237265907,
+      "first_timestamp": 1730088004,
+      "last_line": 7740098,
+      "last_offset": 2245914135,
+      "last_timestamp": 1730174397,
+      "trade_count": 30178
+    },
+    "2024-10-29": {
+      "first_line": 7740099,
+      "first_offset": 2245914423,
+      "first_timestamp": 1730174404,
+      "last_line": 7773642,
+      "last_offset": 2255531949,
+      "last_timestamp": 1730260792,
+      "trade_count": 33544
+    },
+    "2024-10-30": {
+      "first_line": 7773643,
+      "first_offset": 2255532237,
+      "first_timestamp": 1730260806,
+      "last_line": 7803909,
+      "last_offset": 2264217292,
+      "last_timestamp": 1730347199,
+      "trade_count": 30267
+    },
+    "2024-10-31": {
+      "first_line": 7803910,
+      "first_offset": 2264217580,
+      "first_timestamp": 1730347201,
+      "last_line": 7833724,
+      "last_offset": 2272783235,
+      "last_timestamp": 1730433578,
+      "trade_count": 29814
+    },
+    "2024-11-01": {
+      "first_line": 7833725,
+      "first_offset": 2272783522,
+      "first_timestamp": 1730433608,
+      "last_line": 7873563,
+      "last_offset": 2284227225,
+      "last_timestamp": 1730519977,
+      "trade_count": 39839
+    },
+    "2024-11-02": {
+      "first_line": 7873564,
+      "first_offset": 2284227510,
+      "first_timestamp": 1730520022,
+      "last_line": 7895864,
+      "last_offset": 2290633322,
+      "last_timestamp": 1730606335,
+      "trade_count": 22300
+    },
+    "2024-11-03": {
+      "first_line": 7895865,
+      "first_offset": 2290633610,
+      "first_timestamp": 1730606401,
+      "last_line": 7923239,
+      "last_offset": 2298491472,
+      "last_timestamp": 1730696342,
+      "trade_count": 27373
+    },
+    "2024-11-04": {
+      "first_line": 7923240,
+      "first_offset": 2298491757,
+      "first_timestamp": 1730696441,
+      "last_line": 7951053,
+      "last_offset": 2306479326,
+      "last_timestamp": 1730782797,
+      "trade_count": 27814
+    },
+    "2024-11-05": {
+      "first_line": 7951054,
+      "first_offset": 2306479613,
+      "first_timestamp": 1730782800,
+      "last_line": 8001273,
+      "last_offset": 2320896767,
+      "last_timestamp": 1730869197,
+      "trade_count": 50220
+    },
+    "2024-11-06": {
+      "first_line": 8001274,
+      "first_offset": 2320897055,
+      "first_timestamp": 1730869201,
+      "last_line": 8053385,
+      "last_offset": 2335862739,
+      "last_timestamp": 1730955574,
+      "trade_count": 52112
+    },
+    "2024-11-07": {
+      "first_line": 8053386,
+      "first_offset": 2335863027,
+      "first_timestamp": 1730955605,
+      "last_line": 8091207,
+      "last_offset": 2346727899,
+      "last_timestamp": 1731041998,
+      "trade_count": 37822
+    },
+    "2024-11-08": {
+      "first_line": 8091208,
+      "first_offset": 2346728184,
+      "first_timestamp": 1731042000,
+      "last_line": 8140372,
+      "last_offset": 2360859737,
+      "last_timestamp": 1731128387,
+      "trade_count": 49165
+    },
+    "2024-11-09": {
+      "first_line": 8140373,
+      "first_offset": 2360860025,
+      "first_timestamp": 1731128436,
+      "last_line": 8171788,
+      "last_offset": 2369886614,
+      "last_timestamp": 1731214799,
+      "trade_count": 31415
+    },
+    "2024-11-10": {
+      "first_line": 8171789,
+      "first_offset": 2369886902,
+      "first_timestamp": 1731214801,
+      "last_line": 8213628,
+      "last_offset": 2381902098,
+      "last_timestamp": 1731301199,
+      "trade_count": 41837
+    },
+    "2024-11-11": {
+      "first_line": 8213629,
+      "first_offset": 2381902386,
+      "first_timestamp": 1731301211,
+      "last_line": 8297306,
+      "last_offset": 2405936022,
+      "last_timestamp": 1731387594,
+      "trade_count": 83678
+    },
+    "2024-11-12": {
+      "first_line": 8297307,
+      "first_offset": 2405936310,
+      "first_timestamp": 1731387601,
+      "last_line": 8372539,
+      "last_offset": 2427536137,
+      "last_timestamp": 1731473997,
+      "trade_count": 75233
+    },
+    "2024-11-13": {
+      "first_line": 8372540,
+      "first_offset": 2427536425,
+      "first_timestamp": 1731474001,
+      "last_line": 8442204,
+      "last_offset": 2447536990,
+      "last_timestamp": 1731560397,
+      "trade_count": 69665
+    },
+    "2024-11-14": {
+      "first_line": 8442205,
+      "first_offset": 2447537272,
+      "first_timestamp": 1731560403,
+      "last_line": 8493677,
+      "last_offset": 2462322573,
+      "last_timestamp": 1731646788,
+      "trade_count": 51473
+    },
+    "2024-11-15": {
+      "first_line": 8493678,
+      "first_offset": 2462322859,
+      "first_timestamp": 1731646801,
+      "last_line": 8551397,
+      "last_offset": 2478892750,
+      "last_timestamp": 1731733018,
+      "trade_count": 57718
+    },
+    "2024-11-16": {
+      "first_line": 8551398,
+      "first_offset": 2478893038,
+      "first_timestamp": 1731733200,
+      "last_line": 8581024,
+      "last_offset": 2487407312,
+      "last_timestamp": 1731819595,
+      "trade_count": 29627
+    },
+    "2024-11-17": {
+      "first_line": 8581025,
+      "first_offset": 2487407600,
+      "first_timestamp": 1731819603,
+      "last_line": 8602805,
+      "last_offset": 2493660035,
+      "last_timestamp": 1731905991,
+      "trade_count": 21781
+    },
+    "2024-11-18": {
+      "first_line": 8602806,
+      "first_offset": 2493660323,
+      "first_timestamp": 1731906012,
+      "last_line": 8643393,
+      "last_offset": 2505306560,
+      "last_timestamp": 1731992388,
+      "trade_count": 40588
+    },
+    "2024-11-19": {
+      "first_line": 8643394,
+      "first_offset": 2505306845,
+      "first_timestamp": 1731992455,
+      "last_line": 8698316,
+      "last_offset": 2521080392,
+      "last_timestamp": 1732078788,
+      "trade_count": 54922
+    },
+    "2024-11-20": {
+      "first_line": 8698317,
+      "first_offset": 2521080680,
+      "first_timestamp": 1732078814,
+      "last_line": 8754535,
+      "last_offset": 2537216762,
+      "last_timestamp": 1732165199,
+      "trade_count": 56219
+    },
+    "2024-11-21": {
+      "first_line": 8754536,
+      "first_offset": 2537217044,
+      "first_timestamp": 1732165201,
+      "last_line": 8821464,
+      "last_offset": 2556430869,
+      "last_timestamp": 1732251598,
+      "trade_count": 66929
+    },
+    "2024-11-22": {
+      "first_line": 8821465,
+      "first_offset": 2556431157,
+      "first_timestamp": 1732251607,
+      "last_line": 8878318,
+      "last_offset": 2572755748,
+      "last_timestamp": 1732337980,
+      "trade_count": 56854
+    },
+    "2024-11-23": {
+      "first_line": 8878319,
+      "first_offset": 2572756036,
+      "first_timestamp": 1732338001,
+      "last_line": 8899108,
+      "last_offset": 2578726312,
+      "last_timestamp": 1732424321,
+      "trade_count": 20790
+    },
+    "2024-11-24": {
+      "first_line": 8899109,
+      "first_offset": 2578726596,
+      "first_timestamp": 1732424405,
+      "last_line": 8913972,
+      "last_offset": 2582989964,
+      "last_timestamp": 1732510786,
+      "trade_count": 14864
+    },
+    "2024-11-25": {
+      "first_line": 8913973,
+      "first_offset": 2582990246,
+      "first_timestamp": 1732510840,
+      "last_line": 8938697,
+      "last_offset": 2590082321,
+      "last_timestamp": 1732597199,
+      "trade_count": 24725
+    },
+    "2024-11-26": {
+      "first_line": 8938698,
+      "first_offset": 2590082603,
+      "first_timestamp": 1732597236,
+      "last_line": 8963714,
+      "last_offset": 2597255875,
+      "last_timestamp": 1732683493,
+      "trade_count": 25017
+    },
+    "2024-11-27": {
+      "first_line": 8963715,
+      "first_offset": 2597256163,
+      "first_timestamp": 1732683618,
+      "last_line": 8986385,
+      "last_offset": 2603749077,
+      "last_timestamp": 1732769943,
+      "trade_count": 22670
+    },
+    "2024-11-28": {
+      "first_line": 8986386,
+      "first_offset": 2603749362,
+      "first_timestamp": 1732770000,
+      "last_line": 9000618,
+      "last_offset": 2607827004,
+      "last_timestamp": 1732856387,
+      "trade_count": 14233
+    },
+    "2024-11-29": {
+      "first_line": 9000619,
+      "first_offset": 2607827292,
+      "first_timestamp": 1732856450,
+      "last_line": 9019669,
+      "last_offset": 2613290945,
+      "last_timestamp": 1732942799,
+      "trade_count": 19050
+    },
+    "2024-11-30": {
+      "first_line": 9019670,
+      "first_offset": 2613291233,
+      "first_timestamp": 1732942801,
+      "last_line": 9027020,
+      "last_offset": 2615397397,
+      "last_timestamp": 1733029161,
+      "trade_count": 7344
+    },
+    "2024-12-01": {
+      "first_line": 9027021,
+      "first_offset": 2615397685,
+      "first_timestamp": 1733029253,
+      "last_line": 9037288,
+      "last_offset": 2618340541,
+      "last_timestamp": 1733115571,
+      "trade_count": 10268
+    },
+    "2024-12-02": {
+      "first_line": 9037289,
+      "first_offset": 2618340826,
+      "first_timestamp": 1733115600,
+      "last_line": 9070952,
+      "last_offset": 2628005023,
+      "last_timestamp": 1733201992,
+      "trade_count": 33664
+    },
+    "2024-12-03": {
+      "first_line": 9070953,
+      "first_offset": 2628005308,
+      "first_timestamp": 1733202001,
+      "last_line": 9113625,
+      "last_offset": 2640268924,
+      "last_timestamp": 1733288397,
+      "trade_count": 42673
+    },
+    "2024-12-04": {
+      "first_line": 9113626,
+      "first_offset": 2640269212,
+      "first_timestamp": 1733288401,
+      "last_line": 9198927,
+      "last_offset": 2664814198,
+      "last_timestamp": 1733374797,
+      "trade_count": 85301
+    },
+    "2024-12-05": {
+      "first_line": 9198928,
+      "first_offset": 2664814485,
+      "first_timestamp": 1733374800,
+      "last_line": 9279414,
+      "last_offset": 2688024018,
+      "last_timestamp": 1733461134,
+      "trade_count": 80487
+    },
+    "2024-12-06": {
+      "first_line": 9279415,
+      "first_offset": 2688024306,
+      "first_timestamp": 1733461239,
+      "last_line": 9345254,
+      "last_offset": 2707002665,
+      "last_timestamp": 1733547591,
+      "trade_count": 65839
+    },
+    "2024-12-07": {
+      "first_line": 9345255,
+      "first_offset": 2707002949,
+      "first_timestamp": 1733547633,
+      "last_line": 9351451,
+      "last_offset": 2708783085,
+      "last_timestamp": 1733633998,
+      "trade_count": 6197
+    },
+    "2024-12-08": {
+      "first_line": 9351452,
+      "first_offset": 2708783373,
+      "first_timestamp": 1733634014,
+      "last_line": 9362012,
+      "last_offset": 2711819522,
+      "last_timestamp": 1733720301,
+      "trade_count": 10561
+    },
+    "2024-12-09": {
+      "first_line": 9362013,
+      "first_offset": 2711819810,
+      "first_timestamp": 1733720408,
+      "last_line": 9386028,
+      "last_offset": 2718709480,
+      "last_timestamp": 1733806763,
+      "trade_count": 24016
+    },
+    "2024-12-10": {
+      "first_line": 9386029,
+      "first_offset": 2718709768,
+      "first_timestamp": 1733806828,
+      "last_line": 9404768,
+      "last_offset": 2724085414,
+      "last_timestamp": 1733893130,
+      "trade_count": 18740
+    },
+    "2024-12-11": {
+      "first_line": 9404769,
+      "first_offset": 2724085697,
+      "first_timestamp": 1733893310,
+      "last_line": 9419518,
+      "last_offset": 2728331280,
+      "last_timestamp": 1733979576,
+      "trade_count": 14750
+    },
+    "2024-12-12": {
+      "first_line": 9419519,
+      "first_offset": 2728331570,
+      "first_timestamp": 1733979634,
+      "last_line": 9430225,
+      "last_offset": 2731417805,
+      "last_timestamp": 1734065923,
+      "trade_count": 10707
+    },
+    "2024-12-13": {
+      "first_line": 9430226,
+      "first_offset": 2731418093,
+      "first_timestamp": 1734066017,
+      "last_line": 9439192,
+      "last_offset": 2734006358,
+      "last_timestamp": 1734152346,
+      "trade_count": 8967
+    },
+    "2024-12-14": {
+      "first_line": 9439193,
+      "first_offset": 2734006643,
+      "first_timestamp": 1734152405,
+      "last_line": 9443978,
+      "last_offset": 2735388057,
+      "last_timestamp": 1734238695,
+      "trade_count": 4786
+    },
+    "2024-12-15": {
+      "first_line": 9443979,
+      "first_offset": 2735388343,
+      "first_timestamp": 1734238843,
+      "last_line": 9458163,
+      "last_offset": 2739483033,
+      "last_timestamp": 1734325198,
+      "trade_count": 14184
+    },
+    "2024-12-16": {
+      "first_line": 9458164,
+      "first_offset": 2739483322,
+      "first_timestamp": 1734325201,
+      "last_line": 9472518,
+      "last_offset": 2743628890,
+      "last_timestamp": 1734411598,
+      "trade_count": 14355
+    },
+    "2024-12-17": {
+      "first_line": 9472519,
+      "first_offset": 2743629179,
+      "first_timestamp": 1734411656,
+      "last_line": 9485969,
+      "last_offset": 2747515020,
+      "last_timestamp": 1734497938,
+      "trade_count": 13451
+    },
+    "2024-12-18": {
+      "first_line": 9485970,
+      "first_offset": 2747515310,
+      "first_timestamp": 1734498010,
+      "last_line": 9510318,
+      "last_offset": 2754544164,
+      "last_timestamp": 1734584375,
+      "trade_count": 24349
+    },
+    "2024-12-19": {
+      "first_line": 9510319,
+      "first_offset": 2754544451,
+      "first_timestamp": 1734584412,
+      "last_line": 9534373,
+      "last_offset": 2761457418,
+      "last_timestamp": 1734670797,
+      "trade_count": 24055
+    },
+    "2024-12-20": {
+      "first_line": 9534374,
+      "first_offset": 2761457706,
+      "first_timestamp": 1734670818,
+      "last_line": 9556921,
+      "last_offset": 2767923695,
+      "last_timestamp": 1734757058,
+      "trade_count": 22548
+    },
+    "2024-12-21": {
+      "first_line": 9556922,
+      "first_offset": 2767923982,
+      "first_timestamp": 1734757213,
+      "last_line": 9568937,
+      "last_offset": 2771369657,
+      "last_timestamp": 1734843599,
+      "trade_count": 12014
+    },
+    "2024-12-22": {
+      "first_line": 9568938,
+      "first_offset": 2771369945,
+      "first_timestamp": 1734843600,
+      "last_line": 9575432,
+      "last_offset": 2773230741,
+      "last_timestamp": 1734895569,
+      "trade_count": 6494
+    },
+    "2024-12-25": {
+      "first_line": 9575434,
+      "first_offset": 2773231109,
+      "first_timestamp": 1735157582,
+      "last_line": 9578839,
+      "last_offset": 2774206475,
+      "last_timestamp": 1735189186,
+      "trade_count": 3405
+    },
+    "2024-12-26": {
+      "first_line": 9578840,
+      "first_offset": 2774206760,
+      "first_timestamp": 1735189203,
+      "last_line": 9591694,
+      "last_offset": 2777893273,
+      "last_timestamp": 1735275588,
+      "trade_count": 12855
+    },
+    "2024-12-27": {
+      "first_line": 9591695,
+      "first_offset": 2777893561,
+      "first_timestamp": 1735275603,
+      "last_line": 9609449,
+      "last_offset": 2782984114,
+      "last_timestamp": 1735361993,
+      "trade_count": 17755
+    },
+    "2024-12-28": {
+      "first_line": 9609450,
+      "first_offset": 2782984398,
+      "first_timestamp": 1735362023,
+      "last_line": 9617292,
+      "last_offset": 2785232199,
+      "last_timestamp": 1735448320,
+      "trade_count": 7843
+    },
+    "2024-12-29": {
+      "first_line": 9617293,
+      "first_offset": 2785232483,
+      "first_timestamp": 1735448401,
+      "last_line": 9624736,
+      "last_offset": 2787364927,
+      "last_timestamp": 1735534748,
+      "trade_count": 7444
+    },
+    "2024-12-30": {
+      "first_line": 9624737,
+      "first_offset": 2787365210,
+      "first_timestamp": 1735534801,
+      "last_line": 9641254,
+      "last_offset": 2792103634,
+      "last_timestamp": 1735621161,
+      "trade_count": 16518
+    },
+    "2024-12-31": {
+      "first_line": 9641255,
+      "first_offset": 2792103919,
+      "first_timestamp": 1735621200,
+      "last_line": 9651067,
+      "last_offset": 2794916937,
+      "last_timestamp": 1735707581,
+      "trade_count": 9813
+    },
+    "2025-01-01": {
+      "first_line": 9651068,
+      "first_offset": 2794917220,
+      "first_timestamp": 1735707606,
+      "last_line": 9659058,
+      "last_offset": 2797205145,
+      "last_timestamp": 1735793945,
+      "trade_count": 7991
+    },
+    "2025-01-02": {
+      "first_line": 9659059,
+      "first_offset": 2797205433,
+      "first_timestamp": 1735794001,
+      "last_line": 9670627,
+      "last_offset": 2800519587,
+      "last_timestamp": 1735880374,
+      "trade_count": 11569
+    },
+    "2025-01-03": {
+      "first_line": 9670628,
+      "first_offset": 2800519872,
+      "first_timestamp": 1735880413,
+      "last_line": 9681009,
+      "last_offset": 2803495333,
+      "last_timestamp": 1735966761,
+      "trade_count": 10382
+    },
+    "2025-01-04": {
+      "first_line": 9681010,
+      "first_offset": 2803495621,
+      "first_timestamp": 1735966845,
+      "last_line": 9687142,
+      "last_offset": 2805253773,
+      "last_timestamp": 1736053199,
+      "trade_count": 6133
+    },
+    "2025-01-05": {
+      "first_line": 9687143,
+      "first_offset": 2805254058,
+      "first_timestamp": 1736053219,
+      "last_line": 9693528,
+      "last_offset": 2807085897,
+      "last_timestamp": 1736139594,
+      "trade_count": 6386
+    },
+    "2025-01-06": {
+      "first_line": 9693529,
+      "first_offset": 2807086182,
+      "first_timestamp": 1736139607,
+      "last_line": 9708241,
+      "last_offset": 2811317857,
+      "last_timestamp": 1736225981,
+      "trade_count": 14713
+    },
+    "2025-01-07": {
+      "first_line": 9708242,
+      "first_offset": 2811318147,
+      "first_timestamp": 1736226008,
+      "last_line": 9723856,
+      "last_offset": 2815805341,
+      "last_timestamp": 1736312390,
+      "trade_count": 15615
+    },
+    "2025-01-08": {
+      "first_line": 9723857,
+      "first_offset": 2815805629,
+      "first_timestamp": 1736312437,
+      "last_line": 9744245,
+      "last_offset": 2821651862,
+      "last_timestamp": 1736398793,
+      "trade_count": 20388
+    },
+    "2025-01-09": {
+      "first_line": 9744246,
+      "first_offset": 2821652150,
+      "first_timestamp": 1736398804,
+      "last_line": 9760714,
+      "last_offset": 2826372386,
+      "last_timestamp": 1736485196,
+      "trade_count": 16468
+    },
+    "2025-01-10": {
+      "first_line": 9760715,
+      "first_offset": 2826372671,
+      "first_timestamp": 1736485200,
+      "last_line": 9774651,
+      "last_offset": 2830365937,
+      "last_timestamp": 1736571586,
+      "trade_count": 13937
+    },
+    "2025-01-11": {
+      "first_line": 9774652,
+      "first_offset": 2830366225,
+      "first_timestamp": 1736571609,
+      "last_line": 9781400,
+      "last_offset": 2832300645,
+      "last_timestamp": 1736657999,
+      "trade_count": 6749
+    },
+    "2025-01-12": {
+      "first_line": 9781401,
+      "first_offset": 2832300933,
+      "first_timestamp": 1736658000,
+      "last_line": 9788529,
+      "last_offset": 2834344451,
+      "last_timestamp": 1736744384,
+      "trade_count": 7129
+    },
+    "2025-01-13": {
+      "first_line": 9788530,
+      "first_offset": 2834344739,
+      "first_timestamp": 1736744408,
+      "last_line": 9806558,
+      "last_offset": 2839509698,
+      "last_timestamp": 1736830783,
+      "trade_count": 18027
+    },
+    "2025-01-14": {
+      "first_line": 9806559,
+      "first_offset": 2839509983,
+      "first_timestamp": 1736830801,
+      "last_line": 9823969,
+      "last_offset": 2844505910,
+      "last_timestamp": 1736917195,
+      "trade_count": 17411
+    },
+    "2025-01-15": {
+      "first_line": 9823970,
+      "first_offset": 2844506198,
+      "first_timestamp": 1736917205,
+      "last_line": 9848521,
+      "last_offset": 2851563815,
+      "last_timestamp": 1737003557,
+      "trade_count": 24552
+    },
+    "2025-01-16": {
+      "first_line": 9848522,
+      "first_offset": 2851564103,
+      "first_timestamp": 1737003605,
+      "last_line": 9879315,
+      "last_offset": 2860430550,
+      "last_timestamp": 1737089997,
+      "trade_count": 30794
+    },
+    "2025-01-17": {
+      "first_line": 9879316,
+      "first_offset": 2860430840,
+      "first_timestamp": 1737090025,
+      "last_line": 9941885,
+      "last_offset": 2878533474,
+      "last_timestamp": 1737176391,
+      "trade_count": 62570
+    },
+    "2025-01-18": {
+      "first_line": 9941886,
+      "first_offset": 2878533764,
+      "first_timestamp": 1737176401,
+      "last_line": 9984272,
+      "last_offset": 2890803814,
+      "last_timestamp": 1737262792,
+      "trade_count": 42387
+    },
+    "2025-01-19": {
+      "first_line": 9984273,
+      "first_offset": 2890804102,
+      "first_timestamp": 1737262814,
+      "last_line": 10037648,
+      "last_offset": 2906241695,
+      "last_timestamp": 1737349193,
+      "trade_count": 53376
+    },
+    "2025-01-20": {
+      "first_line": 10037649,
+      "first_offset": 2906241985,
+      "first_timestamp": 1737349202,
+      "last_line": 10124983,
+      "last_offset": 2931492829,
+      "last_timestamp": 1737435582,
+      "trade_count": 87335
+    },
+    "2025-01-21": {
+      "first_line": 10124984,
+      "first_offset": 2931493119,
+      "first_timestamp": 1737435600,
+      "last_line": 10186648,
+      "last_offset": 2949329641,
+      "last_timestamp": 1737521980,
+      "trade_count": 61664
+    },
+    "2025-01-22": {
+      "first_line": 10186649,
+      "first_offset": 2949329931,
+      "first_timestamp": 1737522002,
+      "last_line": 10236792,
+      "last_offset": 2963840271,
+      "last_timestamp": 1737608389,
+      "trade_count": 50144
+    },
+    "2025-01-23": {
+      "first_line": 10236793,
+      "first_offset": 2963840558,
+      "first_timestamp": 1737608412,
+      "last_line": 10307619,
+      "last_offset": 2984313743,
+      "last_timestamp": 1737694793,
+      "trade_count": 70827
+    },
+    "2025-01-24": {
+      "first_line": 10307620,
+      "first_offset": 2984314030,
+      "first_timestamp": 1737694800,
+      "last_line": 10344357,
+      "last_offset": 2994939666,
+      "last_timestamp": 1737781116,
+      "trade_count": 36738
+    },
+    "2025-01-25": {
+      "first_line": 10344358,
+      "first_offset": 2994939953,
+      "first_timestamp": 1737781200,
+      "last_line": 10360771,
+      "last_offset": 2999687567,
+      "last_timestamp": 1737867587,
+      "trade_count": 16414
+    },
+    "2025-01-26": {
+      "first_line": 10360772,
+      "first_offset": 2999687857,
+      "first_timestamp": 1737867601,
+      "last_line": 10396116,
+      "last_offset": 3009917414,
+      "last_timestamp": 1737953996,
+      "trade_count": 35345
+    },
+    "2025-01-27": {
+      "first_line": 10396117,
+      "first_offset": 3009917704,
+      "first_timestamp": 1737954000,
+      "last_line": 10465996,
+      "last_offset": 3030070145,
+      "last_timestamp": 1738040386,
+      "trade_count": 69880
+    },
+    "2025-01-28": {
+      "first_line": 10465997,
+      "first_offset": 3030070435,
+      "first_timestamp": 1738040403,
+      "last_line": 10508307,
+      "last_offset": 3042315411,
+      "last_timestamp": 1738126789,
+      "trade_count": 42311
+    },
+    "2025-01-29": {
+      "first_line": 10508308,
+      "first_offset": 3042315701,
+      "first_timestamp": 1738126834,
+      "last_line": 10558837,
+      "last_offset": 3056935816,
+      "last_timestamp": 1738213178,
+      "trade_count": 50528
+    },
+    "2025-01-30": {
+      "first_line": 10558838,
+      "first_offset": 3056936106,
+      "first_timestamp": 1738213204,
+      "last_line": 10622999,
+      "last_offset": 3075516390,
+      "last_timestamp": 1738299538,
+      "trade_count": 64162
+    },
+    "2025-01-31": {
+      "first_line": 10623000,
+      "first_offset": 3075516680,
+      "first_timestamp": 1738299671,
+      "last_line": 10705579,
+      "last_offset": 3099432068,
+      "last_timestamp": 1738385969,
+      "trade_count": 82580
+    },
+    "2025-02-01": {
+      "first_line": 10705580,
+      "first_offset": 3099432358,
+      "first_timestamp": 1738386015,
+      "last_line": 10766024,
+      "last_offset": 3116929951,
+      "last_timestamp": 1738472380,
+      "trade_count": 60445
+    },
+    "2025-02-02": {
+      "first_line": 10766025,
+      "first_offset": 3116930239,
+      "first_timestamp": 1738472403,
+      "last_line": 10875836,
+      "last_offset": 3148511345,
+      "last_timestamp": 1738558797,
+      "trade_count": 109812
+    },
+    "2025-02-03": {
+      "first_line": 10875837,
+      "first_offset": 3148511633,
+      "first_timestamp": 1738558808,
+      "last_line": 10934086,
+      "last_offset": 3165279111,
+      "last_timestamp": 1738645194,
+      "trade_count": 58250
+    },
+    "2025-02-04": {
+      "first_line": 10934087,
+      "first_offset": 3165279398,
+      "first_timestamp": 1738645204,
+      "last_line": 10988724,
+      "last_offset": 3180987269,
+      "last_timestamp": 1738731573,
+      "trade_count": 54638
+    },
+    "2025-02-05": {
+      "first_line": 10988725,
+      "first_offset": 3180987557,
+      "first_timestamp": 1738731601,
+      "last_line": 11040889,
+      "last_offset": 3195980537,
+      "last_timestamp": 1738817998,
+      "trade_count": 52164
+    },
+    "2025-02-06": {
+      "first_line": 11040890,
+      "first_offset": 3195980822,
+      "first_timestamp": 1738818005,
+      "last_line": 11084598,
+      "last_offset": 3208540676,
+      "last_timestamp": 1738904397,
+      "trade_count": 43709
+    },
+    "2025-02-07": {
+      "first_line": 11084599,
+      "first_offset": 3208540964,
+      "first_timestamp": 1738904400,
+      "last_line": 11123870,
+      "last_offset": 3219826853,
+      "last_timestamp": 1738990783,
+      "trade_count": 39272
+    },
+    "2025-02-08": {
+      "first_line": 11123871,
+      "first_offset": 3219827141,
+      "first_timestamp": 1738990803,
+      "last_line": 11152437,
+      "last_offset": 3228043528,
+      "last_timestamp": 1739077111,
+      "trade_count": 28567
+    },
+    "2025-02-09": {
+      "first_line": 11152438,
+      "first_offset": 3228043816,
+      "first_timestamp": 1739077261,
+      "last_line": 11178848,
+      "last_offset": 3235634613,
+      "last_timestamp": 1739163553,
+      "trade_count": 26411
+    },
+    "2025-02-10": {
+      "first_line": 11178849,
+      "first_offset": 3235634898,
+      "first_timestamp": 1739163622,
+      "last_line": 11200018,
+      "last_offset": 3241718577,
+      "last_timestamp": 1739249979,
+      "trade_count": 21167
+    },
+    "2025-02-11": {
+      "first_line": 11200019,
+      "first_offset": 3241718865,
+      "first_timestamp": 1739250006,
+      "last_line": 11228155,
+      "last_offset": 3249806149,
+      "last_timestamp": 1739336373,
+      "trade_count": 28137
+    },
+    "2025-02-12": {
+      "first_line": 11228156,
+      "first_offset": 3249806436,
+      "first_timestamp": 1739336400,
+      "last_line": 11257446,
+      "last_offset": 3258222055,
+      "last_timestamp": 1739422789,
+      "trade_count": 29291
+    },
+    "2025-02-13": {
+      "first_line": 11257447,
+      "first_offset": 3258222343,
+      "first_timestamp": 1739422808,
+      "last_line": 11278668,
+      "last_offset": 3264320542,
+      "last_timestamp": 1739509113,
+      "trade_count": 21222
+    },
+    "2025-02-14": {
+      "first_line": 11278669,
+      "first_offset": 3264320827,
+      "first_timestamp": 1739509213,
+      "last_line": 11301316,
+      "last_offset": 3270826056,
+      "last_timestamp": 1739595592,
+      "trade_count": 22647
+    },
+    "2025-02-15": {
+      "first_line": 11301317,
+      "first_offset": 3270826341,
+      "first_timestamp": 1739595604,
+      "last_line": 11321939,
+      "last_offset": 3276756423,
+      "last_timestamp": 1739681969,
+      "trade_count": 20623
+    },
+    "2025-02-16": {
+      "first_line": 11321940,
+      "first_offset": 3276756711,
+      "first_timestamp": 1739682058,
+      "last_line": 11342655,
+      "last_offset": 3282713397,
+      "last_timestamp": 1739768385,
+      "trade_count": 20716
+    },
+    "2025-02-17": {
+      "first_line": 11342656,
+      "first_offset": 3282713685,
+      "first_timestamp": 1739768453,
+      "last_line": 11365539,
+      "last_offset": 3289289162,
+      "last_timestamp": 1739854797,
+      "trade_count": 22883
+    },
+    "2025-02-18": {
+      "first_line": 11365540,
+      "first_offset": 3289289447,
+      "first_timestamp": 1739854803,
+      "last_line": 11394432,
+      "last_offset": 3297589388,
+      "last_timestamp": 1739941198,
+      "trade_count": 28893
+    },
+    "2025-02-19": {
+      "first_line": 11394433,
+      "first_offset": 3297589676,
+      "first_timestamp": 1739941200,
+      "last_line": 11425862,
+      "last_offset": 3306622657,
+      "last_timestamp": 1740027597,
+      "trade_count": 31430
+    },
+    "2025-02-20": {
+      "first_line": 11425863,
+      "first_offset": 3306622942,
+      "first_timestamp": 1740027601,
+      "last_line": 11465976,
+      "last_offset": 3318155543,
+      "last_timestamp": 1740113998,
+      "trade_count": 40114
+    },
+    "2025-02-21": {
+      "first_line": 11465977,
+      "first_offset": 3318155828,
+      "first_timestamp": 1740114001,
+      "last_line": 11507098,
+      "last_offset": 3329967302,
+      "last_timestamp": 1740200398,
+      "trade_count": 41122
+    },
+    "2025-02-22": {
+      "first_line": 11507099,
+      "first_offset": 3329967587,
+      "first_timestamp": 1740200401,
+      "last_line": 11522304,
+      "last_offset": 3334335691,
+      "last_timestamp": 1740286717,
+      "trade_count": 15206
+    },
+    "2025-02-23": {
+      "first_line": 11522305,
+      "first_offset": 3334335976,
+      "first_timestamp": 1740286803,
+      "last_line": 11534327,
+      "last_offset": 3337787315,
+      "last_timestamp": 1740373195,
+      "trade_count": 12022
+    },
+    "2025-02-24": {
+      "first_line": 11534328,
+      "first_offset": 3337787603,
+      "first_timestamp": 1740373200,
+      "last_line": 11562299,
+      "last_offset": 3345817838,
+      "last_timestamp": 1740459593,
+      "trade_count": 27972
+    },
+    "2025-02-25": {
+      "first_line": 11562300,
+      "first_offset": 3345818126,
+      "first_timestamp": 1740459607,
+      "last_line": 11615943,
+      "last_offset": 3361217221,
+      "last_timestamp": 1740545999,
+      "trade_count": 53642
+    },
+    "2025-02-26": {
+      "first_line": 11615944,
+      "first_offset": 3361217505,
+      "first_timestamp": 1740546000,
+      "last_line": 11672923,
+      "last_offset": 3377578699,
+      "last_timestamp": 1740632384,
+      "trade_count": 56980
+    },
+    "2025-02-27": {
+      "first_line": 11672924,
+      "first_offset": 3377578984,
+      "first_timestamp": 1740632400,
+      "last_line": 11720120,
+      "last_offset": 3391123028,
+      "last_timestamp": 1740718799,
+      "trade_count": 47197
+    },
+    "2025-02-28": {
+      "first_line": 11720121,
+      "first_offset": 3391123316,
+      "first_timestamp": 1740718800,
+      "last_line": 11773857,
+      "last_offset": 3406553621,
+      "last_timestamp": 1740805198,
+      "trade_count": 53737
+    },
+    "2025-03-01": {
+      "first_line": 11773858,
+      "first_offset": 3406553909,
+      "first_timestamp": 1740805200,
+      "last_line": 11813548,
+      "last_offset": 3417967470,
+      "last_timestamp": 1740891592,
+      "trade_count": 39691
+    },
+    "2025-03-02": {
+      "first_line": 11813549,
+      "first_offset": 3417967758,
+      "first_timestamp": 1740891620,
+      "last_line": 11876172,
+      "last_offset": 3435957941,
+      "last_timestamp": 1740977999,
+      "trade_count": 62624
+    },
+    "2025-03-03": {
+      "first_line": 11876173,
+      "first_offset": 3435958229,
+      "first_timestamp": 1740978018,
+      "last_line": 11932187,
+      "last_offset": 3452038804,
+      "last_timestamp": 1741064390,
+      "trade_count": 56015
+    },
+    "2025-03-04": {
+      "first_line": 11932188,
+      "first_offset": 3452039092,
+      "first_timestamp": 1741064405,
+      "last_line": 11981369,
+      "last_offset": 3466159919,
+      "last_timestamp": 1741150799,
+      "trade_count": 49181
+    },
+    "2025-03-05": {
+      "first_line": 11981370,
+      "first_offset": 3466160206,
+      "first_timestamp": 1741150800,
+      "last_line": 12014930,
+      "last_offset": 3475793325,
+      "last_timestamp": 1741237183,
+      "trade_count": 33561
+    },
+    "2025-03-06": {
+      "first_line": 12014931,
+      "first_offset": 3475793613,
+      "first_timestamp": 1741237200,
+      "last_line": 12049278,
+      "last_offset": 3485651526,
+      "last_timestamp": 1741323599,
+      "trade_count": 34348
+    },
+    "2025-03-07": {
+      "first_line": 12049279,
+      "first_offset": 3485651809,
+      "first_timestamp": 1741323600,
+      "last_line": 12091324,
+      "last_offset": 3497726080,
+      "last_timestamp": 1741409996,
+      "trade_count": 42046
+    },
+    "2025-03-08": {
+      "first_line": 12091325,
+      "first_offset": 3497726365,
+      "first_timestamp": 1741410000,
+      "last_line": 12100650,
+      "last_offset": 3500401951,
+      "last_timestamp": 1741496364,
+      "trade_count": 9326
+    },
+    "2025-03-09": {
+      "first_line": 12100651,
+      "first_offset": 3500402236,
+      "first_timestamp": 1741496403,
+      "last_line": 12116799,
+      "last_offset": 3505032525,
+      "last_timestamp": 1741579187,
+      "trade_count": 16149
+    },
+    "2025-03-10": {
+      "first_line": 12116800,
+      "first_offset": 3505032813,
+      "first_timestamp": 1741579200,
+      "last_line": 12145207,
+      "last_offset": 3513184260,
+      "last_timestamp": 1741665592,
+      "trade_count": 28408
+    },
+    "2025-03-11": {
+      "first_line": 12145208,
+      "first_offset": 3513184545,
+      "first_timestamp": 1741665600,
+      "last_line": 12171826,
+      "last_offset": 3520821191,
+      "last_timestamp": 1741751999,
+      "trade_count": 26619
+    },
+    "2025-03-12": {
+      "first_line": 12171827,
+      "first_offset": 3520821479,
+      "first_timestamp": 1741752010,
+      "last_line": 12210952,
+      "last_offset": 3532064748,
+      "last_timestamp": 1741838386,
+      "trade_count": 39126
+    },
+    "2025-03-13": {
+      "first_line": 12210953,
+      "first_offset": 3532065035,
+      "first_timestamp": 1741838405,
+      "last_line": 12227634,
+      "last_offset": 3536849757,
+      "last_timestamp": 1741924792,
+      "trade_count": 16682
+    },
+    "2025-03-14": {
+      "first_line": 12227635,
+      "first_offset": 3536850045,
+      "first_timestamp": 1741924800,
+      "last_line": 12247266,
+      "last_offset": 3542477013,
+      "last_timestamp": 1742011187,
+      "trade_count": 19632
+    },
+    "2025-03-15": {
+      "first_line": 12247267,
+      "first_offset": 3542477301,
+      "first_timestamp": 1742011200,
+      "last_line": 12255392,
+      "last_offset": 3544805699,
+      "last_timestamp": 1742097593,
+      "trade_count": 8126
+    },
+    "2025-03-16": {
+      "first_line": 12255393,
+      "first_offset": 3544805983,
+      "first_timestamp": 1742097619,
+      "last_line": 12264133,
+      "last_offset": 3547311168,
+      "last_timestamp": 1742183929,
+      "trade_count": 8741
+    },
+    "2025-03-17": {
+      "first_line": 12264134,
+      "first_offset": 3547311456,
+      "first_timestamp": 1742184020,
+      "last_line": 12277199,
+      "last_offset": 3551056846,
+      "last_timestamp": 1742270377,
+      "trade_count": 13065
+    },
+    "2025-03-18": {
+      "first_line": 12277200,
+      "first_offset": 3551057131,
+      "first_timestamp": 1742270414,
+      "last_line": 12289082,
+      "last_offset": 3554464152,
+      "last_timestamp": 1742356761,
+      "trade_count": 11883
+    },
+    "2025-03-19": {
+      "first_line": 12289083,
+      "first_offset": 3554464440,
+      "first_timestamp": 1742356807,
+      "last_line": 12314844,
+      "last_offset": 3561856761,
+      "last_timestamp": 1742443188,
+      "trade_count": 25761
+    },
+    "2025-03-20": {
+      "first_line": 12314845,
+      "first_offset": 3561857046,
+      "first_timestamp": 1742443207,
+      "last_line": 12331532,
+      "last_offset": 3566644556,
+      "last_timestamp": 1742529566,
+      "trade_count": 16688
+    },
+    "2025-03-21": {
+      "first_line": 12331533,
+      "first_offset": 3566644841,
+      "first_timestamp": 1742529603,
+      "last_line": 12345466,
+      "last_offset": 3570640247,
+      "last_timestamp": 1742615998,
+      "trade_count": 13934
+    },
+    "2025-03-22": {
+      "first_line": 12345467,
+      "first_offset": 3570640532,
+      "first_timestamp": 1742616048,
+      "last_line": 12353543,
+      "last_offset": 3572956698,
+      "last_timestamp": 1742702310,
+      "trade_count": 8077
+    },
+    "2025-03-23": {
+      "first_line": 12353544,
+      "first_offset": 3572956986,
+      "first_timestamp": 1742702442,
+      "last_line": 12365406,
+      "last_offset": 3576359996,
+      "last_timestamp": 1742788759,
+      "trade_count": 11863
+    },
+    "2025-03-24": {
+      "first_line": 12365407,
+      "first_offset": 3576360284,
+      "first_timestamp": 1742788802,
+      "last_line": 12400834,
+      "last_offset": 3586539593,
+      "last_timestamp": 1742875199,
+      "trade_count": 35427
+    },
+    "2025-03-25": {
+      "first_line": 12400835,
+      "first_offset": 3586539878,
+      "first_timestamp": 1742875201,
+      "last_line": 12432021,
+      "last_offset": 3595497225,
+      "last_timestamp": 1742961599,
+      "trade_count": 31187
+    },
+    "2025-03-26": {
+      "first_line": 12432022,
+      "first_offset": 3595497513,
+      "first_timestamp": 1742961600,
+      "last_line": 12457923,
+      "last_offset": 3602933563,
+      "last_timestamp": 1743047996,
+      "trade_count": 25901
+    },
+    "2025-03-27": {
+      "first_line": 12457924,
+      "first_offset": 3602933848,
+      "first_timestamp": 1743048004,
+      "last_line": 12490521,
+      "last_offset": 3612291568,
+      "last_timestamp": 1743134390,
+      "trade_count": 32598
+    },
+    "2025-03-28": {
+      "first_line": 12490522,
+      "first_offset": 3612291856,
+      "first_timestamp": 1743134438,
+      "last_line": 12522797,
+      "last_offset": 3621557320,
+      "last_timestamp": 1743220785,
+      "trade_count": 32276
+    },
+    "2025-03-29": {
+      "first_line": 12522798,
+      "first_offset": 3621557605,
+      "first_timestamp": 1743220811,
+      "last_line": 12551365,
+      "last_offset": 3629761515,
+      "last_timestamp": 1743307195,
+      "trade_count": 28568
+    },
+    "2025-03-30": {
+      "first_line": 12551366,
+      "first_offset": 3629761803,
+      "first_timestamp": 1743307216,
+      "last_line": 12579762,
+      "last_offset": 3637920800,
+      "last_timestamp": 1743393592,
+      "trade_count": 28397
+    },
+    "2025-03-31": {
+      "first_line": 12579763,
+      "first_offset": 3637921088,
+      "first_timestamp": 1743393600,
+      "last_line": 12626238,
+      "last_offset": 3651276707,
+      "last_timestamp": 1743479994,
+      "trade_count": 46476
+    },
+    "2025-04-01": {
+      "first_line": 12626239,
+      "first_offset": 3651276995,
+      "first_timestamp": 1743480000,
+      "last_line": 12657631,
+      "last_offset": 3660287178,
+      "last_timestamp": 1743566397,
+      "trade_count": 31393
+    },
+    "2025-04-02": {
+      "first_line": 12657632,
+      "first_offset": 3660287466,
+      "first_timestamp": 1743566403,
+      "last_line": 12693916,
+      "last_offset": 3670690943,
+      "last_timestamp": 1743652701,
+      "trade_count": 36285
+    },
+    "2025-04-03": {
+      "first_line": 12693917,
+      "first_offset": 3670691231,
+      "first_timestamp": 1743652802,
+      "last_line": 12722714,
+      "last_offset": 3678955571,
+      "last_timestamp": 1743739195,
+      "trade_count": 28797
+    },
+    "2025-04-04": {
+      "first_line": 12722715,
+      "first_offset": 3678955856,
+      "first_timestamp": 1743739203,
+      "last_line": 12756086,
+      "last_offset": 3688529778,
+      "last_timestamp": 1743825590,
+      "trade_count": 33372
+    },
+    "2025-04-05": {
+      "first_line": 12756087,
+      "first_offset": 3688530062,
+      "first_timestamp": 1743825621,
+      "last_line": 12770349,
+      "last_offset": 3692624598,
+      "last_timestamp": 1743911976,
+      "trade_count": 14263
+    },
+    "2025-04-06": {
+      "first_line": 12770350,
+      "first_offset": 3692624886,
+      "first_timestamp": 1743912011,
+      "last_line": 12806430,
+      "last_offset": 3702980319,
+      "last_timestamp": 1743998399,
+      "trade_count": 36081
+    },
+    "2025-04-07": {
+      "first_line": 12806431,
+      "first_offset": 3702980605,
+      "first_timestamp": 1743998404,
+      "last_line": 12867613,
+      "last_offset": 3720536401,
+      "last_timestamp": 1744084790,
+      "trade_count": 61183
+    },
+    "2025-04-08": {
+      "first_line": 12867614,
+      "first_offset": 3720536685,
+      "first_timestamp": 1744084808,
+      "last_line": 12904971,
+      "last_offset": 3731253220,
+      "last_timestamp": 1744171179,
+      "trade_count": 37357
+    },
+    "2025-04-09": {
+      "first_line": 12904972,
+      "first_offset": 3731253508,
+      "first_timestamp": 1744171200,
+      "last_line": 12952572,
+      "last_offset": 3744906544,
+      "last_timestamp": 1744257582,
+      "trade_count": 47596
+    },
+    "2025-04-10": {
+      "first_line": 12952573,
+      "first_offset": 3744906831,
+      "first_timestamp": 1744257603,
+      "last_line": 12982537,
+      "last_offset": 3753504027,
+      "last_timestamp": 1744343995,
+      "trade_count": 29965
+    },
+    "2025-04-11": {
+      "first_line": 12982538,
+      "first_offset": 3753504313,
+      "first_timestamp": 1744344002,
+      "last_line": 13013502,
+      "last_offset": 3762388207,
+      "last_timestamp": 1744430399,
+      "trade_count": 30965
+    },
+    "2025-04-12": {
+      "first_line": 13013503,
+      "first_offset": 3762388492,
+      "first_timestamp": 1744430409,
+      "last_line": 13044723,
+      "last_offset": 3771355494,
+      "last_timestamp": 1744516794,
+      "trade_count": 31221
+    },
+    "2025-04-13": {
+      "first_line": 13044724,
+      "first_offset": 3771355781,
+      "first_timestamp": 1744516801,
+      "last_line": 13078370,
+      "last_offset": 3781023796,
+      "last_timestamp": 1744603191,
+      "trade_count": 33647
+    },
+    "2025-04-14": {
+      "first_line": 13078371,
+      "first_offset": 3781024084,
+      "first_timestamp": 1744603205,
+      "last_line": 13117882,
+      "last_offset": 3792375830,
+      "last_timestamp": 1744689531,
+      "trade_count": 39512
+    },
+    "2025-04-15": {
+      "first_line": 13117883,
+      "first_offset": 3792376118,
+      "first_timestamp": 1744689603,
+      "last_line": 13158705,
+      "last_offset": 3804107155,
+      "last_timestamp": 1744775999,
+      "trade_count": 40823
+    },
+    "2025-04-16": {
+      "first_line": 13158706,
+      "first_offset": 3804107441,
+      "first_timestamp": 1744776013,
+      "last_line": 13180134,
+      "last_offset": 3810252746,
+      "last_timestamp": 1744862376,
+      "trade_count": 21429
+    },
+    "2025-04-17": {
+      "first_line": 13180135,
+      "first_offset": 3810253034,
+      "first_timestamp": 1744862403,
+      "last_line": 13204315,
+      "last_offset": 3817190045,
+      "last_timestamp": 1744948788,
+      "trade_count": 24181
+    },
+    "2025-04-18": {
+      "first_line": 13204316,
+      "first_offset": 3817190330,
+      "first_timestamp": 1744948810,
+      "last_line": 13218057,
+      "last_offset": 3821131579,
+      "last_timestamp": 1745035176,
+      "trade_count": 13742
+    },
+    "2025-04-19": {
+      "first_line": 13218058,
+      "first_offset": 3821131865,
+      "first_timestamp": 1745035226,
+      "last_line": 13233997,
+      "last_offset": 3825707491,
+      "last_timestamp": 1745121594,
+      "trade_count": 15940
+    },
+    "2025-04-20": {
+      "first_line": 13233998,
+      "first_offset": 3825707776,
+      "first_timestamp": 1745121607,
+      "last_line": 13249764,
+      "last_offset": 3830232272,
+      "last_timestamp": 1745207948,
+      "trade_count": 15767
+    },
+    "2025-04-21": {
+      "first_line": 13249765,
+      "first_offset": 3830232557,
+      "first_timestamp": 1745208003,
+      "last_line": 13287059,
+      "last_offset": 3840940945,
+      "last_timestamp": 1745294374,
+      "trade_count": 37295
+    },
+    "2025-04-22": {
+      "first_line": 13287060,
+      "first_offset": 3840941233,
+      "first_timestamp": 1745294409,
+      "last_line": 13339873,
+      "last_offset": 3856108767,
+      "last_timestamp": 1745380799,
+      "trade_count": 52814
+    },
+    "2025-04-23": {
+      "first_line": 13339874,
+      "first_offset": 3856109055,
+      "first_timestamp": 1745380811,
+      "last_line": 13395489,
+      "last_offset": 3872086218,
+      "last_timestamp": 1745467196,
+      "trade_count": 55615
+    },
+    "2025-04-24": {
+      "first_line": 13395490,
+      "first_offset": 3872086503,
+      "first_timestamp": 1745467208,
+      "last_line": 13432216,
+      "last_offset": 3882633566,
+      "last_timestamp": 1745553598,
+      "trade_count": 36725
+    },
+    "2025-04-25": {
+      "first_line": 13432217,
+      "first_offset": 3882633854,
+      "first_timestamp": 1745553604,
+      "last_line": 13473432,
+      "last_offset": 3894467238,
+      "last_timestamp": 1745639989,
+      "trade_count": 41215
+    },
+    "2025-04-26": {
+      "first_line": 13473433,
+      "first_offset": 3894467526,
+      "first_timestamp": 1745640011,
+      "last_line": 13495748,
+      "last_offset": 3900875601,
+      "last_timestamp": 1745726397,
+      "trade_count": 22316
+    },
+    "2025-04-27": {
+      "first_line": 13495749,
+      "first_offset": 3900875886,
+      "first_timestamp": 1745726412,
+      "last_line": 13515024,
+      "last_offset": 3906410527,
+      "last_timestamp": 1745812781,
+      "trade_count": 19276
+    },
+    "2025-04-28": {
+      "first_line": 13515025,
+      "first_offset": 3906410815,
+      "first_timestamp": 1745812800,
+      "last_line": 13552790,
+      "last_offset": 3917257187,
+      "last_timestamp": 1745899185,
+      "trade_count": 37766
+    },
+    "2025-04-29": {
+      "first_line": 13552791,
+      "first_offset": 3917257472,
+      "first_timestamp": 1745899202,
+      "last_line": 13579059,
+      "last_offset": 3924795766,
+      "last_timestamp": 1745985596,
+      "trade_count": 26269
+    },
+    "2025-04-30": {
+      "first_line": 13579060,
+      "first_offset": 3924796053,
+      "first_timestamp": 1745985600,
+      "last_line": 13607110,
+      "last_offset": 3932845791,
+      "last_timestamp": 1746071980,
+      "trade_count": 28051
+    },
+    "2025-05-01": {
+      "first_line": 13607111,
+      "first_offset": 3932846077,
+      "first_timestamp": 1746072000,
+      "last_line": 13652509,
+      "last_offset": 3945881702,
+      "last_timestamp": 1746158395,
+      "trade_count": 45399
+    },
+    "2025-05-02": {
+      "first_line": 13652510,
+      "first_offset": 3945881988,
+      "first_timestamp": 1746158400,
+      "last_line": 13676207,
+      "last_offset": 3952678936,
+      "last_timestamp": 1746244796,
+      "trade_count": 23698
+    },
+    "2025-05-03": {
+      "first_line": 13676208,
+      "first_offset": 3952679220,
+      "first_timestamp": 1746244810,
+      "last_line": 13693794,
+      "last_offset": 3957729426,
+      "last_timestamp": 1746331187,
+      "trade_count": 17587
+    },
+    "2025-05-04": {
+      "first_line": 13693795,
+      "first_offset": 3957729714,
+      "first_timestamp": 1746331257,
+      "last_line": 13709017,
+      "last_offset": 3962100233,
+      "last_timestamp": 1746417564,
+      "trade_count": 15223
+    },
+    "2025-05-05": {
+      "first_line": 13709018,
+      "first_offset": 3962100521,
+      "first_timestamp": 1746417609,
+      "last_line": 13729357,
+      "last_offset": 3967935449,
+      "last_timestamp": 1746503953,
+      "trade_count": 20340
+    },
+    "2025-05-06": {
+      "first_line": 13729358,
+      "first_offset": 3967935734,
+      "first_timestamp": 1746504040,
+      "last_line": 13759643,
+      "last_offset": 3976627361,
+      "last_timestamp": 1746590378,
+      "trade_count": 30286
+    },
+    "2025-05-07": {
+      "first_line": 13759644,
+      "first_offset": 3976627649,
+      "first_timestamp": 1746590413,
+      "last_line": 13791210,
+      "last_offset": 3985682499,
+      "last_timestamp": 1746676795,
+      "trade_count": 31567
+    },
+    "2025-05-08": {
+      "first_line": 13791211,
+      "first_offset": 3985682787,
+      "first_timestamp": 1746676805,
+      "last_line": 13821883,
+      "last_offset": 3994511394,
+      "last_timestamp": 1746763178,
+      "trade_count": 30673
+    },
+    "2025-05-09": {
+      "first_line": 13821884,
+      "first_offset": 3994511682,
+      "first_timestamp": 1746763207,
+      "last_line": 13849291,
+      "last_offset": 4002423842,
+      "last_timestamp": 1746849595,
+      "trade_count": 27408
+    },
+    "2025-05-10": {
+      "first_line": 13849292,
+      "first_offset": 4002424132,
+      "first_timestamp": 1746849604,
+      "last_line": 13866231,
+      "last_offset": 4007312844,
+      "last_timestamp": 1746935999,
+      "trade_count": 16939
+    },
+    "2025-05-11": {
+      "first_line": 13866232,
+      "first_offset": 4007313134,
+      "first_timestamp": 1746936003,
+      "last_line": 13888328,
+      "last_offset": 4013698197,
+      "last_timestamp": 1747022396,
+      "trade_count": 22097
+    },
+    "2025-05-12": {
+      "first_line": 13888329,
+      "first_offset": 4013698487,
+      "first_timestamp": 1747022420,
+      "last_line": 13921355,
+      "last_offset": 4023237587,
+      "last_timestamp": 1747108798,
+      "trade_count": 33027
+    },
+    "2025-05-13": {
+      "first_line": 13921356,
+      "first_offset": 4023237877,
+      "first_timestamp": 1747108806,
+      "last_line": 13941016,
+      "last_offset": 4028908229,
+      "last_timestamp": 1747195185,
+      "trade_count": 19661
+    },
+    "2025-05-14": {
+      "first_line": 13941017,
+      "first_offset": 4028908517,
+      "first_timestamp": 1747195207,
+      "last_line": 13960973,
+      "last_offset": 4034667335,
+      "last_timestamp": 1747281589,
+      "trade_count": 19957
+    },
+    "2025-05-15": {
+      "first_line": 13960974,
+      "first_offset": 4034667625,
+      "first_timestamp": 1747281600,
+      "last_line": 13980885,
+      "last_offset": 4040409924,
+      "last_timestamp": 1747367991,
+      "trade_count": 19912
+    },
+    "2025-05-16": {
+      "first_line": 13980886,
+      "first_offset": 4040410214,
+      "first_timestamp": 1747368002,
+      "last_line": 13998732,
+      "last_offset": 4045563474,
+      "last_timestamp": 1747454341,
+      "trade_count": 17847
+    },
+    "2025-05-17": {
+      "first_line": 13998733,
+      "first_offset": 4045563762,
+      "first_timestamp": 1747454401,
+      "last_line": 14007968,
+      "last_offset": 4048229027,
+      "last_timestamp": 1747540748,
+      "trade_count": 9236
+    },
+    "2025-05-18": {
+      "first_line": 14007969,
+      "first_offset": 4048229317,
+      "first_timestamp": 1747540839,
+      "last_line": 14024126,
+      "last_offset": 4052893100,
+      "last_timestamp": 1747627178,
+      "trade_count": 16158
+    },
+    "2025-05-19": {
+      "first_line": 14024127,
+      "first_offset": 4052893390,
+      "first_timestamp": 1747627203,
+      "last_line": 14050760,
+      "last_offset": 4060586942,
+      "last_timestamp": 1747713596,
+      "trade_count": 26634
+    },
+    "2025-05-20": {
+      "first_line": 14050761,
+      "first_offset": 4060587232,
+      "first_timestamp": 1747713615,
+      "last_line": 14083873,
+      "last_offset": 4070161184,
+      "last_timestamp": 1747799973,
+      "trade_count": 33108
+    },
+    "2025-05-21": {
+      "first_line": 14083874,
+      "first_offset": 4070161473,
+      "first_timestamp": 1747800010,
+      "last_line": 14126467,
+      "last_offset": 4082467178,
+      "last_timestamp": 1747886396,
+      "trade_count": 42594
+    },
+    "2025-05-22": {
+      "first_line": 14126468,
+      "first_offset": 4082467461,
+      "first_timestamp": 1747886404,
+      "last_line": 14147539,
+      "last_offset": 4088548007,
+      "last_timestamp": 1747972799,
+      "trade_count": 21070
+    },
+    "2025-05-23": {
+      "first_line": 14147540,
+      "first_offset": 4088548297,
+      "first_timestamp": 1747972806,
+      "last_line": 14172876,
+      "last_offset": 4095857501,
+      "last_timestamp": 1748059199,
+      "trade_count": 25337
+    },
+    "2025-05-24": {
+      "first_line": 14172877,
+      "first_offset": 4095857791,
+      "first_timestamp": 1748059201,
+      "last_line": 14185077,
+      "last_offset": 4099376299,
+      "last_timestamp": 1748145577,
+      "trade_count": 12201
+    },
+    "2025-05-25": {
+      "first_line": 14185078,
+      "first_offset": 4099376585,
+      "first_timestamp": 1748145613,
+      "last_line": 14198848,
+      "last_offset": 4103347113,
+      "last_timestamp": 1748231996,
+      "trade_count": 13771
+    },
+    "2025-05-26": {
+      "first_line": 14198849,
+      "first_offset": 4103347398,
+      "first_timestamp": 1748232000,
+      "last_line": 14213793,
+      "last_offset": 4107656307,
+      "last_timestamp": 1748318395,
+      "trade_count": 14943
+    },
+    "2025-05-27": {
+      "first_line": 14213794,
+      "first_offset": 4107656594,
+      "first_timestamp": 1748318408,
+      "last_line": 14240660,
+      "last_offset": 4115416878,
+      "last_timestamp": 1748404795,
+      "trade_count": 26867
+    },
+    "2025-05-28": {
+      "first_line": 14240661,
+      "first_offset": 4115417168,
+      "first_timestamp": 1748404802,
+      "last_line": 14261071,
+      "last_offset": 4121301246,
+      "last_timestamp": 1748491198,
+      "trade_count": 20411
+    },
+    "2025-05-29": {
+      "first_line": 14261072,
+      "first_offset": 4121301533,
+      "first_timestamp": 1748491220,
+      "last_line": 14285054,
+      "last_offset": 4128220639,
+      "last_timestamp": 1748577592,
+      "trade_count": 23983
+    },
+    "2025-05-30": {
+      "first_line": 14285055,
+      "first_offset": 4128220925,
+      "first_timestamp": 1748577603,
+      "last_line": 14323000,
+      "last_offset": 4139187972,
+      "last_timestamp": 1748663994,
+      "trade_count": 37946
+    },
+    "2025-05-31": {
+      "first_line": 14323001,
+      "first_offset": 4139188259,
+      "first_timestamp": 1748664005,
+      "last_line": 14342945,
+      "last_offset": 4144942281,
+      "last_timestamp": 1748750383,
+      "trade_count": 19945
+    },
+    "2025-06-01": {
+      "first_line": 14342946,
+      "first_offset": 4144942568,
+      "first_timestamp": 1748750420,
+      "last_line": 14361764,
+      "last_offset": 4150372042,
+      "last_timestamp": 1748836758,
+      "trade_count": 18819
+    },
+    "2025-06-02": {
+      "first_line": 14361765,
+      "first_offset": 4150372332,
+      "first_timestamp": 1748836800,
+      "last_line": 14382400,
+      "last_offset": 4156327817,
+      "last_timestamp": 1748923193,
+      "trade_count": 20636
+    },
+    "2025-06-03": {
+      "first_line": 14382401,
+      "first_offset": 4156328104,
+      "first_timestamp": 1748923205,
+      "last_line": 14402838,
+      "last_offset": 4162228929,
+      "last_timestamp": 1749009591,
+      "trade_count": 20438
+    },
+    "2025-06-04": {
+      "first_line": 14402839,
+      "first_offset": 4162229216,
+      "first_timestamp": 1749009604,
+      "last_line": 14418850,
+      "last_offset": 4166846397,
+      "last_timestamp": 1749095974,
+      "trade_count": 16012
+    },
+    "2025-06-05": {
+      "first_line": 14418851,
+      "first_offset": 4166846687,
+      "first_timestamp": 1749096002,
+      "last_line": 14448409,
+      "last_offset": 4175382719,
+      "last_timestamp": 1749182398,
+      "trade_count": 29559
+    },
+    "2025-06-06": {
+      "first_line": 14448410,
+      "first_offset": 4175383009,
+      "first_timestamp": 1749182400,
+      "last_line": 14489067,
+      "last_offset": 4187139022,
+      "last_timestamp": 1749268787,
+      "trade_count": 40658
+    },
+    "2025-06-07": {
+      "first_line": 14489068,
+      "first_offset": 4187139312,
+      "first_timestamp": 1749268804,
+      "last_line": 14503693,
+      "last_offset": 4191357556,
+      "last_timestamp": 1749355198,
+      "trade_count": 14626
+    },
+    "2025-06-08": {
+      "first_line": 14503694,
+      "first_offset": 4191357844,
+      "first_timestamp": 1749355206,
+      "last_line": 14519862,
+      "last_offset": 4196024046,
+      "last_timestamp": 1749441588,
+      "trade_count": 16169
+    },
+    "2025-06-09": {
+      "first_line": 14519863,
+      "first_offset": 4196024336,
+      "first_timestamp": 1749441623,
+      "last_line": 14541095,
+      "last_offset": 4202150410,
+      "last_timestamp": 1749527976,
+      "trade_count": 21231
+    },
+    "2025-06-10": {
+      "first_line": 14541096,
+      "first_offset": 4202150700,
+      "first_timestamp": 1749528004,
+      "last_line": 14559197,
+      "last_offset": 4207372833,
+      "last_timestamp": 1749614358,
+      "trade_count": 18102
+    },
+    "2025-06-11": {
+      "first_line": 14559198,
+      "first_offset": 4207373120,
+      "first_timestamp": 1749614410,
+      "last_line": 14582656,
+      "last_offset": 4214151103,
+      "last_timestamp": 1749700788,
+      "trade_count": 23459
+    },
+    "2025-06-12": {
+      "first_line": 14582657,
+      "first_offset": 4214151390,
+      "first_timestamp": 1749700804,
+      "last_line": 14604645,
+      "last_offset": 4220495629,
+      "last_timestamp": 1749787198,
+      "trade_count": 21989
+    },
+    "2025-06-13": {
+      "first_line": 14604646,
+      "first_offset": 4220495916,
+      "first_timestamp": 1749787203,
+      "last_line": 14624756,
+      "last_offset": 4226289476,
+      "last_timestamp": 1749873568,
+      "trade_count": 20111
+    },
+    "2025-06-14": {
+      "first_line": 14624757,
+      "first_offset": 4226289763,
+      "first_timestamp": 1749873607,
+      "last_line": 14636857,
+      "last_offset": 4229777548,
+      "last_timestamp": 1749959984,
+      "trade_count": 12101
+    },
+    "2025-06-15": {
+      "first_line": 14636858,
+      "first_offset": 4229777838,
+      "first_timestamp": 1749960017,
+      "last_line": 14651409,
+      "last_offset": 4233975183,
+      "last_timestamp": 1750046393,
+      "trade_count": 14552
+    },
+    "2025-06-16": {
+      "first_line": 14651410,
+      "first_offset": 4233975470,
+      "first_timestamp": 1750046411,
+      "last_line": 14678831,
+      "last_offset": 4241897906,
+      "last_timestamp": 1750132795,
+      "trade_count": 27421
+    },
+    "2025-06-17": {
+      "first_line": 14678832,
+      "first_offset": 4241898196,
+      "first_timestamp": 1750132802,
+      "last_line": 14704737,
+      "last_offset": 4249382048,
+      "last_timestamp": 1750219167,
+      "trade_count": 25906
+    },
+    "2025-06-18": {
+      "first_line": 14704738,
+      "first_offset": 4249382337,
+      "first_timestamp": 1750219200,
+      "last_line": 14720960,
+      "last_offset": 4254061632,
+      "last_timestamp": 1750305583,
+      "trade_count": 16223
+    },
+    "2025-06-19": {
+      "first_line": 14720961,
+      "first_offset": 4254061919,
+      "first_timestamp": 1750305615,
+      "last_line": 14733980,
+      "last_offset": 4257813132,
+      "last_timestamp": 1750391996,
+      "trade_count": 13020
+    },
+    "2025-06-20": {
+      "first_line": 14733981,
+      "first_offset": 4257813422,
+      "first_timestamp": 1750392003,
+      "last_line": 14755796,
+      "last_offset": 4264106972,
+      "last_timestamp": 1750478378,
+      "trade_count": 21816
+    },
+    "2025-06-21": {
+      "first_line": 14755797,
+      "first_offset": 4264107262,
+      "first_timestamp": 1750478431,
+      "last_line": 14780292,
+      "last_offset": 4271181977,
+      "last_timestamp": 1750564798,
+      "trade_count": 24496
+    },
+    "2025-06-22": {
+      "first_line": 14780293,
+      "first_offset": 4271182267,
+      "first_timestamp": 1750564804,
+      "last_line": 14811913,
+      "last_offset": 4280278472,
+      "last_timestamp": 1750651181,
+      "trade_count": 31621
+    },
+    "2025-06-23": {
+      "first_line": 14811914,
+      "first_offset": 4280278762,
+      "first_timestamp": 1750651215,
+      "last_line": 14843208,
+      "last_offset": 4289314601,
+      "last_timestamp": 1750737598,
+      "trade_count": 31294
+    },
+    "2025-06-24": {
+      "first_line": 14843209,
+      "first_offset": 4289314891,
+      "first_timestamp": 1750737605,
+      "last_line": 14879390,
+      "last_offset": 4299773252,
+      "last_timestamp": 1750823999,
+      "trade_count": 36182
+    },
+    "2025-06-25": {
+      "first_line": 14879391,
+      "first_offset": 4299773542,
+      "first_timestamp": 1750824003,
+      "last_line": 14923625,
+      "last_offset": 4312568466,
+      "last_timestamp": 1750910391,
+      "trade_count": 44235
+    },
+    "2025-06-26": {
+      "first_line": 14923626,
+      "first_offset": 4312568756,
+      "first_timestamp": 1750910402,
+      "last_line": 14979415,
+      "last_offset": 4328716226,
+      "last_timestamp": 1750996795,
+      "trade_count": 55790
+    },
+    "2025-06-27": {
+      "first_line": 14979416,
+      "first_offset": 4328716516,
+      "first_timestamp": 1750996800,
+      "last_line": 15018893,
+      "last_offset": 4340135330,
+      "last_timestamp": 1751083132,
+      "trade_count": 39478
+    },
+    "2025-06-28": {
+      "first_line": 15018894,
+      "first_offset": 4340135618,
+      "first_timestamp": 1751083203,
+      "last_line": 15036031,
+      "last_offset": 4345081494,
+      "last_timestamp": 1751169599,
+      "trade_count": 17138
+    },
+    "2025-06-29": {
+      "first_line": 15036032,
+      "first_offset": 4345081784,
+      "first_timestamp": 1751169604,
+      "last_line": 15057861,
+      "last_offset": 4351387065,
+      "last_timestamp": 1751255988,
+      "trade_count": 21830
+    },
+    "2025-06-30": {
+      "first_line": 15057862,
+      "first_offset": 4351387355,
+      "first_timestamp": 1751256002,
+      "last_line": 15087116,
+      "last_offset": 4359841777,
+      "last_timestamp": 1751342394,
+      "trade_count": 29255
+    },
+    "2025-07-01": {
+      "first_line": 15087117,
+      "first_offset": 4359842067,
+      "first_timestamp": 1751342403,
+      "last_line": 15119503,
+      "last_offset": 4369205013,
+      "last_timestamp": 1751428797,
+      "trade_count": 32387
+    },
+    "2025-07-02": {
+      "first_line": 15119504,
+      "first_offset": 4369205303,
+      "first_timestamp": 1751428802,
+      "last_line": 15163208,
+      "last_offset": 4381844795,
+      "last_timestamp": 1751515191,
+      "trade_count": 43705
+    },
+    "2025-07-03": {
+      "first_line": 15163209,
+      "first_offset": 4381845082,
+      "first_timestamp": 1751515210,
+      "last_line": 15193888,
+      "last_offset": 4390715746,
+      "last_timestamp": 1751601592,
+      "trade_count": 30680
+    },
+    "2025-07-04": {
+      "first_line": 15193889,
+      "first_offset": 4390716036,
+      "first_timestamp": 1751601636,
+      "last_line": 15215459,
+      "last_offset": 4396951017,
+      "last_timestamp": 1751687996,
+      "trade_count": 21571
+    },
+    "2025-07-05": {
+      "first_line": 15215460,
+      "first_offset": 4396951305,
+      "first_timestamp": 1751688016,
+      "last_line": 15228631,
+      "last_offset": 4400752704,
+      "last_timestamp": 1751774378,
+      "trade_count": 13171
+    },
+    "2025-07-06": {
+      "first_line": 15228632,
+      "first_offset": 4400752993,
+      "first_timestamp": 1751774403,
+      "last_line": 15249037,
+      "last_offset": 4406650737,
+      "last_timestamp": 1751860796,
+      "trade_count": 20406
+    },
+    "2025-07-07": {
+      "first_line": 15249038,
+      "first_offset": 4406651027,
+      "first_timestamp": 1751860803,
+      "last_line": 15275569,
+      "last_offset": 4414320179,
+      "last_timestamp": 1751947174,
+      "trade_count": 26532
+    },
+    "2025-07-08": {
+      "first_line": 15275570,
+      "first_offset": 4414320466,
+      "first_timestamp": 1751947207,
+      "last_line": 15298539,
+      "last_offset": 4420958286,
+      "last_timestamp": 1752033565,
+      "trade_count": 22970
+    },
+    "2025-07-09": {
+      "first_line": 15298540,
+      "first_offset": 4420958576,
+      "first_timestamp": 1752033614,
+      "last_line": 15327867,
+      "last_offset": 4429425488,
+      "last_timestamp": 1752119963,
+      "trade_count": 29328
+    },
+    "2025-07-10": {
+      "first_line": 15327868,
+      "first_offset": 4429425776,
+      "first_timestamp": 1752120000,
+      "last_line": 15372371,
+      "last_offset": 4442282019,
+      "last_timestamp": 1752206398,
+      "trade_count": 44504
+    },
+    "2025-07-11": {
+      "first_line": 15372372,
+      "first_offset": 4442282309,
+      "first_timestamp": 1752206404,
+      "last_line": 15434500,
+      "last_offset": 4460247523,
+      "last_timestamp": 1752292783,
+      "trade_count": 62128
+    },
+    "2025-07-12": {
+      "first_line": 15434501,
+      "first_offset": 4460247810,
+      "first_timestamp": 1752292808,
+      "last_line": 15456084,
+      "last_offset": 4466477168,
+      "last_timestamp": 1752379194,
+      "trade_count": 21581
+    },
+    "2025-07-13": {
+      "first_line": 15456085,
+      "first_offset": 4466477458,
+      "first_timestamp": 1752379213,
+      "last_line": 15481034,
+      "last_offset": 4473676129,
+      "last_timestamp": 1752465598,
+      "trade_count": 24950
+    },
+    "2025-07-14": {
+      "first_line": 15481035,
+      "first_offset": 4473676419,
+      "first_timestamp": 1752465601,
+      "last_line": 15599999,
+      "last_offset": 4508067448,
+      "last_timestamp": 1752551994,
+      "trade_count": 118965
+    },
+    "2025-07-15": {
+      "first_line": 15600000,
+      "first_offset": 4508067738,
+      "first_timestamp": 1752552003,
+      "last_line": 15691641,
+      "last_offset": 4534572610,
+      "last_timestamp": 1752638398,
+      "trade_count": 91642
+    },
+    "2025-07-16": {
+      "first_line": 15691642,
+      "first_offset": 4534572900,
+      "first_timestamp": 1752638406,
+      "last_line": 15761574,
+      "last_offset": 4554806648,
+      "last_timestamp": 1752724798,
+      "trade_count": 69933
+    },
+    "2025-07-17": {
+      "first_line": 15761575,
+      "first_offset": 4554806938,
+      "first_timestamp": 1752724807,
+      "last_line": 15842797,
+      "last_offset": 4578312852,
+      "last_timestamp": 1752811173,
+      "trade_count": 81223
+    },
+    "2025-07-18": {
+      "first_line": 15842798,
+      "first_offset": 4578313140,
+      "first_timestamp": 1752811202,
+      "last_line": 15906501,
+      "last_offset": 4596741503,
+      "last_timestamp": 1752897596,
+      "trade_count": 63702
+    },
+    "2025-07-19": {
+      "first_line": 15906502,
+      "first_offset": 4596741793,
+      "first_timestamp": 1752897601,
+      "last_line": 15942541,
+      "last_offset": 4607163884,
+      "last_timestamp": 1752983965,
+      "trade_count": 36040
+    },
+    "2025-07-20": {
+      "first_line": 15942542,
+      "first_offset": 4607164174,
+      "first_timestamp": 1752984032,
+      "last_line": 15962841,
+      "last_offset": 4613022192,
+      "last_timestamp": 1753070397,
+      "trade_count": 20300
+    },
+    "2025-07-21": {
+      "first_line": 15962842,
+      "first_offset": 4613022482,
+      "first_timestamp": 1753070433,
+      "last_line": 16007780,
+      "last_offset": 4626003454,
+      "last_timestamp": 1753156789,
+      "trade_count": 44939
+    },
+    "2025-07-22": {
+      "first_line": 16007781,
+      "first_offset": 4626003740,
+      "first_timestamp": 1753156807,
+      "last_line": 16044520,
+      "last_offset": 4636603797,
+      "last_timestamp": 1753243199,
+      "trade_count": 36740
+    },
+    "2025-07-23": {
+      "first_line": 16044521,
+      "first_offset": 4636604080,
+      "first_timestamp": 1753243202,
+      "last_line": 16072126,
+      "last_offset": 4644563613,
+      "last_timestamp": 1753329589,
+      "trade_count": 27606
+    },
+    "2025-07-24": {
+      "first_line": 16072127,
+      "first_offset": 4644563903,
+      "first_timestamp": 1753329605,
+      "last_line": 16114218,
+      "last_offset": 4656709214,
+      "last_timestamp": 1753415999,
+      "trade_count": 42092
+    },
+    "2025-07-25": {
+      "first_line": 16114219,
+      "first_offset": 4656709503,
+      "first_timestamp": 1753416001,
+      "last_line": 16183905,
+      "last_offset": 4676824928,
+      "last_timestamp": 1753502384,
+      "trade_count": 69687
+    },
+    "2025-07-26": {
+      "first_line": 16183906,
+      "first_offset": 4676825218,
+      "first_timestamp": 1753502407,
+      "last_line": 16201485,
+      "last_offset": 4681890978,
+      "last_timestamp": 1753588749,
+      "trade_count": 17579
+    },
+    "2025-07-27": {
+      "first_line": 16201486,
+      "first_offset": 4681891266,
+      "first_timestamp": 1753588811,
+      "last_line": 16217291,
+      "last_offset": 4686443625,
+      "last_timestamp": 1753675190,
+      "trade_count": 15805
+    },
+    "2025-07-28": {
+      "first_line": 16217292,
+      "first_offset": 4686443912,
+      "first_timestamp": 1753675201,
+      "last_line": 16244256,
+      "last_offset": 4694217821,
+      "last_timestamp": 1753761598,
+      "trade_count": 26964
+    },
+    "2025-07-29": {
+      "first_line": 16244257,
+      "first_offset": 4694218111,
+      "first_timestamp": 1753761602,
+      "last_line": 16294286,
+      "last_offset": 4708671524,
+      "last_timestamp": 1753847995,
+      "trade_count": 50030
+    },
+    "2025-07-30": {
+      "first_line": 16294287,
+      "first_offset": 4708671814,
+      "first_timestamp": 1753848014,
+      "last_line": 16343280,
+      "last_offset": 4722819864,
+      "last_timestamp": 1753934399,
+      "trade_count": 48994
+    },
+    "2025-07-31": {
+      "first_line": 16343281,
+      "first_offset": 4722820153,
+      "first_timestamp": 1753934401,
+      "last_line": 16396266,
+      "last_offset": 4738124032,
+      "last_timestamp": 1754020777,
+      "trade_count": 52986
+    },
+    "2025-08-01": {
+      "first_line": 16396267,
+      "first_offset": 4738124322,
+      "first_timestamp": 1754020804,
+      "last_line": 16464336,
+      "last_offset": 4757778159,
+      "last_timestamp": 1754107196,
+      "trade_count": 68070
+    },
+    "2025-08-02": {
+      "first_line": 16464337,
+      "first_offset": 4757778448,
+      "first_timestamp": 1754107203,
+      "last_line": 16506035,
+      "last_offset": 4769820420,
+      "last_timestamp": 1754193596,
+      "trade_count": 41699
+    },
+    "2025-08-03": {
+      "first_line": 16506036,
+      "first_offset": 4769820704,
+      "first_timestamp": 1754193614,
+      "last_line": 16526223,
+      "last_offset": 4775642898,
+      "last_timestamp": 1754279981,
+      "trade_count": 20188
+    },
+    "2025-08-04": {
+      "first_line": 16526224,
+      "first_offset": 4775643188,
+      "first_timestamp": 1754280004,
+      "last_line": 16551290,
+      "last_offset": 4782879390,
+      "last_timestamp": 1754366398,
+      "trade_count": 25066
+    },
+    "2025-08-05": {
+      "first_line": 16551291,
+      "first_offset": 4782879678,
+      "first_timestamp": 1754366402,
+      "last_line": 16576671,
+      "last_offset": 4790197133,
+      "last_timestamp": 1754452788,
+      "trade_count": 25381
+    },
+    "2025-08-06": {
+      "first_line": 16576672,
+      "first_offset": 4790197420,
+      "first_timestamp": 1754452806,
+      "last_line": 16601893,
+      "last_offset": 4797467988,
+      "last_timestamp": 1754539193,
+      "trade_count": 25222
+    },
+    "2025-08-07": {
+      "first_line": 16601894,
+      "first_offset": 4797468278,
+      "first_timestamp": 1754539219,
+      "last_line": 16634209,
+      "last_offset": 4806781581,
+      "last_timestamp": 1754625591,
+      "trade_count": 32316
+    },
+    "2025-08-08": {
+      "first_line": 16634210,
+      "first_offset": 4806781868,
+      "first_timestamp": 1754625600,
+      "last_line": 16671020,
+      "last_offset": 4817403214,
+      "last_timestamp": 1754711993,
+      "trade_count": 36811
+    },
+    "2025-08-09": {
+      "first_line": 16671021,
+      "first_offset": 4817403501,
+      "first_timestamp": 1754712007,
+      "last_line": 16699234,
+      "last_offset": 4825545145,
+      "last_timestamp": 1754798398,
+      "trade_count": 28214
+    },
+    "2025-08-10": {
+      "first_line": 16699235,
+      "first_offset": 4825545435,
+      "first_timestamp": 1754798400,
+      "last_line": 16733396,
+      "last_offset": 4835401904,
+      "last_timestamp": 1754884796,
+      "trade_count": 34162
+    },
+    "2025-08-11": {
+      "first_line": 16733397,
+      "first_offset": 4835402194,
+      "first_timestamp": 1754884800,
+      "last_line": 16774490,
+      "last_offset": 4847256512,
+      "last_timestamp": 1754971184,
+      "trade_count": 41093
+    },
+    "2025-08-12": {
+      "first_line": 16774491,
+      "first_offset": 4847256800,
+      "first_timestamp": 1754971201,
+      "last_line": 16815292,
+      "last_offset": 4859019262,
+      "last_timestamp": 1755057593,
+      "trade_count": 40802
+    },
+    "2025-08-13": {
+      "first_line": 16815293,
+      "first_offset": 4859019552,
+      "first_timestamp": 1755057602,
+      "last_line": 16879746,
+      "last_offset": 4877627687,
+      "last_timestamp": 1755143985,
+      "trade_count": 64454
+    },
+    "2025-08-14": {
+      "first_line": 16879747,
+      "first_offset": 4877627977,
+      "first_timestamp": 1755144001,
+      "last_line": 16944099,
+      "last_offset": 4896204058,
+      "last_timestamp": 1755230384,
+      "trade_count": 64353
+    },
+    "2025-08-15": {
+      "first_line": 16944100,
+      "first_offset": 4896204348,
+      "first_timestamp": 1755230412,
+      "last_line": 16967607,
+      "last_offset": 4902991800,
+      "last_timestamp": 1755269740,
+      "trade_count": 23508
+    }
+  },
+  "file_size": 4902992089,
+  "first_timestamp": 1695948468,
+  "last_timestamp": 1755269740,
+  "total_lines": 16967607,
+  "version": 1
+}

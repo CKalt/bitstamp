@@ -1,111 +1,129 @@
-# CLAUDE-RESUME.md - Paper Trading Test Session
+# CLAUDE-RESUME.md
 
-## Current Situation
-- **Testing:** Proximity threshold fix (0.5% minimum MA spread) to prevent excessive flipping
-- **Mode:** Paper trading on `gg tst` server (no real money at risk)
-- **Speed:** 1-minute candles for rapid testing (60x faster than hourly)
-- **Branch:** stable-added-adaptive-trad-n-chart-more
-- **Start Time:** ~01:50 on 2025-08-06
+## Current State (2025-08-11)
 
-## Problem We're Solving
-- User lost money due to excessive position flipping when MAs were too close
-- Previous trade: Sold at $113,793 (flipped too early)
-- Solution: Added proximity threshold - only trade when MA4 and MA20 differ by >0.5%
+### Production System Status (gg btc - port 4000)
+- **Status**: NOT currently running (no process found)
+- **Last Known Position**: LONG ~1.2 BTC
+- **Branch**: `stable-added-adaptive-trad-n-chart-more`
+- **Configuration**: 
+  - Hourly candles (1h)
+  - LIVE trading
+  - MA crossover strategy
+  - Proximity threshold: 0.3%
 
-## Key Files Modified
-1. `/src/tdr_core/strategies.py`
-   - Added proximity threshold check (0.5%)
-   - Added 1-minute candle support for testing
-   - Fixed datetime.now() for real-time candles
+### Test System Status (gg tst - port 4001)
+- **Status**: RUNNING on development branch
+- **Position**: SHORT 0.0395 BTC @ $118,525 (paper trading)
+- **Current Price**: ~$118,649
+- **Configuration**:
+  - 1-minute candles for rapid testing (60x faster)
+  - PAPER trading only (no real money)
+  - Adaptive strategy (trending/ranging/volatile modes)
+  - Auto-resume: enabled
+  - Proximity threshold: 0.3%
+- **Performance**: 
+  - 4 trades today
+  - Lost 28.77% over 7 days in backtesting
+  - Win rate: ~15% (needs improvement)
 
-2. `/src/tdr_core/signal_monitor_enhanced.py`
-   - Fixed JSON serialization bug (numpy int64 -> Python int)
+## Major Work Completed (2025-08-11)
 
-3. Configuration on test server:
-   ```json
-   {
-     "Short_Window": 4,
-     "Long_Window": 20,
-     "do_live_trades": false,
-     "candle_interval": "1min",
-     "proximity_threshold": 0.5
-   }
-   ```
+### 1. Indexed Backtesting System ✅
+**Problem**: Reading 16.7M lines (4.5GB) took 5-10 minutes for 1 day of data.
 
-## Test Scripts Created
-All in `/claude-bin/`:
-- `monitor_test.sh` - Main monitoring dashboard
-- `verify_1min_fixed.sh` - Verify 1-minute candles working
-- `test_auto_trading_complete.sh` - Test all auto trading aspects
-- `test_auto_resume_thoroughly.sh` - Test auto-resume functionality
-- `detect_specific_bugs.py` - Automated bug detection
-- `check_pnl_with_fees.sh` - P&L analysis with fees
-- `comprehensive_bug_monitor.sh` - Detailed bug monitoring
+**Solution**: Created daily index system:
+- `btcusd.log.idx` - JSON index with daily summaries
+- `/src/backtesting/build_index.py` - Index builder
+- `/src/backtesting/backtest_adaptive_indexed.py` - Fast backtest using index
 
-## Known Issues Fixed
-1. ✅ 1-minute candles triggering correctly (was stuck at hour boundaries)
-2. ✅ JSON serialization error in signal_monitor_enhanced
-3. ✅ Auto-resume working with correct position/entry price
-4. ✅ Server stability (no more crashes)
+**Results**: 
+- First run: 90 seconds to build index
+- Subsequent runs: 2 seconds for 1 day of data
+- 300x speed improvement!
 
-## Next Steps After Reboot
+### 2. Test Server Fixes on Development Branch ✅
+**Deployed to ck test server**:
+- Fixed auto-resume bug (now respects `auto_resume` flag)
+- Fixed negative entry price bug (line 1132 in strategies.py)
+- Switched from MA to adaptive strategy
+- Committed changes: `9130e66`
 
-### 1. Check Test Results
+### 3. Backtesting Infrastructure ✅
+**Created complete backtesting system**:
+- Matches paper trading configuration exactly
+- 1-minute bars for rapid testing
+- Adaptive strategy with three market modes
+- Easy-to-use scripts in `claude-bin/`
+
+## Key Findings
+
+### Market Analysis
+- **Current Market**: Extremely choppy/sideways (0.1-0.5% daily moves)
+- **MA Strategies**: ALL losing money in this market
+- **Adaptive Strategy**: Also struggling (16% win rate)
+- **Root Cause**: No strategy works well in directionless markets
+
+### Performance Metrics
+| System | Strategy | Timeframe | Performance |
+|--------|----------|-----------|-------------|
+| Production | MA 6/34 | Hourly | Unknown (not running) |
+| Test (paper) | Adaptive | 1-min | -6.92% (1 day) |
+| Test (backtest) | Adaptive | 1-min | -28.77% (7 days) |
+
+## File Locations
+
+### Local (Mac)
+- **Main**: `/Users/chris/projects/python/btc` (gg btc)
+- **Test**: `/Users/chris/projects/python/btc-testing` (gg tst)
+
+### Remote (ck server)
+- **Production**: `/home/chris/projects/bitstamp` (gg btc after `source ~/ggmap`)
+- **Test**: `/home/chris/projects/bitstamp-testing` (gg tst after `source ~/ggmap`)
+
+## Important Scripts
+
+### Backtesting
 ```bash
-# Check how many trades were executed vs blocked
-ssh ck 'grep -c "PAPER TRADE:" /home/chris/projects/bitstamp-testing/logs/tdr_server.log'
-ssh ck 'grep -c "NO_TRADE_PROXIMITY" /home/chris/projects/bitstamp-testing/logs/tdr_server.log'
+# Run indexed backtest (fast!)
+gg btc
+./claude-bin/run_adaptive_backtest.sh --days 7
 
-# See trade history
-ssh ck 'grep "PAPER TRADE:" /home/chris/projects/bitstamp-testing/logs/tdr_server.log'
-
-# Check final position and P&L
-ssh ck 'tail -100 /home/chris/projects/bitstamp-testing/logs/tdr_server.log | grep -E "(Position|P&L)"'
+# Build/rebuild index
+python3 src/backtesting/build_index.py --rebuild
 ```
 
-### 2. Analyze Proximity Threshold Effectiveness
+### Monitoring
 ```bash
-# Get proximity values when trades were blocked
-ssh ck 'grep "SIGNAL_EVAL v2:" /home/chris/projects/bitstamp-testing/logs/tdr_server.log | grep "NO_TRADE_PROXIMITY"'
+# Check test server status
+ssh ck 'curl -s http://localhost:4001/api/status | python3 -m json.tool'
 
-# Compare to when trades executed
-ssh ck 'grep -B5 "PAPER TRADE:" /home/chris/projects/bitstamp-testing/logs/tdr_server.log | grep "SIGNAL_EVAL"'
+# Monitor paper trading
+ssh ck 'tail -f /home/chris/projects/bitstamp-testing/logs/tdr_server.log'
 ```
 
-### 3. Decision Points
-- If proximity threshold worked well (fewer trades, less flipping):
-  - Consider testing with real money but small amounts
-  - Maybe adjust threshold (0.5% might be too strict or too loose)
-  
-- If still too many trades:
-  - Increase proximity threshold to 0.7% or 1.0%
-  - Add additional filters (momentum, volume, etc.)
+## Navigation Conventions
+- **Always use `gg` system**: `gg btc` or `gg tst`, never `cd`
+- **On server**: First run `source ~/ggmap` then use `gg` shortcuts
+- **Claude scripts**: Always in `claude-bin/` directory
+- **General scripts**: In `bin/` directory
 
-### 4. Resume Testing After Reboot
-```bash
-# SSH to test server
-ssh ck
-cd /home/chris/projects/bitstamp-testing
+## Critical Reminders
+1. **Test server** (gg tst) is on **development branch**
+2. **Production** (gg btc) is on **stable-added-adaptive-trad-n-chart-more branch**
+3. **Never copy files directly** to server - use git deployment
+4. **Paper trading only** on test server (no real money)
+5. **Commits**: Made to development branch on test server
 
-# Start server in screen
-screen -S server-tst -dm ./env/bin/python src/tdr_server.py
+## Next Session Priorities
+1. **Tune adaptive strategy parameters** - Current 16% win rate is too low
+2. **Consider mean reversion strategy** for sideways markets
+3. **Add stop-loss/take-profit** mechanisms
+4. **Monitor paper trading** for improvement patterns
+5. **Restart production server** if needed
 
-# Monitor from local machine
-./claude-bin/monitor_test.sh
-```
+## Recent Commits
+- `9130e66` - Fix critical bugs and switch to adaptive strategy (development branch)
 
-## Important Context
-- User has $156,574 USD available for trading
-- System uses 3-part trades to stay under 90% rule
-- Paper trading shows what would happen without risking money
-- Test server (`gg tst`) is separate from production (`gg btc`)
-
-## Current Position (as of last check)
-- Position: SHORT -1.37 BTC
-- Entry: $113,633
-- System auto-resumes position on restart
-
-## Commands to Remember
-- Monitor: `./claude-bin/monitor_test.sh`
-- Restart server: `ssh ck 'cd /home/chris/projects/bitstamp-testing && screen -S server-tst -dm ./env/bin/python src/tdr_server.py'`
-- Check logs: `ssh ck 'tail -f /home/chris/projects/bitstamp-testing/logs/tdr_server.log'`
+## Summary
+Successfully created indexed backtesting system (300x faster), deployed adaptive strategy to test server, and identified that all momentum strategies are losing money in current sideways market. Infrastructure is working perfectly - strategy needs tuning for market conditions.

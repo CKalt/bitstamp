@@ -215,8 +215,11 @@ def auto_load_history():
                           f"size={data_manager.position_size}, cost_basis={data_manager.position_cost_basis}, "
                           f"entry_price=${data_manager.position_cost_basis / abs(data_manager.position_size) if data_manager.position_size != 0 else 0:.2f}")
         
-        # ALWAYS check for auto-resume after history loads
-        # This ensures trading resumes automatically after server restart
+        # Check if auto-resume is enabled in config
+        if not server_config.get('best_strategy', {}).get('auto_resume', False):
+            logger.info("Auto-resume is disabled in configuration - skipping auto-resume check")
+            return
+            
         logger.info("Checking for saved position to auto-resume...")
         
         # Debug: Log data_manager position state before auto-resume
@@ -228,43 +231,11 @@ def auto_load_history():
             # AUTO-RESUME: Execute if resume file exists and auto_resume is enabled
             # This runs once after historical data loads
             resume_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'resume-auto-trade.json')
-            # CRITICAL FIX: Actually check if auto_resume is enabled!
-            if os.path.exists(resume_file):
-                if server_config.get('auto_resume_enabled', False):
-                    with open(resume_file, 'r') as f:
-                        resume_data = json.load(f)
-                    
-                    logger.info(f"Found saved position: {resume_data.get('position', 'UNKNOWN')} {resume_data.get('amount', 0)} {resume_data.get('unit', 'usd')} @ ${resume_data.get('entry_price', 0)}")
-                else:
-                    logger.info(f"Found resume file but auto_resume is disabled in config. Skipping auto-resume.")
-                    logger.info(f"To resume, use client command: resume_auto_trade")
-                    return
+            if os.path.exists(resume_file) and server_config.get("best_strategy", {}).get("auto_resume", False):
+                with open(resume_file, 'r') as f:
+                    resume_data = json.load(f)
                 
-                # Validate resume data before using
-                position = resume_data.get('position', '').upper()
-                unit = resume_data.get('unit', '').lower()
-                amount = resume_data.get('amount', 0)
-                entry_price = resume_data.get('entry_price', 0)
-                
-                validation_errors = []
-                
-                # Check position/unit consistency
-                if position == 'LONG' and unit != 'btc':
-                    validation_errors.append(f"LONG position must use BTC unit, not {unit}")
-                elif position == 'SHORT' and unit != 'usd':
-                    validation_errors.append(f"SHORT position must use USD unit, not {unit}")
-                
-                # Check amounts are reasonable
-                if amount <= 0:
-                    validation_errors.append(f"Invalid amount: {amount}")
-                if entry_price <= 0:
-                    validation_errors.append(f"Invalid entry price: {entry_price}")
-                
-                if validation_errors:
-                    logger.error(f"Resume data validation failed: {', '.join(validation_errors)}")
-                    logger.error("Skipping auto-resume due to invalid data")
-                    logger.error("Please manually resume with: auto_trade <amount><btc|usd> <long|short>")
-                    return
+                logger.info(f"Found saved position: {resume_data.get('position', 'UNKNOWN')} {resume_data.get('amount', 0)} {resume_data.get('unit', 'usd')} @ ${resume_data.get('entry_price', 0)}")
                 
                 # Extract command arguments
                 if 'command' not in resume_data:
@@ -620,16 +591,16 @@ def execute_command():
             if any(cmd in command for cmd in history_required_commands):
                 if not server_config.get('history_loaded', False):
                     if server_config.get('history_loading', False):
-                        # Special handling for resume_auto_trade - enable auto_resume instead of blocking
+                        # Special handling for resume_auto_trade - respect auto_resume config
                         if 'resume_auto_trade' in command and server_config.get('best_strategy'):
                             if not server_config['best_strategy'].get('auto_resume', False):
-                                server_config['best_strategy']['auto_resume'] = True
-                                logger.info("Enabled auto_resume - will resume automatically when history loads")
+                                # Don't force auto_resume if it's explicitly set to False in config
+                                logger.info("Auto-resume is disabled in config. Resume command must be executed manually after history loads.")
                                 return jsonify({
                                     'command': command,
-                                    'success': True,
-                                    'message': 'Auto-resume enabled. Trading will start automatically when history finishes loading.',
-                                    'auto_resume': True,
+                                    'success': False,
+                                    'message': 'Auto-resume is disabled. Please wait for history to load then execute command manually.',
+                                    'auto_resume': False,
                                     'history_loading': True,
                                     'history_progress': server_config.get('history_progress', 0)
                                 }), 200
@@ -1320,7 +1291,7 @@ def get_position_history():
         # Read last saved position from resume-auto-trade.json
         import os
         resume_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'resume-auto-trade.json')
-        if os.path.exists(resume_file):
+        if os.path.exists(resume_file) and server_config.get("best_strategy", {}).get("auto_resume", False):
             try:
                 with open(resume_file, 'r') as f:
                     response['last_position'] = json.load(f)
