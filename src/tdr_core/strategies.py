@@ -1967,7 +1967,7 @@ class MACrossoverStrategy:
                     trade_references.append(trade_ref)
             
             # Determine position type and amount
-            if self.position == 1:  # LONG
+            if self.position_size > 0:  # LONG - determined by positive position_size
                 amount = self.balance_btc
                 unit = 'btc'
                 position_type = 'long'
@@ -1976,7 +1976,7 @@ class MACrossoverStrategy:
                     entry_price = calculated_entry_price
                 else:
                     entry_price = position_info.get('entry_price', self.last_trade_price or 0)
-            elif self.position == -1:  # SHORT
+            elif self.position_size < 0:  # SHORT - determined by negative position_size
                 amount = self.balance_usd
                 unit = 'usd'
                 position_type = 'short'
